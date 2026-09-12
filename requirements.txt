@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+litellm
+python-dotenv
+pydantic
+requests
+sentence-transformers
+scikit-learn

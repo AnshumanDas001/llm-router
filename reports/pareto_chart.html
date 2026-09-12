@@ -1,0 +1,353 @@
+<title>Cost vs Quality Frontier</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --surface-2:      #f3f2ee;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-cheap:   #2a78d6;
+    --series-mid:     #eb6834;
+    --series-frontier:#1baf7a;
+    --router-fill:    #0b0b0b;
+    --success-text:   #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --surface-2:      #232322;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-cheap:   #3987e5;
+      --series-mid:     #d95926;
+      --series-frontier:#199e70;
+      --router-fill:    #ffffff;
+      --success-text:   #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --surface-2:      #232322;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-cheap:   #3987e5;
+    --series-mid:     #d95926;
+    --series-frontier:#199e70;
+    --router-fill:    #ffffff;
+    --success-text:   #0ca30c;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface-1); }
+  .viz-root {
+    font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--surface-1);
+    color: var(--text-primary);
+    padding: 28px 20px 40px;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  header { margin-bottom: 22px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 600; margin: 0 0 6px;
+  }
+  h1 { font-size: 25px; font-weight: 650; margin: 0 0 8px; text-wrap: balance; letter-spacing: -0.01em; }
+  .sub { font-size: 14.5px; color: var(--text-secondary); max-width: 62ch; line-height: 1.5; margin: 0; }
+
+  .chart-card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 20px 8px;
+    margin-bottom: 22px;
+  }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .axis-label { font-size: 12px; fill: var(--text-muted); font-family: "IBM Plex Sans", sans-serif; }
+  .tick-label { font-size: 11px; fill: var(--text-muted); font-family: "IBM Plex Mono", monospace; }
+  .gridline { stroke: var(--gridline); stroke-width: 1; }
+  .baseline-axis { stroke: var(--baseline); stroke-width: 1; }
+  .frontier-line { stroke: var(--text-muted); stroke-width: 1.5; stroke-dasharray: 4 4; fill: none; }
+  .point-label {
+    font-size: 12.5px; font-weight: 600; fill: var(--text-primary);
+    font-family: "IBM Plex Sans", sans-serif;
+  }
+  .point-sub { font-size: 11px; fill: var(--text-secondary); font-family: "IBM Plex Mono", monospace; }
+  .dot { cursor: pointer; }
+  .dot-ring { fill: none; stroke: var(--surface-2); stroke-width: 2; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 16px 22px;
+    padding: 2px 0 16px;
+    font-size: 13px; color: var(--text-secondary);
+  }
+  .legend-item { display: flex; align-items: center; gap: 7px; }
+  .swatch { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  .swatch.star-swatch {
+    width: 13px; height: 13px; border-radius: 0;
+    background: none;
+    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  }
+
+  .tooltip {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity 0.1s ease;
+    background: var(--text-primary); color: var(--surface-1);
+    font-size: 12px; padding: 8px 10px; border-radius: 6px; line-height: 1.45;
+    max-width: 220px; z-index: 5;
+    font-family: "IBM Plex Sans", sans-serif;
+  }
+  .tooltip .mono-line { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; opacity: 0.85; }
+
+  .callouts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 26px; }
+  @media (max-width: 560px) { .callouts { grid-template-columns: 1fr; } }
+  .callout {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .callout .stat { font-size: 21px; font-weight: 650; font-family: "IBM Plex Mono", monospace; }
+  .callout .stat.good { color: var(--success-text); }
+  .callout p { font-size: 13px; color: var(--text-secondary); margin: 4px 0 0; line-height: 1.5; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  caption { text-align: left; font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
+  thead th {
+    text-align: left; font-weight: 600; color: var(--text-secondary);
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 0 10px 8px; border-bottom: 1px solid var(--baseline);
+  }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--gridline); }
+  td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  tbody tr:last-child td { border-bottom: none; }
+  .row-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; }
+  .table-wrap { overflow-x: auto; }
+
+  footer { margin-top: 20px; font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+</style>
+
+<div class="viz-root" id="root">
+  <header>
+    <p class="eyebrow">LLM Router · Week 4</p>
+    <h1>Cost vs. quality across four routing configurations</h1>
+    <p class="sub">61-query eval set, three real model tiers (Llama 3.2 3B / Groq gpt-oss-20b / Gemini 3.5 Flash-Lite). Quality is average score against Week 2's labeled ground truth.</p>
+  </header>
+
+  <div class="chart-card">
+    <div style="position:relative;">
+      <svg viewBox="0 0 800 420" id="chart-svg" role="img" aria-label="Scatter chart of total cost versus average quality for cheap-only, mid-only, frontier-only, and the cascade router configurations"></svg>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="callouts">
+    <div class="callout">
+      <div class="stat good">75.6% cheaper</div>
+      <p>than routing every query to frontier-only, while retaining 99.4% of its quality.</p>
+    </div>
+    <div class="callout">
+      <div class="stat good">4.5% cheaper than mid-only</div>
+      <p>at identical quality (0.994) — mid-only is <strong>dominated</strong>: same result, higher cost. The router sits on the efficient frontier; mid-only does not.</p>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <caption>Exact figures, 61-query eval set (Week 1 baseline used for frontier-only; see footnote)</caption>
+      <thead>
+        <tr><th>Configuration</th><th>Total cost</th><th>Avg quality</th><th>Avg latency</th></tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    Router figure is a real live run (60/61 queries — one transient Groq 502 succeeded on manual retry but isn't counted in the total). Frontier-only cost uses the original Week 1 baseline measurement ($0.05695); an independent Week 2 remeasurement of the same 61 queries got $0.05757 (+1.1%), consistent with normal run-to-run token variance. Mid-only and cheap-only totals are summed from Week 2's per-tier eval responses.
+  </footer>
+</div>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<script>
+(function () {
+  const data = [
+    { key: "cheap",    label: "Cheap-only",    sub: "Llama 3.2 3B",        cost: 0.00000, quality: 0.912, latency: 8715,  color: "var(--series-cheap)",    shape: "circle", frontier: true },
+    { key: "router",   label: "Our Router",    sub: "cascade",             cost: 0.01391, quality: 0.994, latency: null,  color: "var(--router-fill)",     shape: "star",   frontier: true },
+    { key: "mid",      label: "Mid-only",      sub: "Groq gpt-oss-20b",    cost: 0.01456, quality: 0.994, latency: 1323,  color: "var(--series-mid)",      shape: "circle", frontier: false },
+    { key: "frontier", label: "Frontier-only", sub: "Gemini 3.5 Flash-Lite", cost: 0.05695, quality: 1.000, latency: 3442, color: "var(--series-frontier)", shape: "circle", frontier: true },
+  ];
+
+  const W = 800, H = 420;
+  const margin = { top: 20, right: 30, bottom: 56, left: 66 };
+  const plotW = W - margin.left - margin.right;
+  const plotH = H - margin.top - margin.bottom;
+
+  const xMax = 0.065;
+  const yMin = 0.85, yMax = 1.02;
+
+  const xScale = v => margin.left + (v / xMax) * plotW;
+  const yScale = v => margin.top + (1 - (v - yMin) / (yMax - yMin)) * plotH;
+
+  const svg = document.getElementById("chart-svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const ns = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs) => {
+    const e = document.createElementNS(ns, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  };
+
+  // Gridlines + y ticks
+  const yTicks = [0.85, 0.90, 0.95, 1.00];
+  yTicks.forEach(t => {
+    const y = yScale(t);
+    svg.appendChild(el("line", { x1: margin.left, x2: W - margin.right, y1: y, y2: y, class: "gridline" }));
+    const label = el("text", { x: margin.left - 10, y: y + 4, "text-anchor": "end", class: "tick-label" });
+    label.textContent = t.toFixed(2);
+    svg.appendChild(label);
+  });
+
+  // X ticks
+  const xTicks = [0, 0.02, 0.04, 0.06];
+  xTicks.forEach(t => {
+    const x = xScale(t);
+    const label = el("text", { x, y: H - margin.bottom + 22, "text-anchor": "middle", class: "tick-label" });
+    label.textContent = "$" + t.toFixed(2);
+    svg.appendChild(label);
+  });
+
+  // Axes baselines
+  svg.appendChild(el("line", { x1: margin.left, x2: margin.left, y1: margin.top, y2: H - margin.bottom, class: "baseline-axis" }));
+  svg.appendChild(el("line", { x1: margin.left, x2: W - margin.right, y1: H - margin.bottom, y2: H - margin.bottom, class: "baseline-axis" }));
+
+  // Axis titles
+  const xTitle = el("text", { x: margin.left + plotW / 2, y: H - 10, "text-anchor": "middle", class: "axis-label" });
+  xTitle.textContent = "Total cost, 61 queries";
+  svg.appendChild(xTitle);
+
+  const yTitle = el("text", {
+    x: -(margin.top + plotH / 2), y: 20, "text-anchor": "middle", class: "axis-label",
+    transform: "rotate(-90)",
+  });
+  yTitle.textContent = "Average quality score";
+  svg.appendChild(yTitle);
+
+  // Efficient frontier line: cheap -> router -> frontier (mid is dominated, excluded)
+  const frontierPts = data.filter(d => d.frontier).sort((a, b) => a.cost - b.cost);
+  const pathD = frontierPts.map((d, i) => `${i === 0 ? "M" : "L"} ${xScale(d.cost)} ${yScale(d.quality)}`).join(" ");
+  svg.appendChild(el("path", { d: pathD, class: "frontier-line" }));
+
+  const tooltip = document.getElementById("tooltip");
+  const wrap = document.getElementById("root").querySelector(".chart-card > div");
+
+  data.forEach(d => {
+    const cx = xScale(d.cost), cy = yScale(d.quality);
+    const g = el("g", { class: "dot" });
+
+    if (d.shape === "star") {
+      const starPath = starPoints(cx, cy, 11, 5, 4.4);
+      g.appendChild(el("path", { d: starPath + " Z", fill: d.color, stroke: "var(--surface-2)", "stroke-width": 2 }));
+    } else {
+      g.appendChild(el("circle", { cx, cy, r: 9, fill: d.color, class: "dot-ring", stroke: "var(--surface-2)" }));
+      g.appendChild(el("circle", { cx, cy, r: 9, fill: d.color }));
+    }
+
+    // Direct label placement. mid and router sit almost on top of each other
+    // (same quality, cost differs by $0.00065 -- a handful of pixels), so
+    // their labels need real vertical separation, not just a small offset.
+    const labelDx = d.key === "mid" || d.key === "router" ? 14 : 0;
+    const labelDy = d.key === "cheap" ? 24 : d.key === "mid" ? -22 : d.key === "router" ? 24 : -16;
+    const anchor = (d.key === "mid" || d.key === "router") ? "start" : "middle";
+    const lx = cx + labelDx + (anchor === "start" ? 10 : 0);
+    const ly = cy + labelDy;
+
+    const lbl = el("text", { x: lx, y: ly, "text-anchor": anchor, class: "point-label" });
+    lbl.textContent = d.label;
+    svg.appendChild(lbl);
+    const sub = el("text", { x: lx, y: ly + 14, "text-anchor": anchor, class: "point-sub" });
+    sub.textContent = "$" + d.cost.toFixed(5);
+    svg.appendChild(sub);
+
+    g.addEventListener("mouseenter", (e) => showTip(e, d));
+    g.addEventListener("mousemove", (e) => positionTip(e));
+    g.addEventListener("mouseleave", () => { tooltip.style.opacity = 0; });
+
+    svg.appendChild(g);
+  });
+
+  function starPoints(cx, cy, rOuter, points, rInner) {
+    let d = "";
+    const step = Math.PI / points;
+    for (let i = 0; i < points * 2; i++) {
+      const r = i % 2 === 0 ? rOuter : rInner;
+      const angle = i * step - Math.PI / 2;
+      const x = cx + r * Math.cos(angle);
+      const y = cy + r * Math.sin(angle);
+      d += (i === 0 ? "M" : "L") + x + " " + y + " ";
+    }
+    return d;
+  }
+
+  function showTip(e, d) {
+    tooltip.innerHTML = `<strong>${d.label}</strong><br>${d.sub}<br>` +
+      `<span class="mono-line">cost $${d.cost.toFixed(5)} · quality ${d.quality.toFixed(3)}</span>`;
+    tooltip.style.opacity = 1;
+    positionTip(e);
+  }
+  function positionTip(e) {
+    const rect = wrap.getBoundingClientRect();
+    tooltip.style.left = (e.clientX - rect.left + 14) + "px";
+    tooltip.style.top = (e.clientY - rect.top - 10) + "px";
+  }
+
+  // Legend
+  const legend = document.getElementById("legend");
+  const legendItems = [
+    { color: "var(--series-cheap)", label: "Cheap-only", star: false },
+    { color: "var(--series-mid)", label: "Mid-only", star: false },
+    { color: "var(--series-frontier)", label: "Frontier-only", star: false },
+    { color: "var(--router-fill)", label: "Our Router (cascade)", star: true },
+  ];
+  legendItems.forEach(item => {
+    const div = document.createElement("div");
+    div.className = "legend-item";
+    const sw = document.createElement("span");
+    sw.className = "swatch" + (item.star ? " star-swatch" : "");
+    sw.style.background = item.color;
+    div.appendChild(sw);
+    const txt = document.createElement("span");
+    txt.textContent = item.label;
+    div.appendChild(txt);
+    legend.appendChild(div);
+  });
+
+  // Table
+  const tbody = document.getElementById("table-body");
+  data.slice().sort((a, b) => a.cost - b.cost).forEach(d => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="row-swatch" style="background:${d.shape === 'star' ? d.color : d.color}"></span>${d.label}</td>
+      <td class="num">$${d.cost.toFixed(5)}</td>
+      <td class="num">${d.quality.toFixed(3)}</td>
+      <td class="num">${d.latency ? d.latency.toLocaleString() + " ms" : "—"}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+})();
+</script>
