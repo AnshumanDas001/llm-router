@@ -98,5 +98,20 @@
   "How many positive divisors does 360 have?",
   "A biased coin has probability 0.6 of landing heads. What is the probability of getting at least one head in 3 flips?",
   "What is the next number in the sequence: 2, 6, 12, 20, 30, ?",
-  "If a shape has exactly 8 faces, 12 edges, and V vertices, and satisfies Euler's formula (V - E + F = 2), what is V?"
+  "If a shape has exactly 8 faces, 12 edges, and V vertices, and satisfies Euler's formula (V - E + F = 2), what is V?",
+  "A rare genetic condition affects 0.5% of the population. A screening test correctly identifies the condition in 98% of people who have it (true positive rate), but also incorrectly flags 3% of people who don't have it (false positive rate). If a random person tests positive, what is the probability (as a percentage, to one decimal place) that they actually have the condition?",
+  "How many distinct ways are there to tile a 2x10 rectangular board completely using 1x2 dominoes (each domino can be placed horizontally or vertically)?",
+  "In a game of Nim with three piles containing 3, 5, and 7 stones, where players alternately remove any positive number of stones from a single pile and the player who removes the last stone wins, is the position a winning position for the player about to move? Answer 'Yes' or 'No'.",
+  "What is 4,873 multiplied by 2,956?",
+  "A car accelerates uniformly from rest to 108 km/h in 12 seconds. What is its acceleration in meters per second squared?",
+  "What does this Python code print?\n```python\nfuncs = []\nfor i in range(3):\n    funcs.append(lambda: i)\nprint([f() for f in funcs])\n```",
+  "Start with x = 3. Repeat the following process 6 times: x = x * 2 - 1. What is the final value of x?",
+  "In how many ways can 5 distinct letters be placed into 5 distinct envelopes (one letter per envelope) such that no letter is placed in its correct envelope?",
+  "Two players alternately remove 1, 2, or 3 stones from a pile of 17 stones. The player who removes the last stone wins. If both play optimally, does the first player win or lose?",
+  "A tank is filled by pipe A in 6 hours and by pipe B in 4 hours. If both pipes are opened together but pipe A is closed after 1 hour, how long in total (from the start) does it take to fill the tank? Give the answer in hours as a decimal.",
+  "Consider this recursive function:\n```python\ndef mystery(n):\n    if n <= 1:\n        return n\n    return mystery(n-1) + mystery(n-2) + 1\n```\nWhat is mystery(6)?",
+  "A jug contains 8 liters of a solution that is 25% acid. How many liters of pure acid must be added to make the solution 40% acid?",
+  "What is the tightest asymptotic time complexity of the following algorithm: for i from 1 to n, for j from 1 to i, perform a constant-time operation?",
+  "You're on a game show with 3 doors. Behind one is a car, behind the other two are goats. You pick door 1. The host, who knows what's behind each door, opens door 3 to reveal a goat, then offers you the chance to switch to door 2. What is the probability of winning the car if you switch? Give your answer as a decimal.",
+  "What are the last two digits of 13^40?"
 ]

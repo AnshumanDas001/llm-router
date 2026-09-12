@@ -864,5 +864,160 @@
     "eval_method": "exact_match_numeric",
     "expected_value": 6,
     "tolerance": 0
+  },
+  {
+    "id": "q101",
+    "query": "A rare genetic condition affects 0.5% of the population. A screening test correctly identifies the condition in 98% of people who have it (true positive rate), but also incorrectly flags 3% of people who don't have it (false positive rate). If a random person tests positive, what is the probability (as a percentage, to one decimal place) that they actually have the condition?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 14.1,
+    "tolerance": 0.2
+  },
+  {
+    "id": "q102",
+    "query": "How many distinct ways are there to tile a 2x10 rectangular board completely using 1x2 dominoes (each domino can be placed horizontally or vertically)?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 89,
+    "tolerance": 0
+  },
+  {
+    "id": "q103",
+    "query": "In a game of Nim with three piles containing 3, 5, and 7 stones, where players alternately remove any positive number of stones from a single pile and the player who removes the last stone wins, is the position a winning position for the player about to move? Answer 'Yes' or 'No'.",
+    "difficulty": "hard",
+    "task_type": "reasoning",
+    "eval_method": "exact_match",
+    "expected": [
+      "yes"
+    ]
+  },
+  {
+    "id": "q104",
+    "query": "What is 4,873 multiplied by 2,956?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 14404588,
+    "tolerance": 0
+  },
+  {
+    "id": "q105",
+    "query": "A car accelerates uniformly from rest to 108 km/h in 12 seconds. What is its acceleration in meters per second squared?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 2.5,
+    "tolerance": 0.05
+  },
+  {
+    "id": "q106",
+    "query": "What does this Python code print?\n```python\nfuncs = []\nfor i in range(3):\n    funcs.append(lambda: i)\nprint([f() for f in funcs])\n```",
+    "difficulty": "hard",
+    "task_type": "code_trace",
+    "eval_method": "exact_match",
+    "expected": [
+      "[2, 2, 2]"
+    ]
+  },
+  {
+    "id": "q107",
+    "query": "Start with x = 3. Repeat the following process 6 times: x = x * 2 - 1. What is the final value of x?",
+    "difficulty": "hard",
+    "task_type": "code_trace",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 129,
+    "tolerance": 0
+  },
+  {
+    "id": "q108",
+    "query": "In how many ways can 5 distinct letters be placed into 5 distinct envelopes (one letter per envelope) such that no letter is placed in its correct envelope?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 44,
+    "tolerance": 0
+  },
+  {
+    "id": "q109",
+    "query": "Two players alternately remove 1, 2, or 3 stones from a pile of 17 stones. The player who removes the last stone wins. If both play optimally, does the first player win or lose?",
+    "difficulty": "hard",
+    "task_type": "reasoning",
+    "eval_method": "exact_match",
+    "expected": [
+      "first player wins",
+      "wins"
+    ]
+  },
+  {
+    "id": "q110",
+    "query": "A tank is filled by pipe A in 6 hours and by pipe B in 4 hours. If both pipes are opened together but pipe A is closed after 1 hour, how long in total (from the start) does it take to fill the tank? Give the answer in hours as a decimal.",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 3.333,
+    "tolerance": 0.05
+  },
+  {
+    "id": "q111",
+    "query": "Consider this recursive function:\n```python\ndef mystery(n):\n    if n <= 1:\n        return n\n    return mystery(n-1) + mystery(n-2) + 1\n```\nWhat is mystery(6)?",
+    "difficulty": "hard",
+    "task_type": "code_trace",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 20,
+    "tolerance": 0
+  },
+  {
+    "id": "q112",
+    "query": "A jug contains 8 liters of a solution that is 25% acid. How many liters of pure acid must be added to make the solution 40% acid?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 2,
+    "tolerance": 0.1
+  },
+  {
+    "id": "q113",
+    "query": "What is the tightest asymptotic time complexity of the following algorithm: for i from 1 to n, for j from 1 to i, perform a constant-time operation?",
+    "difficulty": "hard",
+    "task_type": "explanation",
+    "eval_method": "exact_match",
+    "expected": [
+      "o(n^2)",
+      "o(n2)",
+      "\u03b8(n^2)",
+      "\u03b8(n2)",
+      "o(n\u00b2)",
+      "\u03b8(n\u00b2)"
+    ]
+  },
+  {
+    "id": "q114",
+    "query": "You're on a game show with 3 doors. Behind one is a car, behind the other two are goats. You pick door 1. The host, who knows what's behind each door, opens door 3 to reveal a goat, then offers you the chance to switch to door 2. What is the probability of winning the car if you switch? Give your answer as a decimal.",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 0.6667,
+    "tolerance": 0.01
+  },
+  {
+    "id": "q115",
+    "query": "What are the last two digits of 13^40?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match",
+    "expected": [
+      "01",
+      "last two digits are 1",
+      "ending in 01"
+    ]
+  },
+  {
+    "id": "q116",
+    "query": "A snail climbs 3 meters up a wall each day but slides back 2 meters each night. How many days does it take to reach the top of a 10-meter wall?",
+    "difficulty": "hard",
+    "task_type": "harvested",
+    "eval_method": "llm_judge"
   }
 ]

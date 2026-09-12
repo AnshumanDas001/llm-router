@@ -44,6 +44,14 @@ def _get_labeled_set():
     return _labeled_queries, _labeled_embeddings
 
 
+def refresh_reference_cache():
+    """Call after merge_candidates.py adds new examples to eval_queries.json,
+    so a long-running server picks them up without a restart."""
+    global _labeled_embeddings, _labeled_queries
+    _labeled_embeddings = None
+    _labeled_queries = None
+
+
 def _embedding_difficulty(query: str) -> str:
     """1-nearest-neighbor, not a k-vote: with only 61 labeled examples and
     MiniLM cosine similarities sitting in a fairly flat 0.2-0.4 band for
