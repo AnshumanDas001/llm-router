@@ -17,7 +17,7 @@ from app.auth import (
     verify_password,
 )
 from app.baseline_cost import estimate_frontier_cost
-from app.cascade import run_cascade
+from app.cascade import AllTiersUnavailable, run_cascade
 from app.db import init_db, log_cascade
 
 app = FastAPI(title="LLM Router")
@@ -184,8 +184,13 @@ def api_send_message(chat_id: int, req: SendMessageRequest, user=Depends(get_cur
 
     try:
         result = run_cascade(messages)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"upstream call failed: {exc}") from exc
+    except AllTiersUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="All model tiers are temporarily rate limited. Please try again in a few minutes.",
+        )
+    except Exception:
+        raise HTTPException(status_code=502, detail="Something went wrong generating a response.")
 
     baseline_cost = estimate_frontier_cost(result["tokens_in"], result["tokens_out"])
 
@@ -226,8 +231,13 @@ def chat_completions(req: ChatRequest):
 
     try:
         result = run_cascade([m.model_dump() for m in req.messages])
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"upstream call failed: {exc}") from exc
+    except AllTiersUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="All model tiers are temporarily rate limited. Please try again in a few minutes.",
+        )
+    except Exception:
+        raise HTTPException(status_code=502, detail="Something went wrong generating a response.")
 
     log_cascade(
         query=req.messages[-1].content,
