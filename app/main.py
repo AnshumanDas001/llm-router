@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app import chat_db
@@ -24,9 +25,12 @@ from app.cascade import AllTiersUnavailable, run_cascade
 from app.db import init_db, log_cascade
 
 app = FastAPI(title="LLM Router")
+app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
+
 DEMO_HTML_PATH = Path(__file__).resolve().parent / "demo.html"
 CHAT_APP_HTML_PATH = Path(__file__).resolve().parent / "chat_app.html"
 SETTINGS_HTML_PATH = Path(__file__).resolve().parent / "settings.html"
+SESSIONS_HTML_PATH = Path(__file__).resolve().parent / "sessions.html"
 
 
 class Message(BaseModel):
@@ -94,6 +98,11 @@ def chat_app():
 @app.get("/settings", response_class=HTMLResponse)
 def settings_page():
     return SETTINGS_HTML_PATH.read_text()
+
+
+@app.get("/sessions", response_class=HTMLResponse)
+def sessions_page():
+    return SESSIONS_HTML_PATH.read_text()
 
 
 # --- auth ------------------------------------------------------------------
@@ -433,6 +442,7 @@ def api_route(req: RouteRequest, user=Depends(get_user_from_api_key)):
     chat_db.log_usage(
         user["id"], "api", result["difficulty"], result["initial_tier"], result["final_tier"],
         result["escalated"], result["total_cost"], baseline_cost, result["total_latency_ms"], now,
+        api_key_id=user["api_key_id"],
     )
 
     return {
@@ -486,5 +496,41 @@ def api_usage(user=Depends(get_current_user)):
                 "timestamp": r["timestamp"],
             }
             for r in log
+        ],
+    }
+
+
+# --- unified sessions (chats + API-key sessions) ----------------------------
+
+@app.get("/api/sessions")
+def api_sessions_overview(user=Depends(get_current_user)):
+    return chat_db.get_sessions_overview(user["id"])
+
+
+@app.get("/api/sessions/api/{key_id}")
+def api_session_detail(key_id: int, user=Depends(get_current_user)):
+    key, calls = chat_db.get_api_session_detail(key_id, user["id"])
+    if key is None:
+        raise HTTPException(status_code=404, detail="session not found")
+
+    total_cost = sum(c["cost"] or 0.0 for c in calls)
+    total_baseline = sum(c["baseline_cost"] or 0.0 for c in calls)
+    return {
+        "id": key["id"],
+        "name": key["name"] or f"API session {key['key_prefix']}",
+        "key_prefix": key["key_prefix"],
+        "created_at": key["created_at"],
+        "revoked": bool(key["revoked"]),
+        "total_cost": total_cost,
+        "total_baseline_cost": total_baseline,
+        "cost_saved": max(0.0, total_baseline - total_cost),
+        "calls": [
+            {
+                "difficulty": c["difficulty"], "initial_tier": c["initial_tier"],
+                "final_tier": c["final_tier"], "escalated": bool(c["escalated"]),
+                "cost": c["cost"], "baseline_cost": c["baseline_cost"],
+                "latency_ms": c["latency_ms"], "timestamp": c["timestamp"],
+            }
+            for c in calls
         ],
     }

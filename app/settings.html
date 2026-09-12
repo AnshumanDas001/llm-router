@@ -2,156 +2,93 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>LLM Router Settings</title>
+<title>Settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/static/app.css">
 <style>
-  :root {
-    --bg: #0d0d0d; --surface: #161616; --surface-2: #1d1d1d; --border: #2a2a2a;
-    --text: #e8e8e6; --muted: #8a8a86;
-    --cheap: #4caf50; --mid: #29b6f6; --frontier: #ffb300; --escalate: #ef5350;
-    --accent: #29b6f6; --good: #4caf50; --warn: #ffb300;
-  }
-  * { box-sizing: border-box; }
-  body {
-    background: var(--bg); color: var(--text); margin: 0;
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px 60px; }
-  [hidden] { display: none !important; }
-
-  header {
-    display: flex; justify-content: space-between; align-items: baseline;
-    margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);
-  }
-  header h1 { font-size: 17px; margin: 0; }
-  header a { color: var(--muted); font-size: 12.5px; text-decoration: underline; }
-
-  section { margin-bottom: 34px; }
-  h2 { font-size: 14px; margin: 0 0 4px; }
-  .section-sub { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
-
-  .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-    padding: 16px;
-  }
-  .card + .card { margin-top: 10px; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-  th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; font-size: 11px; text-transform: uppercase; }
-  td { padding: 7px 8px; border-top: 1px solid var(--border); }
-  .mono { font-family: inherit; }
-  .badge { padding: 1px 7px; border-radius: 8px; font-weight: 600; font-size: 10.5px; }
-  .badge.cheap { background: rgba(76,175,80,0.15); color: var(--cheap); }
-  .badge.mid { background: rgba(41,182,246,0.15); color: var(--mid); }
-  .badge.frontier { background: rgba(255,179,0,0.15); color: var(--frontier); }
-  .badge.revoked { background: rgba(239,83,80,0.15); color: var(--escalate); }
-  .muted { color: var(--muted); }
-
-  input[type=text], input[type=password] {
-    background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
-    padding: 7px 9px; border-radius: 5px; font-family: inherit; font-size: 12.5px;
-  }
-  button {
-    background: var(--accent); color: #001018; border: none; padding: 7px 14px;
-    border-radius: 5px; font-weight: 600; cursor: pointer; font-family: inherit; font-size: 12.5px;
-  }
-  button.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
-  button.danger { background: var(--escalate); color: #200; }
-  button:disabled { opacity: 0.5; cursor: default; }
-
   .tier-row {
     display: grid; grid-template-columns: 70px 1fr 1fr auto; gap: 8px; align-items: center;
     margin-bottom: 8px;
   }
-  @media (max-width: 560px) { .tier-row { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) { .tier-row { grid-template-columns: 1fr; } }
   .tier-row input { width: 100%; }
-
-  .new-key-banner {
-    background: rgba(76,175,80,0.1); border: 1px solid var(--good); border-radius: 6px;
-    padding: 12px; margin-bottom: 12px; font-size: 12.5px;
-  }
-  .new-key-banner .key { display: block; margin: 6px 0; font-weight: 600; word-break: break-all; }
-  .warning-box {
-    background: rgba(255,179,0,0.1); border: 1px solid var(--warn); border-radius: 6px;
-    padding: 10px 12px; font-size: 12px; margin-top: 10px; color: var(--warn);
-  }
-  .stat-row { display: flex; gap: 24px; margin-bottom: 4px; flex-wrap: wrap; }
-  .stat { }
-  .stat .num { font-size: 20px; font-weight: 700; }
-  .stat .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; }
-  .stat .num.good { color: var(--good); }
+  .tier-row-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1>Settings</h1>
-    <a href="/app">&larr; back to chat</a>
-  </header>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div id="app-nav-top-mount"></div>
+    <div class="app-nav-spacer"></div>
+    <div id="app-nav-bottom-mount"></div>
+  </nav>
+  <main class="app-main">
+    <div class="app-content">
 
-  <section>
-    <h2>API keys</h2>
-    <p class="section-sub">For programmatic access to <code>/api/v1/route</code>. We never store your upstream model provider keys -- only these, which identify your account.</p>
-    <div class="card">
-      <div id="new-key-banner" hidden></div>
-      <table id="keys-table"><thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody></tbody></table>
-      <div style="margin-top:10px;">
-        <input type="text" id="new-key-name" placeholder="key name (optional)">
-        <button id="create-key-btn">+ New API key</button>
+      <div class="page-header">
+        <div>
+          <h1>Settings</h1>
+          <p class="sub">Manage API keys and bring-your-own-model configuration. See <a href="/sessions">Sessions</a> for usage and cost-saved history.</p>
+        </div>
       </div>
+
+      <section>
+        <h2>API keys</h2>
+        <p class="section-sub">For programmatic access to <code>/api/v1/route</code>. We never store your upstream model provider keys &mdash; only these, which identify your account. Each key is its own session (see Sessions).</p>
+        <div class="card">
+          <div id="new-key-banner"></div>
+          <table id="keys-table"><thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody></tbody></table>
+          <div style="margin-top:12px; display:flex; gap:8px;">
+            <input type="text" id="new-key-name" placeholder="key name (optional)">
+            <button id="create-key-btn">+ New API key</button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Model configuration &amp; calibration</h2>
+        <p class="section-sub">Bring your own models. Enter a <a href="https://docs.litellm.ai/docs/providers" target="_blank">litellm-style model string</a> per tier (e.g. <code>groq/llama-3.1-8b-instant</code>) and your key for that provider &mdash; used once, transiently, to run a quick calibration; never stored.</p>
+        <div class="card">
+          <div class="tier-row">
+            <span class="tier-row-label">Tier</span><span class="tier-row-label">Model</span><span class="tier-row-label">API key</span><span></span>
+          </div>
+          <div class="tier-row">
+            <span class="badge cheap">cheap</span>
+            <input type="text" id="model-cheap" placeholder="e.g. groq/llama-3.1-8b-instant">
+            <input type="password" id="key-cheap" placeholder="provider API key">
+            <span></span>
+          </div>
+          <div class="tier-row">
+            <span class="badge mid">mid</span>
+            <input type="text" id="model-mid" placeholder="e.g. openai/gpt-4o-mini">
+            <input type="password" id="key-mid" placeholder="provider API key">
+            <span></span>
+          </div>
+          <div class="tier-row">
+            <span class="badge frontier">frontier</span>
+            <input type="text" id="model-frontier" placeholder="e.g. anthropic/claude-...">
+            <input type="password" id="key-frontier" placeholder="provider API key">
+            <span></span>
+          </div>
+          <div style="margin-top:8px; display:flex; align-items:center; gap:10px;">
+            <button id="calibrate-btn">Run calibration</button>
+            <span id="calibrate-status" style="color:var(--text-muted); font-size:12.5px;"></span>
+          </div>
+          <div id="calibrate-warnings"></div>
+
+          <table id="calibration-table" style="margin-top:16px;" hidden>
+            <thead><tr><th>Tier</th><th>Model</th><th>Avg quality</th><th>Avg cost</th><th>Avg latency</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
     </div>
-  </section>
-
-  <section>
-    <h2>Model configuration &amp; calibration</h2>
-    <p class="section-sub">Bring your own models. Enter a <a href="https://docs.litellm.ai/docs/providers" target="_blank" style="color:var(--accent)">litellm-style model string</a> per tier (e.g. <code>groq/llama-3.1-8b-instant</code>) and your key for that provider -- used once, transiently, to run a quick calibration; never stored.</p>
-    <div class="card">
-      <div class="tier-row"><strong>Tier</strong><strong>Model</strong><strong>API key</strong><span></span></div>
-      <div class="tier-row">
-        <span class="badge cheap">cheap</span>
-        <input type="text" id="model-cheap" placeholder="e.g. groq/llama-3.1-8b-instant">
-        <input type="password" id="key-cheap" placeholder="provider API key">
-        <span></span>
-      </div>
-      <div class="tier-row">
-        <span class="badge mid">mid</span>
-        <input type="text" id="model-mid" placeholder="e.g. openai/gpt-4o-mini">
-        <input type="password" id="key-mid" placeholder="provider API key">
-        <span></span>
-      </div>
-      <div class="tier-row">
-        <span class="badge frontier">frontier</span>
-        <input type="text" id="model-frontier" placeholder="e.g. anthropic/claude-...">
-        <input type="password" id="key-frontier" placeholder="provider API key">
-        <span></span>
-      </div>
-      <button id="calibrate-btn" style="margin-top:6px;">Run calibration</button>
-      <span id="calibrate-status" class="muted" style="margin-left:10px;"></span>
-      <div id="calibrate-warnings"></div>
-
-      <table id="calibration-table" style="margin-top:16px;" hidden>
-        <thead><tr><th>Tier</th><th>Model</th><th>Avg quality</th><th>Avg cost</th><th>Avg latency</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section>
-    <h2>Usage dashboard</h2>
-    <p class="section-sub">Across both the chat UI and API calls made with your keys.</p>
-    <div class="card">
-      <div class="stat-row">
-        <div class="stat"><div class="num" id="stat-calls">-</div><div class="lbl">calls</div></div>
-        <div class="stat"><div class="num" id="stat-cost">-</div><div class="lbl">total cost</div></div>
-        <div class="stat"><div class="num good" id="stat-saved">-</div><div class="lbl">saved</div></div>
-      </div>
-      <table id="usage-table" style="margin-top:14px;">
-        <thead><tr><th>Time</th><th>Source</th><th>Difficulty</th><th>Tier</th><th>Cost</th><th>Saved</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+  </main>
 </div>
 
+<script src="/static/nav.js"></script>
 <script>
   async function api(path, opts = {}) {
     const resp = await fetch(path, {
@@ -172,13 +109,13 @@
       <tr>
         <td>${esc(k.name)}</td>
         <td class="mono">${esc(k.key_prefix)}...</td>
-        <td class="muted">${k.created_at.slice(0, 10)}</td>
-        <td class="muted">${k.last_used_at ? k.last_used_at.slice(0, 10) : "never"}</td>
+        <td style="color:var(--text-muted)">${k.created_at.slice(0, 10)}</td>
+        <td style="color:var(--text-muted)">${k.last_used_at ? k.last_used_at.slice(0, 10) : "never"}</td>
         <td>${k.revoked
           ? '<span class="badge revoked">revoked</span>'
           : `<button class="ghost" data-revoke="${k.id}">revoke</button>`}</td>
       </tr>
-    `).join("") || '<tr><td colspan="5" class="muted">No keys yet.</td></tr>';
+    `).join("") || '<tr><td colspan="5"><div class="empty-state">No keys yet.</div></td></tr>';
 
     tbody.querySelectorAll("[data-revoke]").forEach(btn => {
       btn.onclick = async () => {
@@ -192,9 +129,7 @@
     const name = document.getElementById("new-key-name").value.trim() || null;
     const data = await api("/api/keys", { method: "POST", body: JSON.stringify({ name }) });
     const banner = document.getElementById("new-key-banner");
-    banner.hidden = false;
-    banner.className = "new-key-banner";
-    banner.innerHTML = `Your new API key (shown once -- copy it now):<span class="key">${esc(data.key)}</span>`;
+    banner.innerHTML = `<div class="success-box">Your new API key (shown once &mdash; copy it now):<span class="key mono">${esc(data.key)}</span></div>`;
     document.getElementById("new-key-name").value = "";
     loadKeys();
   };
@@ -229,7 +164,6 @@
         document.getElementById("calibrate-warnings").innerHTML = data.warnings
           .map(w => `<div class="warning-box">${esc(w)}</div>`).join("");
       }
-      // Clear key inputs -- they were only ever used for this one request.
       for (const tier of ["cheap", "mid", "frontier"]) document.getElementById(`key-${tier}`).value = "";
     } catch (err) {
       statusEl.textContent = "Error: " + err.message;
@@ -245,9 +179,9 @@
       <tr>
         <td><span class="badge ${tier}">${tier}</span></td>
         <td class="mono">${esc(r.model)}</td>
-        <td>${(r.avg_quality * 100).toFixed(0)}%</td>
-        <td>${fmt(r.avg_cost)}</td>
-        <td>${r.avg_latency_ms.toFixed(0)}ms</td>
+        <td class="mono">${(r.avg_quality * 100).toFixed(0)}%</td>
+        <td class="mono">${fmt(r.avg_cost)}</td>
+        <td class="mono">${r.avg_latency_ms.toFixed(0)}ms</td>
       </tr>
     `).join("");
   }
@@ -260,31 +194,11 @@
     renderCalibration(byTier);
   }
 
-  async function loadUsage() {
-    const data = await api("/api/usage");
-    document.getElementById("stat-calls").textContent = data.n_calls;
-    document.getElementById("stat-cost").textContent = fmt(data.total_cost);
-    document.getElementById("stat-saved").textContent = fmt(data.total_cost_saved);
-
-    document.querySelector("#usage-table tbody").innerHTML = data.log.map(r => `
-      <tr>
-        <td class="muted">${r.timestamp.slice(0, 19).replace("T", " ")}</td>
-        <td>${esc(r.source)}</td>
-        <td class="muted">${esc(r.difficulty || "-")}</td>
-        <td><span class="badge ${r.final_tier}">${esc(r.final_tier || "-")}</span></td>
-        <td>${fmt(r.cost)}</td>
-        <td>${fmt(Math.max(0, (r.baseline_cost ?? 0) - (r.cost ?? 0)))}</td>
-        <td>${r.escalated ? '<span class="badge revoked">escalated</span>' : ""}</td>
-      </tr>
-    `).join("") || '<tr><td colspan="7" class="muted">No usage yet.</td></tr>';
-  }
-
   (async function init() {
-    try { await api("/auth/me"); } catch { window.location.href = "/app"; return; }
+    await initNav("settings");
     loadKeys();
     loadModels();
     loadCalibrationHistory();
-    loadUsage();
   })();
 </script>
 </body>

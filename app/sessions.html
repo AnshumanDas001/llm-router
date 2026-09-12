@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sessions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .new-session-menu { position: relative; display: inline-block; }
+  .new-session-dropdown {
+    position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: var(--radius); min-width: 180px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 10; overflow: hidden;
+  }
+  .new-session-dropdown button {
+    display: block; width: 100%; text-align: left; background: none; color: var(--text-primary);
+    border: none; border-radius: 0; padding: 10px 14px; font-weight: 500;
+  }
+  .new-session-dropdown button:hover { background: var(--surface-3); }
+  .new-session-dropdown .desc { color: var(--text-muted); font-size: 11px; display: block; margin-top: 1px; font-weight: 400; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div id="app-nav-top-mount"></div>
+    <div class="app-nav-spacer"></div>
+    <div id="app-nav-bottom-mount"></div>
+  </nav>
+  <main class="app-main">
+    <div class="app-content">
+
+      <div id="overview-view">
+        <div class="page-header">
+          <div>
+            <h1>Sessions</h1>
+            <p class="sub">Every chat and API key, each its own session. Click one for the full call log.</p>
+          </div>
+          <div class="new-session-menu">
+            <button id="new-session-btn">+ New session</button>
+            <div class="new-session-dropdown" id="new-session-dropdown" hidden>
+              <button id="new-chat-session-btn">New chat<span class="desc">Interactive, in the chat UI</span></button>
+              <button id="new-api-session-btn">New API session<span class="desc">Issues a key for programmatic use</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div id="new-key-banner"></div>
+
+        <table id="sessions-table">
+          <thead><tr><th>Session</th><th>Type</th><th>Calls</th><th>Total cost</th><th>Saved</th><th>Created</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div id="detail-view" hidden>
+        <div class="page-header">
+          <div>
+            <h1 id="detail-title">Session</h1>
+            <p class="sub" id="detail-sub"></p>
+          </div>
+          <a href="/sessions">&larr; all sessions</a>
+        </div>
+        <div class="stat-row card" style="margin-bottom:18px;">
+          <div class="stat"><div class="num" id="detail-calls">-</div><div class="lbl">calls</div></div>
+          <div class="stat"><div class="num" id="detail-cost">-</div><div class="lbl">total cost</div></div>
+          <div class="stat"><div class="num good" id="detail-saved">-</div><div class="lbl">saved</div></div>
+        </div>
+        <table id="detail-table">
+          <thead><tr><th>Time</th><th>Difficulty</th><th>Tier</th><th>Cost</th><th>Saved</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script src="/static/nav.js"></script>
+<script>
+  function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+  function fmt(n) { return "$" + (n ?? 0).toFixed(5); }
+
+  async function api(path, opts = {}) {
+    const resp = await fetch(path, {
+      ...opts, headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      credentials: "same-origin",
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.detail || `request failed (${resp.status})`);
+    return data;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const apiSessionId = params.get("api");
+
+  async function loadOverview() {
+    const sessions = await api("/api/sessions");
+    const tbody = document.querySelector("#sessions-table tbody");
+    tbody.innerHTML = sessions.map(s => `
+      <tr class="clickable" data-type="${s.type}" data-id="${s.id}">
+        <td>${esc(s.name)}${s.revoked ? ' <span class="badge revoked">revoked</span>' : ""}</td>
+        <td><span class="badge ${s.type === "chat" ? "chat-type" : "api-type"}">${s.type}</span></td>
+        <td class="mono">${s.n_calls}</td>
+        <td class="mono">${fmt(s.total_cost)}</td>
+        <td class="mono" style="color:var(--good)">${fmt(s.cost_saved)}</td>
+        <td class="mono" style="color:var(--text-muted)">${s.created_at.slice(0, 10)}</td>
+      </tr>
+    `).join("") || '<tr><td colspan="6"><div class="empty-state">No sessions yet -- start a chat or create an API session.</div></td></tr>';
+
+    tbody.querySelectorAll("tr[data-type]").forEach(row => {
+      row.onclick = () => {
+        if (row.dataset.type === "chat") window.location.href = `/app?chat=${row.dataset.id}`;
+        else window.location.href = `/sessions?api=${row.dataset.id}`;
+      };
+    });
+  }
+
+  async function loadApiSessionDetail(keyId) {
+    document.getElementById("overview-view").hidden = true;
+    document.getElementById("detail-view").hidden = false;
+
+    const data = await api(`/api/sessions/api/${keyId}`);
+    document.getElementById("detail-title").textContent = data.name;
+    document.getElementById("detail-sub").textContent =
+      `API session · ${data.key_prefix}... · created ${data.created_at.slice(0, 10)}` +
+      (data.revoked ? " · revoked" : "");
+    document.getElementById("detail-calls").textContent = data.calls.length;
+    document.getElementById("detail-cost").textContent = fmt(data.total_cost);
+    document.getElementById("detail-saved").textContent = fmt(data.cost_saved);
+
+    document.querySelector("#detail-table tbody").innerHTML = data.calls.map(c => `
+      <tr>
+        <td class="mono" style="color:var(--text-muted)">${c.timestamp.slice(0, 19).replace("T", " ")}</td>
+        <td style="color:var(--text-muted)">${esc(c.difficulty || "-")}</td>
+        <td><span class="badge ${c.final_tier}">${esc(c.final_tier || "-")}</span></td>
+        <td class="mono">${fmt(c.cost)}</td>
+        <td class="mono" style="color:var(--good)">${fmt(Math.max(0, (c.baseline_cost ?? 0) - (c.cost ?? 0)))}</td>
+        <td>${c.escalated ? '<span class="badge escalated">escalated</span>' : ""}</td>
+      </tr>
+    `).join("") || '<tr><td colspan="6"><div class="empty-state">No calls yet with this key.</div></td></tr>';
+  }
+
+  // --- new session menu ---
+  const dropdown = document.getElementById("new-session-dropdown");
+  document.getElementById("new-session-btn").onclick = (e) => {
+    e.stopPropagation();
+    dropdown.hidden = !dropdown.hidden;
+  };
+  document.addEventListener("click", () => { dropdown.hidden = true; });
+
+  document.getElementById("new-chat-session-btn").onclick = async () => {
+    const { id } = await api("/api/chats", { method: "POST", body: JSON.stringify({}) });
+    window.location.href = `/app?chat=${id}`;
+  };
+
+  document.getElementById("new-api-session-btn").onclick = async () => {
+    const data = await api("/api/keys", { method: "POST", body: JSON.stringify({ name: null }) });
+    const banner = document.getElementById("new-key-banner");
+    banner.innerHTML = `<div class="success-box">New API session key (shown once -- copy it now):
+      <span class="key mono">${esc(data.key)}</span>
+      Use it as <span class="mono">Authorization: Bearer ${esc(data.key_prefix)}...</span> against <span class="mono">/api/v1/route</span>.
+      Configure your models first at <a href="/settings">Settings</a> if you haven't.</div>`;
+    loadOverview();
+  };
+
+  (async function init() {
+    await initNav("sessions");
+    if (apiSessionId) {
+      await loadApiSessionDetail(apiSessionId);
+    } else {
+      await loadOverview();
+    }
+  })();
+</script>
+</body>
+</html>

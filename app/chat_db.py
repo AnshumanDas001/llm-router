@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS calibration_results (
 CREATE TABLE IF NOT EXISTS usage_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
+    api_key_id INTEGER REFERENCES api_keys(id),
     source TEXT NOT NULL,
     difficulty TEXT,
     initial_tier TEXT,
@@ -114,6 +115,15 @@ def init_chat_db():
     with get_conn() as conn:
         conn.executescript(SCHEMA)
         conn.commit()
+        # Migration: usage_log predates api_key_id (added when API-mode calls
+        # became groupable into per-key "sessions"). SQLite has no
+        # ADD COLUMN IF NOT EXISTS, so guard the duplicate-column error.
+        try:
+            conn.execute("ALTER TABLE usage_log ADD COLUMN api_key_id INTEGER REFERENCES api_keys(id)")
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
 
 
 # --- users -------------------------------------------------------------
@@ -245,9 +255,12 @@ def list_api_keys(user_id: int):
 
 
 def get_user_by_api_key_hash(key_hash: str):
+    """Returns a row with the user's fields plus api_key_id (the specific
+    key used -- each key is also a "session" for API-mode usage, so callers
+    need to know which one to attribute a call to)."""
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT u.* FROM api_keys k JOIN users u ON u.id = k.user_id "
+            "SELECT u.*, k.id AS api_key_id FROM api_keys k JOIN users u ON u.id = k.user_id "
             "WHERE k.key_hash = ? AND k.revoked = 0", (key_hash,),
         ).fetchone()
         if row:
@@ -313,14 +326,18 @@ def get_calibration_results(user_id: int):
 
 
 # --- usage log (both chat UI and API-mode traffic write here) --------------
+# An API-mode row's api_key_id makes that key a "session" -- see
+# get_sessions_overview / get_api_session_detail below, which group by it.
 
 def log_usage(user_id: int, source: str, difficulty: str, initial_tier: str, final_tier: str,
-               escalated: bool, cost: float, baseline_cost: float, latency_ms: float, timestamp: str):
+               escalated: bool, cost: float, baseline_cost: float, latency_ms: float, timestamp: str,
+               api_key_id: int | None = None):
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO usage_log (user_id, source, difficulty, initial_tier, final_tier, "
-            "escalated, cost, baseline_cost, latency_ms, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, source, difficulty, initial_tier, final_tier, int(escalated),
+            "INSERT INTO usage_log (user_id, api_key_id, source, difficulty, initial_tier, "
+            "final_tier, escalated, cost, baseline_cost, latency_ms, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, api_key_id, source, difficulty, initial_tier, final_tier, int(escalated),
              cost, baseline_cost, latency_ms, timestamp),
         )
         conn.commit()
@@ -346,3 +363,61 @@ def get_usage_log(user_id: int, limit: int = 100):
             "SELECT * FROM usage_log WHERE user_id = ? ORDER BY id DESC LIMIT ?",
             (user_id, limit),
         ).fetchall()
+
+
+# --- unified sessions overview (chats + API-key sessions) ------------------
+
+def get_sessions_overview(user_id: int):
+    """Every session a user has, of either type, as one flat list -- a chat
+    (grouped by chats/chat_messages) or an API key (grouped by api_keys/
+    usage_log, one key = one session)."""
+    with get_conn() as conn:
+        chat_rows = conn.execute(
+            "SELECT c.id, c.title, c.created_at, COUNT(m.id) AS n_calls, "
+            "COALESCE(SUM(m.cost), 0) AS total_cost, "
+            "COALESCE(SUM(m.baseline_cost), 0) AS total_baseline_cost "
+            "FROM chats c LEFT JOIN chat_messages m ON m.chat_id = c.id AND m.role = 'assistant' "
+            "WHERE c.user_id = ? GROUP BY c.id ORDER BY c.id DESC", (user_id,),
+        ).fetchall()
+        api_rows = conn.execute(
+            "SELECT k.id, k.name, k.key_prefix, k.created_at, k.revoked, "
+            "COUNT(u.id) AS n_calls, COALESCE(SUM(u.cost), 0) AS total_cost, "
+            "COALESCE(SUM(u.baseline_cost), 0) AS total_baseline_cost "
+            "FROM api_keys k LEFT JOIN usage_log u ON u.api_key_id = k.id "
+            "WHERE k.user_id = ? GROUP BY k.id ORDER BY k.id DESC", (user_id,),
+        ).fetchall()
+
+    sessions = []
+    for c in chat_rows:
+        sessions.append({
+            "type": "chat", "id": c["id"], "name": c["title"] or "New chat",
+            "created_at": c["created_at"], "n_calls": c["n_calls"],
+            "total_cost": c["total_cost"], "total_baseline_cost": c["total_baseline_cost"],
+            "cost_saved": max(0.0, c["total_baseline_cost"] - c["total_cost"]),
+            "revoked": False,
+        })
+    for k in api_rows:
+        sessions.append({
+            "type": "api", "id": k["id"], "name": k["name"] or f"API session {k['key_prefix']}",
+            "created_at": k["created_at"], "n_calls": k["n_calls"],
+            "total_cost": k["total_cost"], "total_baseline_cost": k["total_baseline_cost"],
+            "cost_saved": max(0.0, k["total_baseline_cost"] - k["total_cost"]),
+            "revoked": bool(k["revoked"]),
+        })
+    sessions.sort(key=lambda s: s["created_at"], reverse=True)
+    return sessions
+
+
+def get_api_session_detail(api_key_id: int, user_id: int):
+    """The call log for one API-key session -- verifies ownership via the
+    user_id join, same 404-not-403 pattern as chat access."""
+    with get_conn() as conn:
+        key = conn.execute(
+            "SELECT * FROM api_keys WHERE id = ? AND user_id = ?", (api_key_id, user_id),
+        ).fetchone()
+        if key is None:
+            return None, []
+        calls = conn.execute(
+            "SELECT * FROM usage_log WHERE api_key_id = ? ORDER BY id DESC", (api_key_id,),
+        ).fetchall()
+        return key, calls

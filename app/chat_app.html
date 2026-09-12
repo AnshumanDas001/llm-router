@@ -3,87 +3,47 @@
 <head>
 <meta charset="utf-8">
 <title>LLM Router Chat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<link rel="stylesheet" href="/static/app.css">
 <style>
-  :root {
-    --bg: #0d0d0d; --surface: #161616; --surface-2: #1d1d1d; --border: #2a2a2a;
-    --text: #e8e8e6; --muted: #8a8a86;
-    --cheap: #4caf50; --mid: #29b6f6; --frontier: #ffb300; --escalate: #ef5350;
-    --accent: #29b6f6; --good: #4caf50;
-  }
-  * { box-sizing: border-box; }
-  body {
-    background: var(--bg); color: var(--text); margin: 0; height: 100vh; overflow: hidden;
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  }
-  [hidden] { display: none !important; }
-
   /* --- auth screen --- */
-  #auth-screen {
-    height: 100vh; display: flex; align-items: center; justify-content: center;
-  }
-  .auth-box {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 28px; width: 320px;
-  }
+  #auth-screen { height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .auth-box { width: 320px; }
   .auth-box h1 { font-size: 16px; margin: 0 0 4px; }
-  .auth-box p.sub { color: var(--muted); font-size: 12.5px; margin: 0 0 20px; }
-  .auth-box input {
-    width: 100%; background: var(--surface-2); border: 1px solid var(--border);
-    color: var(--text); padding: 9px 10px; border-radius: 6px; margin-bottom: 10px;
-    font-family: inherit; font-size: 13.5px;
-  }
-  .auth-box button {
-    width: 100%; background: var(--accent); color: #001018; border: none;
-    padding: 10px; border-radius: 6px; font-weight: 600; cursor: pointer;
-    font-family: inherit; font-size: 13.5px; margin-top: 4px;
-  }
-  .auth-toggle { text-align: center; margin-top: 14px; font-size: 12.5px; color: var(--muted); }
-  .auth-toggle a { color: var(--accent); cursor: pointer; text-decoration: none; }
-  .auth-error { color: var(--escalate); font-size: 12px; margin-bottom: 8px; min-height: 14px; }
+  .auth-box .sub { color: var(--text-muted); font-size: 12.5px; margin: 0 0 20px; }
+  .auth-box input { width: 100%; margin-bottom: 10px; }
+  .auth-box button { width: 100%; margin-top: 4px; }
+  .auth-toggle { text-align: center; margin-top: 14px; font-size: 12.5px; color: var(--text-muted); }
+  .auth-toggle a { cursor: pointer; text-decoration: none; }
+  .auth-error { color: var(--critical); font-size: 12px; margin-bottom: 8px; min-height: 14px; }
 
-  /* --- app layout --- */
-  #app-screen { display: flex; height: 100vh; }
-  #sidebar {
-    width: 240px; background: var(--surface); border-right: 1px solid var(--border);
-    display: flex; flex-direction: column; flex-shrink: 0;
-  }
-  #sidebar-header { padding: 14px 14px 10px; border-bottom: 1px solid var(--border); }
-  #sidebar-header .user { font-size: 12.5px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
-  #logout-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 11px; text-decoration: underline; font-family: inherit; }
-  #new-chat-btn {
-    margin: 10px 14px; background: var(--surface-2); border: 1px solid var(--border);
-    color: var(--text); padding: 8px; border-radius: 6px; cursor: pointer; font-family: inherit;
-    font-size: 12.5px; font-weight: 600;
-  }
-  #new-chat-btn:hover { border-color: var(--accent); }
-  #chat-list { flex: 1; overflow-y: auto; padding: 0 8px; }
-  .chat-item {
-    padding: 9px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; font-size: 12.5px;
-  }
+  /* --- chat-list, nested inside the shared nav sidebar --- */
+  #new-chat-btn { margin: 12px 14px 8px; width: calc(100% - 28px); }
+  #chat-list { flex: 1; overflow-y: auto; padding: 0 8px; min-height: 0; }
+  .chat-item { padding: 9px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; font-size: 12.5px; }
   .chat-item:hover { background: var(--surface-2); }
   .chat-item.active { background: var(--surface-2); border: 1px solid var(--border); }
   .chat-item .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chat-item .saved { color: var(--good); font-size: 11px; margin-top: 2px; }
 
-  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #main-header {
-    padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex;
+  /* --- chat main pane --- */
+  #chat-main { display: flex; flex-direction: column; height: 100vh; min-width: 0; }
+  #chat-header {
+    padding: 14px 22px; border-bottom: 1px solid var(--border); display: flex;
     justify-content: space-between; align-items: center; flex-shrink: 0;
   }
-  #main-header h2 { font-size: 14px; margin: 0; font-weight: 600; }
+  #chat-header h2 { font-size: 14px; margin: 0; font-weight: 650; }
   #cost-saved-stat { font-size: 12.5px; color: var(--good); font-weight: 600; }
-  #cost-saved-stat .label { color: var(--muted); font-weight: 400; }
+  #cost-saved-stat .label { color: var(--text-muted); font-weight: 400; }
 
-  #messages { flex: 1; overflow-y: auto; padding: 20px; }
+  #messages { flex: 1; overflow-y: auto; padding: 22px; }
   .msg { max-width: 640px; margin-bottom: 18px; }
   .msg.user { margin-left: auto; }
-  .msg .bubble {
-    padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.5;
-    font-family: -apple-system, "Segoe UI", sans-serif;
-  }
+  .msg .bubble { padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.5; }
   .msg.user .bubble { background: var(--accent); color: #001018; white-space: pre-wrap; }
-  .msg.assistant .bubble { background: var(--surface); border: 1px solid var(--border); }
+  .msg.assistant .bubble { background: var(--surface-1); border: 1px solid var(--border); }
 
   /* rendered markdown inside assistant bubbles */
   .bubble p { margin: 0 0 10px; }
@@ -93,57 +53,27 @@
   .bubble h1, .bubble h2, .bubble h3 { font-size: 1.05em; margin: 14px 0 8px; }
   .bubble h1:first-child, .bubble h2:first-child, .bubble h3:first-child { margin-top: 0; }
   .bubble strong { font-weight: 700; }
-  .bubble a { color: var(--accent); text-decoration: underline; }
-  .bubble blockquote {
-    margin: 0 0 10px; padding-left: 12px; border-left: 2px solid var(--border);
-    color: var(--muted);
-  }
-  .bubble code {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 0.88em; background: var(--surface-2); padding: 2px 5px; border-radius: 4px;
-  }
-  .bubble pre {
-    margin: 0 0 10px; border-radius: 8px; overflow-x: auto; max-width: 100%;
-  }
-  .bubble pre code {
-    display: block; padding: 12px 14px; background: #0a0a0a !important;
-    border-radius: 8px; font-size: 0.85em; line-height: 1.5;
-  }
-  .bubble table {
-    border-collapse: collapse; margin: 0 0 10px; font-size: 0.9em; display: block;
-    overflow-x: auto; max-width: 100%;
-  }
-  .bubble th, .bubble td {
-    border: 1px solid var(--border); padding: 6px 10px; text-align: left;
-  }
+  .bubble a { text-decoration: underline; }
+  .bubble blockquote { margin: 0 0 10px; padding-left: 12px; border-left: 2px solid var(--border); color: var(--text-muted); }
+  .bubble code { font-size: 0.88em; background: var(--surface-2); padding: 2px 5px; border-radius: 4px; }
+  .bubble pre { margin: 0 0 10px; border-radius: 8px; overflow-x: auto; max-width: 100%; }
+  .bubble pre code { display: block; padding: 12px 14px; background: #0a0a0a !important; border-radius: 8px; font-size: 0.85em; line-height: 1.5; }
+  .bubble table { border-collapse: collapse; margin: 0 0 10px; font-size: 0.9em; display: block; overflow-x: auto; max-width: 100%; }
+  .bubble th, .bubble td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
   .bubble th { background: var(--surface-2); font-weight: 600; }
-  .msg-meta { font-size: 11.5px; color: var(--muted); margin-top: 5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .badge { padding: 1px 7px; border-radius: 8px; font-weight: 600; font-size: 10.5px; }
-  .badge.cheap { background: rgba(76,175,80,0.15); color: var(--cheap); }
-  .badge.mid { background: rgba(41,182,246,0.15); color: var(--mid); }
-  .badge.frontier { background: rgba(255,179,0,0.15); color: var(--frontier); }
-  .badge.escalated { background: rgba(239,83,80,0.15); color: var(--escalate); }
-  .empty-state { color: var(--muted); text-align: center; margin-top: 60px; font-size: 13px; }
+  .msg-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-  #composer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-shrink: 0; }
-  #composer input {
-    flex: 1; background: var(--surface); border: 1px solid var(--border); color: var(--text);
-    padding: 10px 12px; border-radius: 6px; font-family: inherit; font-size: 14px;
-  }
-  #composer input:focus { outline: none; border-color: var(--accent); }
-  #composer button {
-    background: var(--accent); color: #001018; border: none; padding: 10px 18px;
-    border-radius: 6px; font-weight: 600; cursor: pointer; font-family: inherit; font-size: 14px;
-  }
-  #composer button:disabled { opacity: 0.5; cursor: default; }
+  #composer { padding: 16px 22px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-shrink: 0; }
+  #composer input { flex: 1; padding: 10px 12px; font-size: 14px; }
+  #composer button { padding: 10px 18px; font-size: 14px; }
 </style>
 </head>
 <body>
 
 <div id="auth-screen">
-  <div class="auth-box">
+  <div class="card auth-box">
     <h1 id="auth-title">Log in</h1>
-    <p class="sub">LLM Router -- cost-saving chat demo</p>
+    <p class="sub">LLM Router &mdash; cost-saving chat</p>
     <div class="auth-error" id="auth-error"></div>
     <input type="text" id="auth-username" placeholder="Username" autocomplete="username">
     <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
@@ -154,22 +84,16 @@
   </div>
 </div>
 
-<div id="app-screen" hidden>
-  <div id="sidebar">
-    <div id="sidebar-header">
-      <div class="user">
-        <span id="username-display"></span>
-        <span>
-          <a href="/settings" style="color:var(--muted);font-size:11px;text-decoration:underline;margin-right:10px;">settings</a>
-          <button id="logout-btn">log out</button>
-        </span>
-      </div>
-    </div>
-    <button id="new-chat-btn">+ New chat</button>
+<div class="app-shell" id="app-screen" hidden>
+  <nav class="app-nav">
+    <div id="app-nav-top-mount"></div>
+    <button id="new-chat-btn" class="ghost">+ New chat</button>
     <div id="chat-list"></div>
-  </div>
-  <div id="main">
-    <div id="main-header">
+    <div class="app-nav-spacer" style="flex:0;"></div>
+    <div id="app-nav-bottom-mount"></div>
+  </nav>
+  <main class="app-main" id="chat-main">
+    <div id="chat-header">
       <h2 id="chat-title">Select or start a chat</h2>
       <div id="cost-saved-stat"></div>
     </div>
@@ -178,12 +102,13 @@
       <input type="text" id="composer-input" placeholder="Ask anything..." autocomplete="off" disabled>
       <button id="composer-send" disabled>Send</button>
     </div>
-  </div>
+  </main>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+<script src="/static/nav.js"></script>
 <script>
   marked.setOptions({ breaks: true });
 
@@ -200,7 +125,6 @@
     });
   }
 
-  let currentUser = null;
   let currentChatId = null;
   let isSignup = false;
 
@@ -237,28 +161,18 @@
     const password = document.getElementById("auth-password").value;
     authError.textContent = "";
     try {
-      const data = await api(isSignup ? "/auth/signup" : "/auth/login", {
+      await api(isSignup ? "/auth/signup" : "/auth/login", {
         method: "POST", body: JSON.stringify({ username, password }),
       });
-      currentUser = data.username;
       await enterApp();
     } catch (err) {
       authError.textContent = err.message;
     }
   };
 
-  document.getElementById("logout-btn").onclick = async () => {
-    await api("/auth/logout", { method: "POST" });
-    currentUser = null;
-    currentChatId = null;
-    appScreen.hidden = true;
-    authScreen.hidden = false;
-  };
-
   async function checkSession() {
     try {
-      const data = await api("/auth/me");
-      currentUser = data.username;
+      await api("/auth/me");
       await enterApp();
     } catch {
       authScreen.hidden = false;
@@ -268,8 +182,12 @@
   async function enterApp() {
     authScreen.hidden = true;
     appScreen.hidden = false;
-    document.getElementById("username-display").textContent = currentUser;
+    await initNav("chat");
+
+    const params = new URLSearchParams(window.location.search);
+    const chatParam = params.get("chat");
     await refreshChatList();
+    if (chatParam) await openChat(parseInt(chatParam, 10));
   }
 
   // --- chats ---
@@ -296,6 +214,7 @@
 
   async function openChat(chatId) {
     currentChatId = chatId;
+    history.replaceState(null, "", `/app?chat=${chatId}`);
     const chat = await api(`/api/chats/${chatId}`);
     document.getElementById("chat-title").textContent = chat.title;
     document.getElementById("composer-input").disabled = false;
@@ -338,7 +257,7 @@
       const meta = document.createElement("div");
       meta.className = "msg-meta";
       let html = `<span class="badge ${m.tier}">${m.tier}</span>`;
-      html += `<span>$${(m.cost ?? 0).toFixed(5)} · ${(m.latency_ms ?? 0).toFixed(0)}ms</span>`;
+      html += `<span class="mono">$${(m.cost ?? 0).toFixed(5)} &middot; ${(m.latency_ms ?? 0).toFixed(0)}ms</span>`;
       if (m.escalated) html += `<span class="badge escalated">escalated</span>`;
       meta.innerHTML = html;
       wrap.appendChild(meta);
@@ -368,7 +287,7 @@
     messagesEl.appendChild(renderMessage({ role: "user", content }));
     const loadingEl = document.createElement("div");
     loadingEl.className = "msg assistant";
-    loadingEl.innerHTML = '<div class="bubble" style="color:var(--muted)">Routing…</div>';
+    loadingEl.innerHTML = '<div class="bubble loading-text">Routing&hellip;</div>';
     messagesEl.appendChild(loadingEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
@@ -384,7 +303,7 @@
       await refreshChatList();
     } catch (err) {
       loadingEl.querySelector(".bubble").textContent = "Error: " + err.message;
-      loadingEl.querySelector(".bubble").style.color = "var(--escalate)";
+      loadingEl.querySelector(".bubble").style.color = "var(--critical)";
     } finally {
       sendBtn.disabled = false;
       input.disabled = false;

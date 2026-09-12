@@ -1,0 +1,172 @@
+/* Shared design system for the LLM Router product pages (chat, sessions,
+   settings). Extends the same validated palette + type pairing used for
+   the Week 4 Pareto chart (IBM Plex Sans/Mono, CVD-safe categorical hues
+   for cheap/mid/frontier) rather than inventing a separate look per page. */
+
+:root {
+  color-scheme: dark;
+  --bg: #141413;
+  --surface-1: #1a1a19;
+  --surface-2: #232322;
+  --surface-3: #2b2b29;
+  --border: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+
+  --series-cheap: #3987e5;   /* blue   */
+  --series-mid: #d95926;     /* orange */
+  --series-frontier: #199e70;/* aqua   */
+  --accent: var(--series-cheap);
+
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #e66767;
+
+  --radius: 8px;
+  --radius-sm: 5px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text-primary);
+  margin: 0;
+  font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+
+.mono {
+  font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+a { color: var(--accent); }
+
+[hidden] { display: none !important; }
+
+/* --- app shell: persistent nav + content area ------------------------- */
+
+.app-shell { display: flex; height: 100vh; overflow: hidden; }
+
+.app-nav {
+  width: 208px; flex-shrink: 0; background: var(--surface-1);
+  border-right: 1px solid var(--border); display: flex; flex-direction: column;
+  padding: 16px 0;
+}
+.app-nav .brand {
+  padding: 0 16px 16px; font-weight: 650; font-size: 14px; letter-spacing: -0.01em;
+  border-bottom: 1px solid var(--border); margin-bottom: 12px;
+}
+.app-nav .brand .dot { color: var(--series-cheap); }
+.app-nav-link {
+  display: flex; align-items: center; gap: 9px; padding: 9px 16px; color: var(--text-secondary);
+  text-decoration: none; font-size: 13px; font-weight: 500; cursor: pointer; border: none;
+  background: none; width: 100%; text-align: left; font-family: inherit;
+}
+.app-nav-link:hover { color: var(--text-primary); background: var(--surface-2); }
+.app-nav-link.active { color: var(--text-primary); background: var(--surface-2); border-left: 2px solid var(--accent); padding-left: 14px; }
+.app-nav-spacer { flex: 1; }
+.app-nav-user {
+  padding: 12px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.app-nav-user button {
+  background: none; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 11px; text-decoration: underline; font-family: inherit; padding: 0;
+}
+
+.app-main { flex: 1; overflow-y: auto; min-width: 0; }
+.app-content { max-width: 920px; margin: 0 auto; padding: 28px 24px 60px; }
+
+@media (max-width: 640px) {
+  .app-shell { flex-direction: column; height: auto; overflow: visible; }
+  .app-nav { width: 100%; flex-direction: row; align-items: center; padding: 8px 4px; overflow-x: auto; }
+  .app-nav .brand, .app-nav-user { display: none; }
+  .app-nav-link { width: auto; white-space: nowrap; }
+  .app-main { overflow: visible; }
+}
+
+/* --- page headers -------------------------------------------------------- */
+
+.page-header { margin-bottom: 22px; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.page-header h1 { font-size: 18px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+.page-header .sub { color: var(--text-secondary); font-size: 13px; margin: 4px 0 0; max-width: 62ch; line-height: 1.5; }
+
+/* --- cards / sections ----------------------------------------------------- */
+
+.card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 16px;
+}
+.card + .card { margin-top: 10px; }
+section { margin-bottom: 30px; }
+section h2 { font-size: 14px; margin: 0 0 4px; font-weight: 650; }
+section .section-sub { color: var(--text-muted); font-size: 12px; margin: 0 0 14px; line-height: 1.5; }
+
+/* --- tables ------------------------------------------------------------- */
+
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th {
+  text-align: left; color: var(--text-muted); font-weight: 600; padding: 7px 9px;
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--border-strong);
+}
+td { padding: 9px 9px; border-bottom: 1px solid var(--border); }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr.clickable { cursor: pointer; }
+tbody tr.clickable:hover { background: var(--surface-2); }
+
+/* --- badges (tier identity, status) --------------------------------------- */
+
+.badge { padding: 2px 8px; border-radius: 9px; font-weight: 600; font-size: 10.5px; white-space: nowrap; }
+.badge.cheap { background: rgba(57, 135, 229, 0.16); color: var(--series-cheap); }
+.badge.mid { background: rgba(217, 89, 38, 0.18); color: #f08a5d; }
+.badge.frontier { background: rgba(25, 158, 112, 0.18); color: #2bc98f; }
+.badge.escalated { background: rgba(230, 103, 103, 0.16); color: var(--critical); }
+.badge.revoked { background: rgba(230, 103, 103, 0.16); color: var(--critical); }
+.badge.chat-type { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+.badge.api-type { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+
+/* --- buttons / forms ------------------------------------------------------ */
+
+button {
+  background: var(--accent); color: #001018; border: none; padding: 8px 15px;
+  border-radius: var(--radius-sm); font-weight: 600; cursor: pointer; font-family: inherit;
+  font-size: 13px;
+}
+button.ghost { background: var(--surface-2); color: var(--text-primary); border: 1px solid var(--border); }
+button.danger { background: var(--critical); color: #1a0505; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+input[type=text], input[type=password] {
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);
+  padding: 8px 10px; border-radius: var(--radius-sm); font-family: inherit; font-size: 13px;
+}
+input[type=text]:focus, input[type=password]:focus { outline: none; border-color: var(--accent); }
+
+/* --- stats row ------------------------------------------------------------ */
+
+.stat-row { display: flex; gap: 28px; flex-wrap: wrap; }
+.stat .num { font-size: 22px; font-weight: 700; font-family: "IBM Plex Mono", monospace; }
+.stat .num.good { color: var(--good); }
+.stat .lbl { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 2px; }
+
+/* --- empty / loading states ------------------------------------------------ */
+
+.empty-state { color: var(--text-muted); text-align: center; padding: 40px 20px; font-size: 13px; }
+.loading-text { color: var(--text-muted); }
+
+/* --- misc ------------------------------------------------------------- */
+
+.warning-box {
+  background: rgba(250, 178, 25, 0.10); border: 1px solid var(--warning); border-radius: 6px;
+  padding: 10px 12px; font-size: 12px; margin-top: 10px; color: var(--warning);
+}
+.success-box {
+  background: rgba(12, 163, 12, 0.10); border: 1px solid var(--good); border-radius: 6px;
+  padding: 12px; font-size: 12.5px; margin-bottom: 12px; color: var(--text-primary);
+}
+.success-box .key { display: block; margin: 6px 0; font-weight: 600; word-break: break-all; color: var(--good); }
