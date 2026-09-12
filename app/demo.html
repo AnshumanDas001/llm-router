@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>LLM Router Demo</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <style>
   :root {
     --bg: #0d0d0d;
@@ -48,9 +49,28 @@
   .example-chip:hover { color: var(--text); border-color: var(--mid); }
   .answer {
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-    padding: 16px; margin-bottom: 12px; white-space: pre-wrap; font-size: 14px;
-    line-height: 1.5; min-height: 24px;
+    padding: 16px; margin-bottom: 12px; font-size: 14px;
+    line-height: 1.5; min-height: 24px; font-family: -apple-system, "Segoe UI", sans-serif;
   }
+  .answer p { margin: 0 0 10px; }
+  .answer p:last-child { margin-bottom: 0; }
+  .answer ul, .answer ol { margin: 0 0 10px; padding-left: 22px; }
+  .answer li { margin-bottom: 3px; }
+  .answer code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.88em; background: var(--border); padding: 2px 5px; border-radius: 4px;
+  }
+  .answer pre { margin: 0 0 10px; border-radius: 8px; overflow-x: auto; max-width: 100%; }
+  .answer pre code {
+    display: block; padding: 12px 14px; background: #0a0a0a !important;
+    border-radius: 8px; font-size: 0.85em; line-height: 1.5;
+  }
+  .answer table {
+    border-collapse: collapse; margin: 0 0 10px; font-size: 0.9em; display: block;
+    overflow-x: auto; max-width: 100%;
+  }
+  .answer th, .answer td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+  .answer th { background: var(--border); font-weight: 600; }
   .router-line {
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px;
   }
@@ -84,7 +104,18 @@
   <div class="answer" id="answer"><span class="placeholder">Response will appear here.</span></div>
   <div class="router-line" id="router-line"></div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
   <script>
+    marked.setOptions({ breaks: true });
+    function renderMarkdown(text) { return DOMPurify.sanitize(marked.parse(text)); }
+    function highlightCodeBlocks(container) {
+      container.querySelectorAll("pre code").forEach(block => {
+        try { hljs.highlightElement(block); } catch { /* unsupported language */ }
+      });
+    }
+
     const EXAMPLES = [
       "What is the capital of Australia?",
       "Explain the CAP theorem and give a real-world example.",
@@ -129,7 +160,8 @@
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || "request failed");
 
-        answerEl.textContent = data.choices[0].message.content;
+        answerEl.innerHTML = renderMarkdown(data.choices[0].message.content);
+        highlightCodeBlocks(answerEl);
         renderRouterLine(data._router, performance.now() - start);
       } catch (err) {
         answerEl.innerHTML = `<span style="color:var(--escalate)">Error: ${escapeHtml(String(err.message || err))}</span>`;

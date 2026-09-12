@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>LLM Router Chat</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <style>
   :root {
     --bg: #0d0d0d; --surface: #161616; --surface-2: #1d1d1d; --border: #2a2a2a;
@@ -78,10 +79,44 @@
   .msg { max-width: 640px; margin-bottom: 18px; }
   .msg.user { margin-left: auto; }
   .msg .bubble {
-    padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.5; white-space: pre-wrap;
+    padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.5;
+    font-family: -apple-system, "Segoe UI", sans-serif;
   }
-  .msg.user .bubble { background: var(--accent); color: #001018; }
+  .msg.user .bubble { background: var(--accent); color: #001018; white-space: pre-wrap; }
   .msg.assistant .bubble { background: var(--surface); border: 1px solid var(--border); }
+
+  /* rendered markdown inside assistant bubbles */
+  .bubble p { margin: 0 0 10px; }
+  .bubble p:last-child { margin-bottom: 0; }
+  .bubble ul, .bubble ol { margin: 0 0 10px; padding-left: 22px; }
+  .bubble li { margin-bottom: 3px; }
+  .bubble h1, .bubble h2, .bubble h3 { font-size: 1.05em; margin: 14px 0 8px; }
+  .bubble h1:first-child, .bubble h2:first-child, .bubble h3:first-child { margin-top: 0; }
+  .bubble strong { font-weight: 700; }
+  .bubble a { color: var(--accent); text-decoration: underline; }
+  .bubble blockquote {
+    margin: 0 0 10px; padding-left: 12px; border-left: 2px solid var(--border);
+    color: var(--muted);
+  }
+  .bubble code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.88em; background: var(--surface-2); padding: 2px 5px; border-radius: 4px;
+  }
+  .bubble pre {
+    margin: 0 0 10px; border-radius: 8px; overflow-x: auto; max-width: 100%;
+  }
+  .bubble pre code {
+    display: block; padding: 12px 14px; background: #0a0a0a !important;
+    border-radius: 8px; font-size: 0.85em; line-height: 1.5;
+  }
+  .bubble table {
+    border-collapse: collapse; margin: 0 0 10px; font-size: 0.9em; display: block;
+    overflow-x: auto; max-width: 100%;
+  }
+  .bubble th, .bubble td {
+    border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+  }
+  .bubble th { background: var(--surface-2); font-weight: 600; }
   .msg-meta { font-size: 11.5px; color: var(--muted); margin-top: 5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .badge { padding: 1px 7px; border-radius: 8px; font-weight: 600; font-size: 10.5px; }
   .badge.cheap { background: rgba(76,175,80,0.15); color: var(--cheap); }
@@ -143,7 +178,25 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script>
+  marked.setOptions({ breaks: true });
+
+  function renderMarkdown(text) {
+    return DOMPurify.sanitize(marked.parse(text));
+  }
+
+  // Applied to the DOM after insertion rather than via marked's `highlight`
+  // option, whose API has changed across marked versions -- this works
+  // against the plain <pre><code> marked always outputs, regardless.
+  function highlightCodeBlocks(container) {
+    container.querySelectorAll("pre code").forEach(block => {
+      try { hljs.highlightElement(block); } catch { /* unsupported language, leave as-is */ }
+    });
+  }
+
   let currentUser = null;
   let currentChatId = null;
   let isSignup = false;
@@ -270,7 +323,12 @@
     wrap.className = `msg ${m.role}`;
     const bubble = document.createElement("div");
     bubble.className = "bubble";
-    bubble.textContent = m.content;
+    if (m.role === "assistant") {
+      bubble.innerHTML = renderMarkdown(m.content);
+      highlightCodeBlocks(bubble);
+    } else {
+      bubble.textContent = m.content;
+    }
     wrap.appendChild(bubble);
 
     if (m.role === "assistant" && m.tier) {
