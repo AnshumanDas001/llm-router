@@ -1,63 +1,868 @@
 [
-  {"id": "q01", "query": "What is the capital of Australia?", "difficulty": "easy", "task_type": "factual_qa", "eval_method": "exact_match", "expected": ["canberra"]},
-  {"id": "q02", "query": "Classify the sentiment of this review as positive, negative, or neutral: 'The battery life is terrible but the screen is gorgeous.'", "difficulty": "easy", "task_type": "classification", "eval_method": "llm_judge"},
-  {"id": "q03", "query": "Convert this to JSON: name: John Doe, age: 34, city: Boston", "difficulty": "easy", "task_type": "formatting", "eval_method": "schema_json", "expected_json": {"name": "John Doe", "age": 34, "city": "Boston"}},
-  {"id": "q04", "query": "What is 17 * 23?", "difficulty": "easy", "task_type": "math", "eval_method": "exact_match", "expected": ["391"]},
-  {"id": "q05", "query": "Name the largest planet in our solar system.", "difficulty": "easy", "task_type": "factual_qa", "eval_method": "exact_match", "expected": ["jupiter"]},
-  {"id": "q06", "query": "Is 'affect' or 'effect' correct in: 'The new policy will ___ everyone.'", "difficulty": "easy", "task_type": "factual_qa", "eval_method": "exact_match", "expected": ["affect"]},
-  {"id": "q07", "query": "List the primary colors.", "difficulty": "easy", "task_type": "factual_qa", "eval_method": "exact_match_set", "expected": ["red", "blue", "yellow"]},
-  {"id": "q08", "query": "Translate 'good morning' to French.", "difficulty": "easy", "task_type": "translation", "eval_method": "exact_match", "expected": ["bonjour"]},
-  {"id": "q09", "query": "What year did World War II end?", "difficulty": "easy", "task_type": "factual_qa", "eval_method": "exact_match", "expected": ["1945"]},
-  {"id": "q10", "query": "Extract the email address from this text: 'Contact us at support@example.com for help.'", "difficulty": "easy", "task_type": "extraction", "eval_method": "exact_match", "expected": ["support@example.com"]},
-  {"id": "q11", "query": "Rewrite this sentence in passive voice: 'The chef cooked the meal.'", "difficulty": "easy", "task_type": "rewrite", "eval_method": "schema_pattern", "expected_pattern": "was cooked by the chef"},
-  {"id": "q12", "query": "What's the chemical symbol for gold?", "difficulty": "easy", "task_type": "factual_qa", "eval_method": "exact_match", "expected": ["au"]},
-  {"id": "q13", "query": "Classify this ticket as billing, technical, or general: 'I was charged twice for my subscription this month.'", "difficulty": "easy", "task_type": "classification", "eval_method": "exact_match", "expected": ["billing"]},
-  {"id": "q14", "query": "Convert 100 Fahrenheit to Celsius.", "difficulty": "easy", "task_type": "math", "eval_method": "exact_match_numeric", "expected_value": 37.78, "tolerance": 0.5},
-  {"id": "q15", "query": "What is the plural of 'cactus'?", "difficulty": "easy", "task_type": "factual_qa", "eval_method": "exact_match", "expected": ["cacti", "cactuses"]},
-  {"id": "q16", "query": "Format this list alphabetically: banana, apple, cherry, date", "difficulty": "easy", "task_type": "formatting", "eval_method": "schema_pattern", "expected_pattern": "apple.*banana.*cherry.*date"},
-  {"id": "q17", "query": "What does HTTP stand for?", "difficulty": "easy", "task_type": "factual_qa", "eval_method": "exact_match", "expected": ["hypertext transfer protocol"]},
-  {"id": "q18", "query": "Is the following a valid email address: 'john@@example..com'?", "difficulty": "easy", "task_type": "classification", "eval_method": "exact_match", "expected": ["no", "invalid", "not valid"]},
-  {"id": "q19", "query": "Give a one-word synonym for 'happy'.", "difficulty": "easy", "task_type": "factual_qa", "eval_method": "exact_match", "expected": ["joyful", "glad", "content", "cheerful", "pleased", "delighted", "elated", "merry", "jubilant"]},
-  {"id": "q20", "query": "What is the boiling point of water at sea level in Celsius?", "difficulty": "easy", "task_type": "factual_qa", "eval_method": "exact_match", "expected": ["100"]},
-  {"id": "q21", "query": "Summarize this in one sentence: 'The meeting covered Q3 budget cuts, a delayed product launch, and a new hire in marketing.'", "difficulty": "medium", "task_type": "summarization", "eval_method": "llm_judge"},
-  {"id": "q22", "query": "Summarize the plot of Romeo and Juliet in two sentences.", "difficulty": "medium", "task_type": "summarization", "eval_method": "llm_judge"},
-  {"id": "q23", "query": "Explain the difference between TCP and UDP in 3 sentences.", "difficulty": "medium", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q24", "query": "Write a short product description for a stainless steel water bottle.", "difficulty": "medium", "task_type": "creative", "eval_method": "llm_judge"},
-  {"id": "q25", "query": "Give three pros and three cons of remote work.", "difficulty": "medium", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q26", "query": "Rewrite this email to sound more formal: 'hey can u send me the report asap thx'", "difficulty": "medium", "task_type": "rewrite", "eval_method": "llm_judge"},
-  {"id": "q27", "query": "Explain what a REST API is to a non-technical person.", "difficulty": "medium", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q28", "query": "Summarize the key differences between SQL and NoSQL databases.", "difficulty": "medium", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q29", "query": "Draft a two-sentence apology email for a delayed shipment.", "difficulty": "medium", "task_type": "creative", "eval_method": "llm_judge"},
-  {"id": "q30", "query": "Explain photosynthesis in simple terms, suitable for a 10-year-old.", "difficulty": "medium", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q31", "query": "Compare the pros and cons of renting vs buying a home in a short paragraph.", "difficulty": "medium", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q32", "query": "Write a brief summary of the causes of the French Revolution.", "difficulty": "medium", "task_type": "summarization", "eval_method": "llm_judge"},
-  {"id": "q33", "query": "Explain the concept of compound interest with an example.", "difficulty": "medium", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q34", "query": "Give a short explanation of how vaccines work.", "difficulty": "medium", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q35", "query": "Summarize the main idea of Maslow's hierarchy of needs.", "difficulty": "medium", "task_type": "summarization", "eval_method": "llm_judge"},
-  {"id": "q36", "query": "Write step-by-step instructions for setting up a new email account.", "difficulty": "medium", "task_type": "procedural", "eval_method": "llm_judge"},
-  {"id": "q37", "query": "Debug this Python function: def add(a, b): return a - b  # should add the numbers", "difficulty": "hard", "task_type": "code_debug", "eval_method": "schema_pattern", "expected_pattern": "a\\s*\\+\\s*b"},
-  {"id": "q38", "query": "Write a Python function that checks if a string is a palindrome.", "difficulty": "hard", "task_type": "code_generation", "eval_method": "llm_judge"},
-  {"id": "q39", "query": "Explain why this code throws an IndexError: arr = [1,2,3]; print(arr[3])", "difficulty": "hard", "task_type": "explanation", "eval_method": "exact_match_contains_any", "expected": ["index", "out of range", "out of bounds"]},
-  {"id": "q40", "query": "Write a SQL query to find the second-highest salary in an 'employees' table.", "difficulty": "hard", "task_type": "code_generation", "eval_method": "llm_judge"},
-  {"id": "q41", "query": "Given a binary tree, write pseudocode to compute its height.", "difficulty": "hard", "task_type": "code_generation", "eval_method": "llm_judge"},
-  {"id": "q42", "query": "A train leaves station A at 60 mph and another leaves station B (300 miles away) at 90 mph toward each other at the same time. When do they meet?", "difficulty": "hard", "task_type": "math", "eval_method": "exact_match_numeric", "expected_value": 2.0, "tolerance": 0.05},
-  {"id": "q43", "query": "Explain the trolley problem and one major ethical framework's answer to it.", "difficulty": "hard", "task_type": "reasoning", "eval_method": "llm_judge"},
-  {"id": "q44", "query": "Write a recursive function in Python to compute the nth Fibonacci number, and explain its time complexity.", "difficulty": "hard", "task_type": "code_generation", "eval_method": "llm_judge"},
-  {"id": "q45", "query": "Given three variables a, b, c representing side lengths, write code to determine if they form a valid triangle and classify it as equilateral, isosceles, or scalene.", "difficulty": "hard", "task_type": "code_generation", "eval_method": "llm_judge"},
-  {"id": "q46", "query": "Explain why a naive quicksort implementation can degrade to O(n^2) time complexity, and how to mitigate it.", "difficulty": "hard", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q47", "query": "You have 8 identical-looking balls, one is heavier. Using a balance scale only twice, explain how to find the heavier ball.", "difficulty": "hard", "task_type": "reasoning", "eval_method": "llm_judge"},
-  {"id": "q48", "query": "Design a rate limiter algorithm for an API and explain the tradeoffs between token bucket and sliding window approaches.", "difficulty": "hard", "task_type": "design", "eval_method": "llm_judge"},
-  {"id": "q49", "query": "Write a function that detects if a linked list has a cycle, and explain why it works.", "difficulty": "hard", "task_type": "code_generation", "eval_method": "llm_judge"},
-  {"id": "q50", "query": "Explain the CAP theorem and give a real-world example of a system that chooses AP over CP.", "difficulty": "hard", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q51", "query": "A user reports that their web app is slow only on Mondays at 9am. Walk through your debugging process.", "difficulty": "hard", "task_type": "reasoning", "eval_method": "llm_judge"},
-  {"id": "q52", "query": "Write a regex to validate a US phone number in the format (123) 456-7890, and explain each part.", "difficulty": "hard", "task_type": "code_generation", "eval_method": "llm_judge"},
-  {"id": "q53", "query": "Explain how a hash table resolves collisions, comparing chaining and open addressing.", "difficulty": "hard", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q54", "query": "Given this ambiguous requirement: 'the system should be fast', ask the clarifying questions you'd need before estimating the work.", "difficulty": "hard", "task_type": "reasoning", "eval_method": "llm_judge"},
-  {"id": "q55", "query": "Critique this argument for logical fallacies: 'Everyone I know likes this restaurant, so it must be the best restaurant in the city.'", "difficulty": "hard", "task_type": "reasoning", "eval_method": "llm_judge"},
-  {"id": "q56", "query": "Explain the difference between correlation and causation using a concrete example, and describe a scenario where confusing them led to a bad decision.", "difficulty": "hard", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q57", "query": "Write a function to merge two sorted arrays without using extra space beyond O(1), and explain the tradeoff vs. using extra space.", "difficulty": "hard", "task_type": "code_generation", "eval_method": "llm_judge"},
-  {"id": "q58", "query": "Design a database schema for a simple e-commerce order system (users, products, orders, order_items), and explain your normalization choices.", "difficulty": "hard", "task_type": "design", "eval_method": "llm_judge"},
-  {"id": "q59", "query": "Explain why floating point numbers can't represent 0.1 exactly, and what problems this causes in financial calculations.", "difficulty": "hard", "task_type": "explanation", "eval_method": "llm_judge"},
-  {"id": "q60", "query": "Given a list of transactions with timestamps, write an algorithm to detect potential duplicate charges within a 5-minute window.", "difficulty": "hard", "task_type": "code_generation", "eval_method": "llm_judge"},
-  {"id": "q61", "query": "Explain the difference between optimistic and pessimistic locking in databases, with a scenario where each is preferable.", "difficulty": "hard", "task_type": "explanation", "eval_method": "llm_judge"}
+  {
+    "id": "q01",
+    "query": "What is the capital of Australia?",
+    "difficulty": "easy",
+    "task_type": "factual_qa",
+    "eval_method": "exact_match",
+    "expected": [
+      "canberra"
+    ]
+  },
+  {
+    "id": "q02",
+    "query": "Classify the sentiment of this review as positive, negative, or neutral: 'The battery life is terrible but the screen is gorgeous.'",
+    "difficulty": "easy",
+    "task_type": "classification",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q03",
+    "query": "Convert this to JSON: name: John Doe, age: 34, city: Boston",
+    "difficulty": "easy",
+    "task_type": "formatting",
+    "eval_method": "schema_json",
+    "expected_json": {
+      "name": "John Doe",
+      "age": 34,
+      "city": "Boston"
+    }
+  },
+  {
+    "id": "q04",
+    "query": "What is 17 * 23?",
+    "difficulty": "easy",
+    "task_type": "math",
+    "eval_method": "exact_match",
+    "expected": [
+      "391"
+    ]
+  },
+  {
+    "id": "q05",
+    "query": "Name the largest planet in our solar system.",
+    "difficulty": "easy",
+    "task_type": "factual_qa",
+    "eval_method": "exact_match",
+    "expected": [
+      "jupiter"
+    ]
+  },
+  {
+    "id": "q06",
+    "query": "Is 'affect' or 'effect' correct in: 'The new policy will ___ everyone.'",
+    "difficulty": "easy",
+    "task_type": "factual_qa",
+    "eval_method": "exact_match",
+    "expected": [
+      "affect"
+    ]
+  },
+  {
+    "id": "q07",
+    "query": "List the primary colors.",
+    "difficulty": "easy",
+    "task_type": "factual_qa",
+    "eval_method": "exact_match_set",
+    "expected": [
+      "red",
+      "blue",
+      "yellow"
+    ]
+  },
+  {
+    "id": "q08",
+    "query": "Translate 'good morning' to French.",
+    "difficulty": "easy",
+    "task_type": "translation",
+    "eval_method": "exact_match",
+    "expected": [
+      "bonjour"
+    ]
+  },
+  {
+    "id": "q09",
+    "query": "What year did World War II end?",
+    "difficulty": "easy",
+    "task_type": "factual_qa",
+    "eval_method": "exact_match",
+    "expected": [
+      "1945"
+    ]
+  },
+  {
+    "id": "q10",
+    "query": "Extract the email address from this text: 'Contact us at support@example.com for help.'",
+    "difficulty": "easy",
+    "task_type": "extraction",
+    "eval_method": "exact_match",
+    "expected": [
+      "support@example.com"
+    ]
+  },
+  {
+    "id": "q11",
+    "query": "Rewrite this sentence in passive voice: 'The chef cooked the meal.'",
+    "difficulty": "easy",
+    "task_type": "rewrite",
+    "eval_method": "schema_pattern",
+    "expected_pattern": "was cooked by the chef"
+  },
+  {
+    "id": "q12",
+    "query": "What's the chemical symbol for gold?",
+    "difficulty": "easy",
+    "task_type": "factual_qa",
+    "eval_method": "exact_match",
+    "expected": [
+      "au"
+    ]
+  },
+  {
+    "id": "q13",
+    "query": "Classify this ticket as billing, technical, or general: 'I was charged twice for my subscription this month.'",
+    "difficulty": "easy",
+    "task_type": "classification",
+    "eval_method": "exact_match",
+    "expected": [
+      "billing"
+    ]
+  },
+  {
+    "id": "q14",
+    "query": "Convert 100 Fahrenheit to Celsius.",
+    "difficulty": "easy",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 37.78,
+    "tolerance": 0.5
+  },
+  {
+    "id": "q15",
+    "query": "What is the plural of 'cactus'?",
+    "difficulty": "easy",
+    "task_type": "factual_qa",
+    "eval_method": "exact_match",
+    "expected": [
+      "cacti",
+      "cactuses"
+    ]
+  },
+  {
+    "id": "q16",
+    "query": "Format this list alphabetically: banana, apple, cherry, date",
+    "difficulty": "easy",
+    "task_type": "formatting",
+    "eval_method": "schema_pattern",
+    "expected_pattern": "apple.*banana.*cherry.*date"
+  },
+  {
+    "id": "q17",
+    "query": "What does HTTP stand for?",
+    "difficulty": "easy",
+    "task_type": "factual_qa",
+    "eval_method": "exact_match",
+    "expected": [
+      "hypertext transfer protocol"
+    ]
+  },
+  {
+    "id": "q18",
+    "query": "Is the following a valid email address: 'john@@example..com'?",
+    "difficulty": "easy",
+    "task_type": "classification",
+    "eval_method": "exact_match",
+    "expected": [
+      "no",
+      "invalid",
+      "not valid"
+    ]
+  },
+  {
+    "id": "q19",
+    "query": "Give a one-word synonym for 'happy'.",
+    "difficulty": "easy",
+    "task_type": "factual_qa",
+    "eval_method": "exact_match",
+    "expected": [
+      "joyful",
+      "glad",
+      "content",
+      "cheerful",
+      "pleased",
+      "delighted",
+      "elated",
+      "merry",
+      "jubilant"
+    ]
+  },
+  {
+    "id": "q20",
+    "query": "What is the boiling point of water at sea level in Celsius?",
+    "difficulty": "easy",
+    "task_type": "factual_qa",
+    "eval_method": "exact_match",
+    "expected": [
+      "100"
+    ]
+  },
+  {
+    "id": "q21",
+    "query": "Summarize this in one sentence: 'The meeting covered Q3 budget cuts, a delayed product launch, and a new hire in marketing.'",
+    "difficulty": "medium",
+    "task_type": "summarization",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q22",
+    "query": "Summarize the plot of Romeo and Juliet in two sentences.",
+    "difficulty": "medium",
+    "task_type": "summarization",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q23",
+    "query": "Explain the difference between TCP and UDP in 3 sentences.",
+    "difficulty": "medium",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q24",
+    "query": "Write a short product description for a stainless steel water bottle.",
+    "difficulty": "medium",
+    "task_type": "creative",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q25",
+    "query": "Give three pros and three cons of remote work.",
+    "difficulty": "medium",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q26",
+    "query": "Rewrite this email to sound more formal: 'hey can u send me the report asap thx'",
+    "difficulty": "medium",
+    "task_type": "rewrite",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q27",
+    "query": "Explain what a REST API is to a non-technical person.",
+    "difficulty": "medium",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q28",
+    "query": "Summarize the key differences between SQL and NoSQL databases.",
+    "difficulty": "medium",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q29",
+    "query": "Draft a two-sentence apology email for a delayed shipment.",
+    "difficulty": "medium",
+    "task_type": "creative",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q30",
+    "query": "Explain photosynthesis in simple terms, suitable for a 10-year-old.",
+    "difficulty": "medium",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q31",
+    "query": "Compare the pros and cons of renting vs buying a home in a short paragraph.",
+    "difficulty": "medium",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q32",
+    "query": "Write a brief summary of the causes of the French Revolution.",
+    "difficulty": "medium",
+    "task_type": "summarization",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q33",
+    "query": "Explain the concept of compound interest with an example.",
+    "difficulty": "medium",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q34",
+    "query": "Give a short explanation of how vaccines work.",
+    "difficulty": "medium",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q35",
+    "query": "Summarize the main idea of Maslow's hierarchy of needs.",
+    "difficulty": "medium",
+    "task_type": "summarization",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q36",
+    "query": "Write step-by-step instructions for setting up a new email account.",
+    "difficulty": "medium",
+    "task_type": "procedural",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q37",
+    "query": "Debug this Python function: def add(a, b): return a - b  # should add the numbers",
+    "difficulty": "hard",
+    "task_type": "code_debug",
+    "eval_method": "schema_pattern",
+    "expected_pattern": "a\\s*\\+\\s*b"
+  },
+  {
+    "id": "q38",
+    "query": "Write a Python function that checks if a string is a palindrome.",
+    "difficulty": "hard",
+    "task_type": "code_generation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q39",
+    "query": "Explain why this code throws an IndexError: arr = [1,2,3]; print(arr[3])",
+    "difficulty": "hard",
+    "task_type": "explanation",
+    "eval_method": "exact_match_contains_any",
+    "expected": [
+      "index",
+      "out of range",
+      "out of bounds"
+    ]
+  },
+  {
+    "id": "q40",
+    "query": "Write a SQL query to find the second-highest salary in an 'employees' table.",
+    "difficulty": "hard",
+    "task_type": "code_generation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q41",
+    "query": "Given a binary tree, write pseudocode to compute its height.",
+    "difficulty": "hard",
+    "task_type": "code_generation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q42",
+    "query": "A train leaves station A at 60 mph and another leaves station B (300 miles away) at 90 mph toward each other at the same time. When do they meet?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 2.0,
+    "tolerance": 0.05
+  },
+  {
+    "id": "q43",
+    "query": "Explain the trolley problem and one major ethical framework's answer to it.",
+    "difficulty": "hard",
+    "task_type": "reasoning",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q44",
+    "query": "Write a recursive function in Python to compute the nth Fibonacci number, and explain its time complexity.",
+    "difficulty": "hard",
+    "task_type": "code_generation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q45",
+    "query": "Given three variables a, b, c representing side lengths, write code to determine if they form a valid triangle and classify it as equilateral, isosceles, or scalene.",
+    "difficulty": "hard",
+    "task_type": "code_generation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q46",
+    "query": "Explain why a naive quicksort implementation can degrade to O(n^2) time complexity, and how to mitigate it.",
+    "difficulty": "hard",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q47",
+    "query": "You have 8 identical-looking balls, one is heavier. Using a balance scale only twice, explain how to find the heavier ball.",
+    "difficulty": "hard",
+    "task_type": "reasoning",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q48",
+    "query": "Design a rate limiter algorithm for an API and explain the tradeoffs between token bucket and sliding window approaches.",
+    "difficulty": "hard",
+    "task_type": "design",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q49",
+    "query": "Write a function that detects if a linked list has a cycle, and explain why it works.",
+    "difficulty": "hard",
+    "task_type": "code_generation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q50",
+    "query": "Explain the CAP theorem and give a real-world example of a system that chooses AP over CP.",
+    "difficulty": "hard",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q51",
+    "query": "A user reports that their web app is slow only on Mondays at 9am. Walk through your debugging process.",
+    "difficulty": "hard",
+    "task_type": "reasoning",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q52",
+    "query": "Write a regex to validate a US phone number in the format (123) 456-7890, and explain each part.",
+    "difficulty": "hard",
+    "task_type": "code_generation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q53",
+    "query": "Explain how a hash table resolves collisions, comparing chaining and open addressing.",
+    "difficulty": "hard",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q54",
+    "query": "Given this ambiguous requirement: 'the system should be fast', ask the clarifying questions you'd need before estimating the work.",
+    "difficulty": "hard",
+    "task_type": "reasoning",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q55",
+    "query": "Critique this argument for logical fallacies: 'Everyone I know likes this restaurant, so it must be the best restaurant in the city.'",
+    "difficulty": "hard",
+    "task_type": "reasoning",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q56",
+    "query": "Explain the difference between correlation and causation using a concrete example, and describe a scenario where confusing them led to a bad decision.",
+    "difficulty": "hard",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q57",
+    "query": "Write a function to merge two sorted arrays without using extra space beyond O(1), and explain the tradeoff vs. using extra space.",
+    "difficulty": "hard",
+    "task_type": "code_generation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q58",
+    "query": "Design a database schema for a simple e-commerce order system (users, products, orders, order_items), and explain your normalization choices.",
+    "difficulty": "hard",
+    "task_type": "design",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q59",
+    "query": "Explain why floating point numbers can't represent 0.1 exactly, and what problems this causes in financial calculations.",
+    "difficulty": "hard",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q60",
+    "query": "Given a list of transactions with timestamps, write an algorithm to detect potential duplicate charges within a 5-minute window.",
+    "difficulty": "hard",
+    "task_type": "code_generation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q61",
+    "query": "Explain the difference between optimistic and pessimistic locking in databases, with a scenario where each is preferable.",
+    "difficulty": "hard",
+    "task_type": "explanation",
+    "eval_method": "llm_judge"
+  },
+  {
+    "id": "q62",
+    "query": "A store offers a 20% discount, then an additional 15% off the discounted price. If the original price is $80, what is the final price?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match",
+    "expected": [
+      "54.40",
+      "$54.40",
+      "54.4"
+    ]
+  },
+  {
+    "id": "q63",
+    "query": "If a train travels 240 miles in 3 hours, then increases its speed by 25% for the next 2 hours, how many total miles does it travel?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 440,
+    "tolerance": 0.5
+  },
+  {
+    "id": "q64",
+    "query": "What is the sum of all even numbers from 1 to 50 inclusive?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 650,
+    "tolerance": 0
+  },
+  {
+    "id": "q65",
+    "query": "A recipe requires 2.5 cups of flour for 12 cookies. How many cups of flour are needed to make 30 cookies?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 6.25,
+    "tolerance": 0.05
+  },
+  {
+    "id": "q66",
+    "query": "If you flip a fair coin 4 times, what is the probability of getting exactly 2 heads?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 0.375,
+    "tolerance": 0.01
+  },
+  {
+    "id": "q67",
+    "query": "A rectangular garden is 12 meters by 8 meters. If a path of uniform width 1 meter is built around the outside of the garden, what is the area of the path?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 44,
+    "tolerance": 0.5
+  },
+  {
+    "id": "q68",
+    "query": "What is 15% of 15% of 4000?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 90,
+    "tolerance": 0.5
+  },
+  {
+    "id": "q69",
+    "query": "How many seconds are there in 3 days, 4 hours, and 30 minutes?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 275400,
+    "tolerance": 1
+  },
+  {
+    "id": "q70",
+    "query": "A car depreciates by 12% each year. If it's worth $25,000 now, what will it be worth after 2 years (rounded to nearest dollar)?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 19360,
+    "tolerance": 5
+  },
+  {
+    "id": "q71",
+    "query": "If it takes 6 workers 8 days to build a wall, how many days would it take 4 workers working at the same rate?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 12,
+    "tolerance": 0.1
+  },
+  {
+    "id": "q72",
+    "query": "What is the remainder when 2^10 is divided by 7?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 2,
+    "tolerance": 0
+  },
+  {
+    "id": "q73",
+    "query": "A jar contains 5 red, 3 blue, and 2 green marbles. If two marbles are drawn without replacement, what is the probability both are red?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 0.2222,
+    "tolerance": 0.01
+  },
+  {
+    "id": "q74",
+    "query": "How many distinct ways can the letters in the word 'LEVEL' be arranged?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 30,
+    "tolerance": 0
+  },
+  {
+    "id": "q75",
+    "query": "If today is a Wednesday, what day of the week will it be 100 days from now?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match",
+    "expected": [
+      "friday"
+    ]
+  },
+  {
+    "id": "q76",
+    "query": "What is the least common multiple of 12, 18, and 30?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 180,
+    "tolerance": 0
+  },
+  {
+    "id": "q77",
+    "query": "Simplify: (3/4) divided by (9/16) times (2/3). Give the answer as a decimal.",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 0.8889,
+    "tolerance": 0.01
+  },
+  {
+    "id": "q78",
+    "query": "A rectangular prism has dimensions 4cm x 5cm x 6cm. What is its surface area in square centimeters?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 148,
+    "tolerance": 0
+  },
+  {
+    "id": "q79",
+    "query": "If x + y = 10 and x - y = 4, what is the value of x*y?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 21,
+    "tolerance": 0
+  },
+  {
+    "id": "q80",
+    "query": "What is the sum of the interior angles of a regular heptagon (7-sided polygon), in degrees?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 900,
+    "tolerance": 0
+  },
+  {
+    "id": "q81",
+    "query": "How many trailing zeros are in 15! (15 factorial)?",
+    "difficulty": "medium",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 3,
+    "tolerance": 0
+  },
+  {
+    "id": "q82",
+    "query": "What is the 100th digit after the decimal point in the decimal expansion of 1/7?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 8,
+    "tolerance": 0
+  },
+  {
+    "id": "q83",
+    "query": "In how many ways can 5 distinct books be arranged on a shelf if 2 specific books must always be next to each other?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 48,
+    "tolerance": 0
+  },
+  {
+    "id": "q84",
+    "query": "What is the value of the 15th term in the Fibonacci sequence, if F(1)=1, F(2)=1?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 610,
+    "tolerance": 0
+  },
+  {
+    "id": "q85",
+    "query": "A number is divisible by both 7 and 11 but not by 13. What is the smallest such positive number greater than 100?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 154,
+    "tolerance": 0
+  },
+  {
+    "id": "q86",
+    "query": "What is the output of this Python code?\n```python\ndef f(x, lst=[]):\n    lst.append(x)\n    return lst\nprint(f(1))\nprint(f(2))\n```",
+    "difficulty": "hard",
+    "task_type": "code_trace",
+    "eval_method": "exact_match_set",
+    "expected": [
+      "[1]",
+      "[1, 2]"
+    ]
+  },
+  {
+    "id": "q87",
+    "query": "Given the recurrence T(n) = 3*T(n-1) + 2, with T(0) = 1, what is T(4)?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 161,
+    "tolerance": 0
+  },
+  {
+    "id": "q88",
+    "query": "What is the smallest positive integer n such that n! is divisible by 1000?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 15,
+    "tolerance": 0
+  },
+  {
+    "id": "q89",
+    "query": "Four people (Alice, Bob, Carol, Dave) each have a different favorite color (red, blue, green, yellow) and a different pet (cat, dog, fish, bird). Alice's favorite color is not red or blue. Bob has a cat and does not like blue. The person who likes green has a dog. Carol's favorite color is yellow. Dave does not like green. Who likes red, and what pet do they have?",
+    "difficulty": "hard",
+    "task_type": "reasoning",
+    "eval_method": "exact_match_set",
+    "expected": [
+      "bob",
+      "cat"
+    ]
+  },
+  {
+    "id": "q90",
+    "query": "What is the chromatic number of a complete graph with 6 vertices (K6)?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 6,
+    "tolerance": 0
+  },
+  {
+    "id": "q91",
+    "query": "A password must be exactly 4 characters, using only digits 0-9, with no repeated digits. How many such passwords are possible?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 5040,
+    "tolerance": 0
+  },
+  {
+    "id": "q92",
+    "query": "What is the time complexity of building a heap from an unsorted array of n elements using the standard bottom-up heapify algorithm?",
+    "difficulty": "hard",
+    "task_type": "explanation",
+    "eval_method": "exact_match",
+    "expected": [
+      "o(n)",
+      "\u03b8(n)",
+      "linear time",
+      "linear-time"
+    ]
+  },
+  {
+    "id": "q93",
+    "query": "Two trains start 500 km apart and move toward each other. Train A travels at 60 km/h and Train B at 90 km/h, but Train B stops for 30 minutes after 1 hour of travel before continuing. How long after both trains start do they meet (in hours, to two decimal places)?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 3.63,
+    "tolerance": 0.05
+  },
+  {
+    "id": "q94",
+    "query": "What is the output of: print(0.1 + 0.2 == 0.3) in Python?",
+    "difficulty": "hard",
+    "task_type": "code_trace",
+    "eval_method": "exact_match",
+    "expected": [
+      "false"
+    ]
+  },
+  {
+    "id": "q95",
+    "query": "In a knockout tournament with 37 players (no byes allowed except the minimum necessary), how many total matches are played to determine a winner?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 36,
+    "tolerance": 0
+  },
+  {
+    "id": "q96",
+    "query": "What is the units digit of 7^100?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 1,
+    "tolerance": 0
+  },
+  {
+    "id": "q97",
+    "query": "How many positive divisors does 360 have?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 24,
+    "tolerance": 0
+  },
+  {
+    "id": "q98",
+    "query": "A biased coin has probability 0.6 of landing heads. What is the probability of getting at least one head in 3 flips?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 0.936,
+    "tolerance": 0.01
+  },
+  {
+    "id": "q99",
+    "query": "What is the next number in the sequence: 2, 6, 12, 20, 30, ?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 42,
+    "tolerance": 0
+  },
+  {
+    "id": "q100",
+    "query": "If a shape has exactly 8 faces, 12 edges, and V vertices, and satisfies Euler's formula (V - E + F = 2), what is V?",
+    "difficulty": "hard",
+    "task_type": "math",
+    "eval_method": "exact_match_numeric",
+    "expected_value": 6,
+    "tolerance": 0
+  }
 ]

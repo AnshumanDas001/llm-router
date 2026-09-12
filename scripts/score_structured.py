@@ -27,14 +27,41 @@ def score_exact_match_set(text: str, expected: list[str]) -> float:
 
 
 def score_exact_match_numeric(text: str, expected_value: float, tolerance: float) -> float:
-    numbers = re.findall(r"-?\d+\.?\d*", text)
-    for n in numbers:
+    candidates = []
+
+    # Plain numbers, including comma-formatted thousands (e.g. "275,400").
+    for n in re.findall(r"-?\d[\d,]*\.?\d*", text):
         try:
-            if abs(float(n) - expected_value) <= tolerance:
-                return 1.0
+            candidates.append(float(n.replace(",", "")))
         except ValueError:
             continue
-    return 0.0
+
+    # Percentages, e.g. "22.23%" or LaTeX-escaped "22.23\%" -> 0.2223 -- a
+    # common alternate way models express a probability that the plain-number
+    # pass above would otherwise misread as e.g. 22.23 and reject as wildly
+    # out of tolerance.
+    for n in re.findall(r"-?\d[\d,]*\.?\d*\s*\\?%", text):
+        try:
+            candidates.append(float(n.rstrip("%\\ ").replace(",", "")) / 100)
+        except ValueError:
+            continue
+
+    # Fractions, plain ("2/9") or LaTeX (\frac{2}{9}) -- probability answers
+    # are frequently left as an unreduced fraction rather than converted.
+    for num, den in re.findall(r"(\d+)\s*/\s*(\d+)", text):
+        try:
+            if float(den) != 0:
+                candidates.append(float(num) / float(den))
+        except ValueError:
+            continue
+    for num, den in re.findall(r"\\frac\{(\d+)\}\{(\d+)\}", text):
+        try:
+            if float(den) != 0:
+                candidates.append(float(num) / float(den))
+        except ValueError:
+            continue
+
+    return 1.0 if any(abs(c - expected_value) <= tolerance for c in candidates) else 0.0
 
 
 def extract_first_json_object(text: str) -> str | None:
