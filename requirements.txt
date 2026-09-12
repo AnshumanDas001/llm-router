@@ -6,3 +6,4 @@ pydantic
 requests
 sentence-transformers
 scikit-learn
+bcrypt
