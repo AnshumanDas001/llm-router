@@ -1,14 +1,17 @@
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from app.cascade import run_cascade
 from app.db import init_db, log_cascade
 
 app = FastAPI(title="LLM Router")
+DEMO_HTML_PATH = Path(__file__).resolve().parent / "demo.html"
 
 
 class Message(BaseModel):
@@ -29,6 +32,11 @@ def on_startup():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/demo", response_class=HTMLResponse)
+def demo():
+    return DEMO_HTML_PATH.read_text()
 
 
 @app.post("/v1/chat/completions")

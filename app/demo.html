@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LLM Router Demo</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --surface: #161616;
+    --border: #2a2a2a;
+    --text: #e8e8e6;
+    --muted: #8a8a86;
+    --cheap: #4caf50;
+    --mid: #29b6f6;
+    --frontier: #ffb300;
+    --escalate: #ef5350;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 20px 60px;
+  }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
+  form { display: flex; gap: 8px; margin-bottom: 24px; }
+  input[type=text] {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); padding: 10px 12px; border-radius: 6px; font-size: 14px;
+    font-family: inherit;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--mid); }
+  button {
+    background: var(--mid); color: #001018; border: none; padding: 10px 18px;
+    border-radius: 6px; font-weight: 600; cursor: pointer; font-family: inherit;
+    font-size: 14px;
+  }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 28px; }
+  .example-chip {
+    font-size: 12px; color: var(--muted); background: var(--surface);
+    border: 1px solid var(--border); padding: 4px 10px; border-radius: 12px;
+    cursor: pointer;
+  }
+  .example-chip:hover { color: var(--text); border-color: var(--mid); }
+  .answer {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; margin-bottom: 12px; white-space: pre-wrap; font-size: 14px;
+    line-height: 1.5; min-height: 24px;
+  }
+  .router-line {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px;
+  }
+  .badge {
+    padding: 2px 9px; border-radius: 10px; font-weight: 600; font-size: 12px;
+  }
+  .badge.cheap { background: rgba(76,175,80,0.15); color: var(--cheap); }
+  .badge.mid { background: rgba(41,182,246,0.15); color: var(--mid); }
+  .badge.frontier { background: rgba(255,179,0,0.15); color: var(--frontier); }
+  .meta { color: var(--muted); }
+  .escalation {
+    margin-top: 8px; font-size: 12.5px; color: var(--escalate);
+  }
+  .escalation .reason { color: var(--muted); margin-left: 14px; }
+  .chain { color: var(--text); font-weight: 600; }
+  .placeholder { color: var(--muted); font-style: italic; }
+  .loading { color: var(--muted); }
+</style>
+</head>
+<body>
+  <h1>LLM Router — live demo</h1>
+  <p class="sub">Type a query and watch it get classified, routed, and (if needed) escalated in real time.</p>
+
+  <form id="form">
+    <input type="text" id="query" placeholder="Ask anything..." autocomplete="off" autofocus>
+    <button type="submit" id="submit">Send</button>
+  </form>
+
+  <div class="examples" id="examples"></div>
+
+  <div class="answer" id="answer"><span class="placeholder">Response will appear here.</span></div>
+  <div class="router-line" id="router-line"></div>
+
+  <script>
+    const EXAMPLES = [
+      "What is the capital of Australia?",
+      "Explain the CAP theorem and give a real-world example.",
+      "Classify: 'The battery life is terrible but the screen is gorgeous.'",
+      "What is the 100th digit of 1/7?",
+    ];
+
+    const examplesEl = document.getElementById("examples");
+    EXAMPLES.forEach(ex => {
+      const chip = document.createElement("span");
+      chip.className = "example-chip";
+      chip.textContent = ex.length > 40 ? ex.slice(0, 40) + "…" : ex;
+      chip.title = ex;
+      chip.onclick = () => { document.getElementById("query").value = ex; submitQuery(ex); };
+      examplesEl.appendChild(chip);
+    });
+
+    const form = document.getElementById("form");
+    const input = document.getElementById("query");
+    const submitBtn = document.getElementById("submit");
+    const answerEl = document.getElementById("answer");
+    const routerLineEl = document.getElementById("router-line");
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (q) submitQuery(q);
+    });
+
+    async function submitQuery(query) {
+      submitBtn.disabled = true;
+      answerEl.innerHTML = '<span class="loading">Routing…</span>';
+      routerLineEl.innerHTML = "";
+      const start = performance.now();
+
+      try {
+        const resp = await fetch("/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages: [{ role: "user", content: query }] }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || "request failed");
+
+        answerEl.textContent = data.choices[0].message.content;
+        renderRouterLine(data._router, performance.now() - start);
+      } catch (err) {
+        answerEl.innerHTML = `<span style="color:var(--escalate)">Error: ${escapeHtml(String(err.message || err))}</span>`;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    }
+
+    function renderRouterLine(router, wallMs) {
+      const badge = `<span class="badge ${router.final_tier}">${router.final_tier}</span>`;
+      const meta = `<span class="meta">classified ${router.difficulty} · $${router.cost.toFixed(5)} · ${router.latency_ms.toFixed(0)}ms (wall ${wallMs.toFixed(0)}ms)</span>`;
+      let html = `Routed to: ${badge} ${meta}`;
+
+      if (router.escalated) {
+        const tierOrder = ["cheap", "mid", "frontier"];
+        const start = tierOrder.indexOf(router.initial_tier);
+        const end = tierOrder.indexOf(router.final_tier);
+        const chain = tierOrder.slice(start, end + 1).join(" → ");
+        html += `<div class="escalation">⤴ Escalated <span class="chain">(${chain})</span>`;
+        for (const reason of router.escalation_reasons) {
+          html += `<div class="reason">- ${escapeHtml(reason)}</div>`;
+        }
+        html += `</div>`;
+      }
+      routerLineEl.innerHTML = html;
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement("div");
+      div.textContent = s;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

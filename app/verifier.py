@@ -36,17 +36,21 @@ Does this response address every explicit part of the request, and is it coheren
 REFUSAL_PATTERN = re.compile(
     r"\b(i cannot|i can'?t|i'm unable|i am unable|as an ai)\b", re.IGNORECASE
 )
-MIN_STRUCTURAL_LENGTH = 20  # characters
 
 
 def _verify_structural(response_text: str) -> dict:
-    """Free check: no model call, just pattern/length sanity checks."""
+    """Free check: no model call, just pattern sanity checks.
+
+    Deliberately no minimum-length check: a one-word answer like "Neutral"
+    to a classification query is a completely valid, complete response, and
+    an earlier length threshold (20 chars) flagged it as "suspiciously
+    short" -- a false positive that triggered a real, costly escalation all
+    the way to frontier for no quality reason. Length alone isn't a
+    reliable signal; empty-response and refusal-pattern checks below catch
+    the genuinely broken cases without penalizing legitimate terseness."""
     stripped = response_text.strip() if response_text else ""
     if not stripped:
         return {"passed": False, "reason": "empty response", "cost": 0.0,
-                "latency_ms": 0.0, "verifier_tier": None}
-    if len(stripped) < MIN_STRUCTURAL_LENGTH:
-        return {"passed": False, "reason": "suspiciously short response", "cost": 0.0,
                 "latency_ms": 0.0, "verifier_tier": None}
     if REFUSAL_PATTERN.search(stripped[:200]):
         return {"passed": False, "reason": "looks like a refusal", "cost": 0.0,
