@@ -1,6 +1,6 @@
 /* Shared design system for the LLM Router product pages (chat, sessions,
    settings). Extends the same validated palette + type pairing used for
-   the Week 4 Pareto chart (IBM Plex Sans/Mono, CVD-safe categorical hues
+   the Pareto chart (IBM Plex Sans/Mono, CVD-safe categorical hues
    for cheap/mid/frontier) rather than inventing a separate look per page. */
 
 :root {
@@ -57,26 +57,48 @@ a { color: var(--accent); }
   padding: 16px 0;
 }
 .app-nav .brand {
-  padding: 0 16px 16px; font-weight: 650; font-size: 14px; letter-spacing: -0.01em;
-  border-bottom: 1px solid var(--border); margin-bottom: 12px;
+  padding: 0 14px 14px; font-weight: 650; font-size: 14px; letter-spacing: -0.01em;
+  border-bottom: 1px solid var(--border); margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
 }
 .app-nav .brand .dot { color: var(--series-cheap); }
+.app-nav .brand .brand-version {
+  font-size: 9.5px; font-weight: 600; color: var(--text-muted); background: var(--surface-3);
+  border-radius: 5px; padding: 2px 5px; font-family: "IBM Plex Mono", monospace; letter-spacing: 0;
+}
 .app-nav-link {
-  display: flex; align-items: center; gap: 9px; padding: 9px 16px; color: var(--text-secondary);
+  display: flex; align-items: center; gap: 10px; padding: 8px 11px; color: var(--text-secondary);
   text-decoration: none; font-size: 13px; font-weight: 500; cursor: pointer; border: none;
-  background: none; width: 100%; text-align: left; font-family: inherit;
+  background: none; text-align: left; font-family: inherit;
+  margin: 1px 8px; border-radius: 7px; width: auto;
 }
 .app-nav-link:hover { color: var(--text-primary); background: var(--surface-2); }
-.app-nav-link.active { color: var(--text-primary); background: var(--surface-2); border-left: 2px solid var(--accent); padding-left: 14px; }
+.app-nav-link.active { color: var(--text-primary); background: var(--surface-2); }
+.app-nav-link.active .nav-icon { color: var(--accent); opacity: 1; }
+.app-nav-link .nav-icon { display: inline-flex; width: 15px; height: 15px; flex-shrink: 0; opacity: 0.8; }
+.app-nav-link .nav-icon svg { width: 100%; height: 100%; }
+.app-nav-link .nav-label { flex: 1; }
+.app-nav-link .nav-badge {
+  font-size: 10px; font-weight: 650; color: var(--good); background: rgba(12, 163, 12, 0.12);
+  padding: 2px 6px; border-radius: 8px; font-family: "IBM Plex Mono", monospace;
+}
 .app-nav-spacer { flex: 1; }
 .app-nav-user {
-  padding: 12px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted);
-  display: flex; justify-content: space-between; align-items: center;
+  padding: 11px 14px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--text-muted);
+  display: flex; align-items: center; gap: 9px; min-width: 0;
 }
+.app-nav-user .nav-avatar {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #001018;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+  flex-shrink: 0;
+}
+.app-nav-user .nav-user-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-nav-user button {
-  background: none; border: none; color: var(--text-muted); cursor: pointer;
-  font-size: 11px; text-decoration: underline; font-family: inherit; padding: 0;
+  background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;
+  border-radius: 6px; display: inline-flex; align-items: center; flex-shrink: 0;
 }
+.app-nav-user button:hover { background: var(--surface-2); color: var(--text-primary); }
+.app-nav-user button svg { width: 15px; height: 15px; }
 
 .app-main { flex: 1; overflow-y: auto; min-width: 0; }
 .app-content { max-width: 920px; margin: 0 auto; padding: 28px 24px 60px; }
@@ -129,6 +151,7 @@ tbody tr.clickable:hover { background: var(--surface-2); }
 .badge.revoked { background: rgba(230, 103, 103, 0.16); color: var(--critical); }
 .badge.chat-type { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
 .badge.api-type { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+.badge.byom { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
 
 /* --- buttons / forms ------------------------------------------------------ */
 
@@ -199,6 +222,22 @@ input[type=text]:focus, input[type=password]:focus { outline: none; border-color
 .dropdown-menu hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 
 .badge.pinned { background: rgba(57, 135, 229, 0.16); color: var(--series-cheap); }
+
+/* --- tab switcher (settings, and anywhere else stacked sections read better
+   as tabs) ---------------------------------------------------------------- */
+
+.tabs-nav {
+  display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 22px;
+}
+.tab-btn {
+  background: none; border: none; color: var(--text-muted); font-family: inherit;
+  font-size: 13px; font-weight: 600; padding: 9px 4px; margin-bottom: -1px; cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.tab-btn + .tab-btn { margin-left: 18px; }
+.tab-btn:hover { color: var(--text-primary); }
+.tab-btn.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+.tab-panel[hidden] { display: none !important; }
 
 /* --- lightweight inline confirm (destructive actions) --------------------- */
 

@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Models &amp; calibration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  .hint { color: var(--text-muted); font-size: 11.5px; }
+  .provider-card { margin-bottom: 8px; }
+  .provider-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .provider-name { font-weight: 650; font-size: 13.5px; }
+  .provider-head .provider-delete { margin-left: auto; padding: 4px 10px; font-size: 11.5px; }
+  .provider-models { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .model-chip {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 3px 4px 3px 8px; font-size: 11.5px; color: var(--text-secondary);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .chip-remove {
+    background: none; border: none; color: var(--text-muted); cursor: pointer;
+    font-size: 14px; line-height: 1; padding: 0 3px; border-radius: 3px;
+  }
+  .chip-remove:hover { background: var(--surface-3); color: var(--critical); }
+  .provider-add-model { display: flex; gap: 6px; margin-top: 10px; }
+  .provider-add-model input { flex: 1; }
+
+  .add-provider-title { font-weight: 650; font-size: 13.5px; margin-bottom: 12px; }
+  .provider-form { display: flex; flex-direction: column; gap: 11px; max-width: 520px; }
+  .provider-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
+  .provider-form input, .provider-form select, .provider-form textarea {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);
+    padding: 8px 10px; border-radius: var(--radius-sm); font-family: inherit; font-size: 13px;
+  }
+  .provider-form textarea { font-family: "IBM Plex Mono", monospace; font-size: 12px; resize: vertical; }
+  .provider-form .checkbox-row { flex-direction: row; align-items: flex-start; gap: 8px; }
+  .provider-form .checkbox-row input { width: auto; margin-top: 2px; }
+  .provider-form .checkbox-row .hint { display: block; }
+  .models-title { font-size: 13px; font-weight: 650; margin: 22px 0 4px; }
+
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <nav class="app-nav">
+    <div id="app-nav-top-mount"></div>
+    <div id="app-nav-links-mount"></div>
+    <div class="app-nav-spacer"></div>
+    <div id="app-nav-bottom-mount"></div>
+  </nav>
+  <main class="app-main">
+    <div class="app-content">
+
+      <div class="page-header">
+        <div>
+          <h1>Models &amp; calibration</h1>
+          <p class="sub">Connect your providers, list their models, and calibrate each one. A
+            calibrated model can be picked for any tier of any chat session.</p>
+        </div>
+      </div>
+
+        <section style="margin-bottom:0;">
+          <p class="section-sub">Connect a provider, list the models you want to use from it, then
+            calibrate each one. Calibration is per <em>model</em>, so a model you measure once can be
+            slotted as cheap in one session and mid in another without re-measuring.</p>
+
+          <div id="provider-list"></div>
+
+          <div class="card" style="margin-top:12px;">
+            <div class="add-provider-title">Connect a provider</div>
+            <div class="provider-form">
+              <label>Provider
+                <select id="new-provider-type"></select>
+              </label>
+              <label>Name
+                <input type="text" id="new-provider-name" placeholder="e.g. My Groq">
+              </label>
+              <label>Models <span class="hint">one per line, litellm format</span>
+                <textarea id="new-provider-models" rows="3"
+                  placeholder="groq/openai/gpt-oss-20b&#10;groq/llama-3.1-8b-instant"></textarea>
+              </label>
+              <label id="api-base-label" hidden>API base
+                <input type="text" id="new-provider-api-base" placeholder="http://localhost:11434">
+              </label>
+              <label id="api-key-label">API key
+                <input type="password" id="new-provider-key" placeholder="provider API key">
+              </label>
+              <label class="checkbox-row" id="store-key-row">
+                <input type="checkbox" id="new-provider-store">
+                <span>
+                  Save this key (encrypted) so I don't re-enter it
+                  <span class="hint" id="store-key-hint"></span>
+                </span>
+              </label>
+              <div>
+                <button id="add-provider-btn">Connect provider</button>
+                <span id="provider-status" class="hint"></span>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="models-title">Connected models</h3>
+          <p class="section-sub">A model must be calibrated before you can start a session with it.</p>
+          <div class="card">
+            <div id="calibrate-warnings"></div>
+            <table id="models-table">
+              <thead><tr>
+                <th>Model</th><th>Provider</th><th>Easy</th><th>Medium</th><th>Hard</th>
+                <th>Avg cost</th><th>Avg latency</th><th></th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+            <div id="calibrate-status" class="hint" style="margin-top:10px;"></div>
+          </div>
+        </section>
+
+    </div>
+  </main>
+</div>
+
+<script src="/static/nav.js"></script>
+<script>
+  async function api(path, opts = {}) {
+    const resp = await fetch(path, {
+      ...opts, headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      credentials: "same-origin",
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.detail || `request failed (${resp.status})`);
+    return data;
+  }
+  function fmt(n) { return "$" + (n ?? 0).toFixed(5); }
+  function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+  // --- providers ---
+  let providerTypes = [];
+  let keyStorageAvailable = false;
+
+  async function loadProviderTypes() {
+    const data = await api("/api/provider-types");
+    providerTypes = data.providers;
+    keyStorageAvailable = data.key_storage_available;
+
+    document.getElementById("new-provider-type").innerHTML = providerTypes
+      .map(p => `<option value="${p.provider}">${esc(p.label)}</option>`).join("");
+
+    // Storing a key needs a server-side secret. Without one, say so plainly
+    // rather than offering a checkbox that would fail on submit.
+    const storeBox = document.getElementById("new-provider-store");
+    const hint = document.getElementById("store-key-hint");
+    if (!keyStorageAvailable) {
+      storeBox.disabled = true;
+      hint.textContent = "unavailable -- ROUTER_SECRET_KEY is not set on the server";
+    } else {
+      hint.textContent = "otherwise you enter it once per browser session";
+    }
+    syncProviderForm();
+  }
+
+  function syncProviderForm() {
+    const chosen = providerTypes.find(p => p.provider === document.getElementById("new-provider-type").value);
+    const needsKey = chosen ? chosen.needs_key : true;
+    document.getElementById("api-key-label").hidden = !needsKey;
+    document.getElementById("store-key-row").hidden = !needsKey;
+    document.getElementById("api-base-label").hidden = chosen ? chosen.provider !== "ollama" : true;
+  }
+  document.getElementById("new-provider-type").onchange = syncProviderForm;
+
+  async function loadProviders() {
+    const providers = await api("/api/providers");
+    const el = document.getElementById("provider-list");
+    if (!providers.length) {
+      el.innerHTML = '<div class="empty-state">No providers connected yet.</div>';
+      return;
+    }
+    el.innerHTML = providers.map(p => `
+      <div class="card provider-card">
+        <div class="provider-head">
+          <span class="provider-name">${esc(p.name)}</span>
+          <span class="badge api-type">${esc(p.provider)}</span>
+          ${p.has_stored_key
+            ? '<span class="badge byom" title="key stored encrypted">key saved</span>'
+            : '<span class="hint">key entered per session</span>'}
+          <button class="ghost provider-delete" data-provider="${p.id}">Remove</button>
+        </div>
+        <div class="provider-models">
+          ${p.models.length
+            ? p.models.map(m => `
+                <span class="model-chip mono">${esc(m.model_name)}<button
+                  class="chip-remove" data-remove-model="${m.id}"
+                  title="Remove this model">&times;</button></span>`).join("")
+            : '<span class="hint">no models listed yet</span>'}
+        </div>
+        <div class="provider-add-model">
+          <input type="text" placeholder="add a model (litellm format)" data-model-input="${p.id}">
+          <button class="ghost" data-add-model="${p.id}">Add</button>
+        </div>
+      </div>
+    `).join("");
+
+    el.querySelectorAll("[data-provider]").forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm("Remove this provider and its models?")) return;
+        await api(`/api/providers/${btn.dataset.provider}`, { method: "DELETE" });
+        await refreshModelsTab();
+      };
+    });
+    el.querySelectorAll("[data-remove-model]").forEach(btn => {
+      btn.onclick = async () => {
+        await api(`/api/provider-models/${btn.dataset.removeModel}`, { method: "DELETE" });
+        await refreshModelsTab();
+      };
+    });
+    el.querySelectorAll("[data-add-model]").forEach(btn => {
+      btn.onclick = async () => {
+        const id = btn.dataset.addModel;
+        const input = el.querySelector(`[data-model-input="${id}"]`);
+        if (!input.value.trim()) return;
+        await api(`/api/providers/${id}/models`, {
+          method: "POST", body: JSON.stringify({ model_name: input.value.trim() }),
+        });
+        await refreshModelsTab();
+      };
+    });
+  }
+
+  document.getElementById("add-provider-btn").onclick = async () => {
+    const status = document.getElementById("provider-status");
+    const provider = document.getElementById("new-provider-type").value;
+    const name = document.getElementById("new-provider-name").value.trim();
+    const models = document.getElementById("new-provider-models").value
+      .split("\n").map(s => s.trim()).filter(Boolean);
+    const apiKey = document.getElementById("new-provider-key").value;
+    const storeKey = document.getElementById("new-provider-store").checked;
+    const apiBase = document.getElementById("new-provider-api-base").value.trim();
+
+    if (!name) { status.textContent = "Give this connection a name."; return; }
+    status.textContent = "Connecting...";
+    try {
+      await api("/api/providers", {
+        method: "POST",
+        body: JSON.stringify({
+          name, provider, models, api_key: apiKey || null,
+          store_key: storeKey, api_base: apiBase || null,
+        }),
+      });
+      status.textContent = "Connected.";
+      document.getElementById("new-provider-name").value = "";
+      document.getElementById("new-provider-models").value = "";
+      document.getElementById("new-provider-key").value = "";
+      document.getElementById("new-provider-store").checked = false;
+      await refreshModelsTab();
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  };
+
+  // --- connected models + per-model calibration ---
+  function pct(v) { return v == null ? "&mdash;" : (v * 100).toFixed(0) + "%"; }
+
+  // A score below the routing threshold is why a difficulty skips that model,
+  // so mark it rather than leaving the reader to compare numbers by eye.
+  const QUALITY_THRESHOLD = 0.80;
+  function scoreCell(v) {
+    if (v == null) return '<td class="mono" style="color:var(--text-muted)">&mdash;</td>';
+    return `<td class="mono"${v < QUALITY_THRESHOLD ? ' style="color:var(--warning)"' : ""}>${pct(v)}</td>`;
+  }
+
+  async function loadConnectedModels() {
+    const models = await api("/api/my-models");
+    const tbody = document.querySelector("#models-table tbody");
+    if (!models.length) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">Connect a provider above to list models.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = models.map(m => {
+      const q = m.quality_by_difficulty || {};
+      return `
+        <tr>
+          <td class="mono">${esc(m.model_name)}</td>
+          <td style="color:var(--text-muted)">${esc(m.provider_name)}
+              <span class="badge api-type">${esc(m.provider)}</span></td>
+          ${scoreCell(q.easy)}
+          ${scoreCell(q.medium)}
+          ${scoreCell(q.hard)}
+          <td class="mono">${m.avg_cost == null ? "&mdash;" : fmt(m.avg_cost)}</td>
+          <td class="mono">${m.avg_latency_ms == null ? "&mdash;" : m.avg_latency_ms.toFixed(0) + "ms"}</td>
+          <td><button class="ghost" data-calibrate="${esc(m.model_name)}"
+                data-needs-key="${m.has_stored_key ? "0" : "1"}">
+              ${m.calibrated ? "Re-calibrate" : "Calibrate"}</button></td>
+        </tr>
+      `;
+    }).join("");
+
+    tbody.querySelectorAll("[data-calibrate]").forEach(btn => {
+      btn.onclick = () => calibrateModel(btn.dataset.calibrate, btn.dataset.needsKey === "1", btn);
+    });
+  }
+
+  async function calibrateModel(modelName, needsKey, btn) {
+    const status = document.getElementById("calibrate-status");
+    const warnBox = document.getElementById("calibrate-warnings");
+    warnBox.innerHTML = "";
+
+    let apiKey = null;
+    if (needsKey) {
+      apiKey = prompt(`Provider key for ${modelName}\n\nUsed once for this calibration and never stored.`);
+      if (apiKey === null) return;
+    }
+
+    btn.disabled = true;
+    status.textContent = `Calibrating ${modelName} -- this runs ~24 live queries and can take a minute or two...`;
+    try {
+      const data = await api("/api/calibrate-model", {
+        method: "POST", body: JSON.stringify({ model_name: modelName, api_key: apiKey }),
+      });
+      status.textContent = `Done: ${modelName}.`;
+      if (data.warnings.length) {
+        warnBox.innerHTML = data.warnings.map(w => `<div class="warning-box">${esc(w)}</div>`).join("");
+      }
+      await loadConnectedModels();
+    } catch (err) {
+      status.textContent = "";
+      warnBox.innerHTML = `<div class="warning-box">${esc(err.message)}</div>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function refreshModelsTab() {
+    await loadProviders();
+    await loadConnectedModels();
+  }
+
+
+  (async function init() {
+    await initNav("models");
+    await loadProviderTypes();
+    await refreshModelsTab();
+  })();
+</script>
+</body>
+</html>

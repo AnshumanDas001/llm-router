@@ -270,12 +270,17 @@ console.log(data._router);</code></pre></div>
 
     <section id="calibration-ui">
       <h2>Calibration &mdash; via the web UI</h2>
-      <p>In <a href="/settings">Settings</a>, enter a model string and your provider key per tier, then click <strong>Run calibration</strong>. This runs ~25 objectively-scoreable queries (math, logic, code-tracing &mdash; no LLM judge needed) against your model live, using your key once, transiently. Only the resulting quality/cost/latency numbers are stored.</p>
+      <p>In <a href="/settings">Settings</a>, enter a model string and your provider key per tier, then click <strong>Run calibration</strong>. This runs ~24 objectively-scoreable queries (math, logic, code-tracing &mdash; no LLM judge needed) against your model live, using your key once, transiently. Only the resulting quality/cost/latency numbers are stored.</p>
+      <p>The query set is <strong>stratified by difficulty</strong>, so each tier gets a separate easy / medium / hard score rather than one blended average. That distinction is the point: a model that aces easy and medium but collapses on hard still posts a respectable overall number, and routing needs to know the difference.</p>
+      <h3>What calibration decides</h3>
+      <p>Those per-difficulty scores produce your <strong>routing map</strong> &mdash; for each difficulty, traffic starts at the cheapest configured tier that scored at least 80% on <em>that</em> difficulty, and escalates from there only if a check fails. Settings shows the resulting map after every run.</p>
+      <p>Without calibration, a BYOM account would route by our defaults, which encode <em>our</em> measurements of <em>our</em> models &mdash; wrong in both directions for someone else's stack. Calibrate, and the map is derived from your own numbers. Re-calibrating with different models re-derives it.</p>
+      <div class="callout note"><span class="icon">i</span><p>A tier whose calibration calls all fail (bad model string or key) is reported in <code>warnings</code> and <strong>not</strong> saved, so a broken model can't silently become a routing target.</p></div>
     </section>
 
     <section id="calibration-api">
       <h2>Calibration &mdash; via the API</h2>
-      <p>The same calibration, without touching the browser &mdash; useful if your integration is entirely programmatic. Authenticate with your API key instead of a login session:</p>
+      <p>The same calibration, without touching the browser. Calibration is keyed by <strong>model</strong>, so you measure a model once and can then slot it into any tier of any session without re-measuring. Authenticate with your API key instead of a login session:</p>
       <div class="code-block">
         <div class="code-tabs">
           <button class="code-tab active" data-lang="bash">cURL</button>
@@ -287,20 +292,54 @@ console.log(data._router);</code></pre></div>
   -H "Authorization: Bearer rtr_your_key_here" \
   -H "Content-Type: application/json" \
   -d '{
-    "tiers": {
-      "cheap": {"model": "groq/llama-3.1-8b-instant", "api_key": "your-groq-key"}
-    }
+    "model_name": "groq/llama-3.1-8b-instant",
+    "api_key": "your-groq-key"
   }'</code></pre></div>
         <div class="code-pane" data-lang="python"><pre><code class="language-python">import requests
 
 resp = requests.post(
     "https://your-router-host/api/v1/calibrate",
     headers={"Authorization": "Bearer rtr_your_key_here"},
-    json={"tiers": {"cheap": {"model": "groq/llama-3.1-8b-instant", "api_key": "your-groq-key"}}},
+    json={"model_name": "groq/llama-3.1-8b-instant", "api_key": "your-groq-key"},
 )
-print(resp.json())  # {"results": {...}, "warnings": [...]}</code></pre></div>
+print(resp.json())  # {"model_name": ..., "stats": {...}, "warnings": [...]}</code></pre></div>
       </div>
-      <p>Response includes a <code>warnings</code> list if your configured tiers don't follow the expected quality ordering (e.g. "mid" scoring below "cheap") &mdash; worth checking before you route real traffic.</p>
+      <p>The model must already be connected to your account (Settings &rarr; Models &amp; calibration, or the Providers UI). <code>api_key</code> is optional &mdash; omit it if you saved that provider's key.</p>
+      <ul>
+        <li><code>stats.quality_by_difficulty</code> &mdash; easy/medium/hard scores, the input to routing. <code>null</code> for a difficulty whose queries all failed.</li>
+        <li><code>stats.n_rate_limited</code> &mdash; queries lost to provider throttling, reported separately from real failures.</li>
+        <li><code>warnings</code> &mdash; unmeasured difficulties and partial runs.</li>
+      </ul>
+      <div class="callout note"><span class="icon">i</span><p>A model whose calibration calls all fail returns an error and is <strong>not</strong> saved, so a broken model string can't silently become a routing target. The message distinguishes a bad model string from a provider rate limit.</p></div>
+
+      <h3>The full programmatic flow</h3>
+      <p>Define your models in your own code &rarr; connect them once &rarr; calibrate each &rarr; route every request against whichever three you want for that call:</p>
+      <div class="code-block">
+        <div class="code-tabs">
+          <button class="code-tab active" data-lang="python">Python</button>
+          <span class="code-tab-spacer"></span>
+          <button class="copy-btn" data-copy>Copy</button>
+        </div>
+        <div class="code-pane active" data-lang="python"><pre><code class="language-python">HEADERS = {"Authorization": "Bearer rtr_your_key_here"}
+MODELS = {
+    "cheap": "groq/llama-3.1-8b-instant",
+    "mid": "openai/gpt-4o-mini",
+    "frontier": "openai/gpt-4o",
+}
+
+# one-time: measure each model
+for model in MODELS.values():
+    requests.post(f"{HOST}/api/v1/calibrate", headers=HEADERS,
+                  json={"model_name": model, "api_key": PROVIDER_KEY})
+
+# every request thereafter
+resp = requests.post(f"{HOST}/api/v1/route", headers=HEADERS, json={
+    "messages": [{"role": "user", "content": "What is 2+2?"}],
+    "models": MODELS,
+    "tier_api_keys": {"cheap": GROQ_KEY, "mid": OPENAI_KEY, "frontier": OPENAI_KEY},
+})</code></pre></div>
+      </div>
+      <p><code>tier_api_keys</code> is only needed for tiers whose provider key you chose <em>not</em> to save; saved keys are used automatically.</p>
     </section>
 
     <section id="ref-route">

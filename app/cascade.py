@@ -1,4 +1,4 @@
-"""Week 3: the actual cascade -- classify, generate, verify, escalate.
+"""The cascade: classify, generate, verify, escalate.
 
 Also degrades gracefully when a tier is temporarily unavailable (rate
 limited / daily quota exhausted) instead of hard-failing the whole
@@ -42,9 +42,10 @@ def _complete(tier: str, messages: list[dict], tier_models: dict | None,
 
 
 def run_cascade(messages: list[dict], tier_models: dict | None = None,
-                 tier_api_keys: dict | None = None) -> dict:
+                 tier_api_keys: dict | None = None,
+                 difficulty_to_tier: dict | None = None) -> dict:
     query = messages[-1]["content"]
-    initial_tier, difficulty = classify_initial_tier(query)
+    initial_tier, difficulty = classify_initial_tier(query, difficulty_to_tier)
 
     available_tiers = TIER_ORDER if tier_models is None else [
         t for t in TIER_ORDER if t in tier_models
@@ -60,7 +61,7 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
     # check (by the next tier up in the full configured list) -- not
     # whichever tier this particular query's sequence happens to start at.
     # A "hard" query skips straight to e.g. mid, but mid still only gets the
-    # free structural check: Week 2 showed mid's failure rate is low and its
+    # free structural check: the eval set showed mid's failure rate is low and its
     # answers are long, making a real judge call there expensive for little
     # safety benefit (it was 82.5% of total cascade cost before this fix).
     judge_model_for = {}

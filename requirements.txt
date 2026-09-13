@@ -7,3 +7,4 @@ requests
 sentence-transformers
 scikit-learn
 bcrypt
+cryptography

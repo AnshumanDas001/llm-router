@@ -8,6 +8,23 @@
 <link rel="stylesheet" href="/static/app.css">
 <style>
   .new-session-dropdown { right: 0; top: calc(100% + 6px); min-width: 200px; }
+
+  .session-list { display: flex; flex-direction: column; gap: 8px; }
+  .session-card {
+    display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 18px; align-items: center;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 13px 16px; cursor: pointer;
+  }
+  .session-card:hover { border-color: var(--border-strong); background: var(--surface-2); }
+  .session-card .name { font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+  .session-card .stat-col { text-align: right; min-width: 70px; }
+  .session-card .stat-col .v { font-size: 13px; }
+  .session-card .stat-col .k { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
+  .session-card .created { color: var(--text-muted); font-size: 12px; text-align: right; min-width: 80px; }
+  @media (max-width: 640px) {
+    .session-card { grid-template-columns: 1fr; gap: 6px; text-align: left; }
+    .session-card .stat-col, .session-card .created { text-align: left; }
+  }
 </style>
 </head>
 <body>
@@ -37,10 +54,7 @@
 
         <div id="new-key-banner"></div>
 
-        <table id="sessions-table">
-          <thead><tr><th>Session</th><th>Type</th><th>Calls</th><th>Total cost</th><th>Saved</th><th>Created</th></tr></thead>
-          <tbody></tbody>
-        </table>
+        <div class="session-list" id="sessions-list"></div>
       </div>
 
       <div id="detail-view" hidden>
@@ -86,19 +100,22 @@
 
   async function loadOverview() {
     const sessions = await api("/api/sessions");
-    const tbody = document.querySelector("#sessions-table tbody");
-    tbody.innerHTML = sessions.map(s => `
-      <tr class="clickable" data-type="${s.type}" data-id="${s.id}">
-        <td>${esc(s.name)}${s.pinned ? ' <span class="badge pinned">pinned</span>' : ""}${s.revoked ? ' <span class="badge revoked">revoked</span>' : ""}</td>
-        <td><span class="badge ${s.type === "chat" ? "chat-type" : "api-type"}">${s.type}</span></td>
-        <td class="mono">${s.n_calls}</td>
-        <td class="mono">${fmt(s.total_cost)}</td>
-        <td class="mono" style="color:var(--good)">${fmt(s.cost_saved)}</td>
-        <td class="mono" style="color:var(--text-muted)">${s.created_at.slice(0, 10)}</td>
-      </tr>
-    `).join("") || '<tr><td colspan="6"><div class="empty-state">No sessions yet -- start a chat or create an API session.</div></td></tr>';
+    const listEl = document.getElementById("sessions-list");
+    listEl.innerHTML = sessions.map(s => `
+      <div class="session-card" data-type="${s.type}" data-id="${s.id}">
+        <div class="name">
+          <span class="badge ${s.type === "chat" ? "chat-type" : "api-type"}">${s.type}</span>
+          ${esc(s.name)}
+          ${s.pinned ? ' <span class="badge pinned">pinned</span>' : ""}${s.revoked ? ' <span class="badge revoked">revoked</span>' : ""}
+        </div>
+        <div class="stat-col"><div class="v mono">${s.n_calls}</div><div class="k">calls</div></div>
+        <div class="stat-col"><div class="v mono">${fmt(s.total_cost)}</div><div class="k">cost</div></div>
+        <div class="stat-col"><div class="v mono" style="color:var(--good)">${fmt(s.cost_saved)}</div><div class="k">saved</div></div>
+        <div class="created">${s.created_at.slice(0, 10)}</div>
+      </div>
+    `).join("") || '<div class="empty-state">No sessions yet -- start a chat or create an API session.</div>';
 
-    tbody.querySelectorAll("tr[data-type]").forEach(row => {
+    listEl.querySelectorAll(".session-card[data-type]").forEach(row => {
       row.onclick = () => {
         if (row.dataset.type === "chat") window.location.href = `/app?chat=${row.dataset.id}`;
         else window.location.href = `/sessions?api=${row.dataset.id}`;

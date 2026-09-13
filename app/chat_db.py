@@ -1,8 +1,9 @@
 """Auth + chat-session storage for the product-style demo.
 
-Kept separate from app/db.py (Week 1-4's eval/logging infra) since this is
+Kept separate from app/db.py (the eval/logging infra) since this is
 a genuinely different subsystem -- product state, not research data.
 """
+import json
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS chats (
     user_id INTEGER NOT NULL REFERENCES users(id),
     title TEXT,
     pinned INTEGER NOT NULL DEFAULT 0,
+    mode TEXT NOT NULL DEFAULT 'builtin',
     created_at TEXT NOT NULL
 );
 
@@ -43,6 +45,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     baseline_cost REAL,
     escalated INTEGER,
     latency_ms REAL,
+    difficulty TEXT,
+    escalation_reasons TEXT,
     timestamp TEXT NOT NULL
 );
 
@@ -80,8 +84,56 @@ CREATE TABLE IF NOT EXISTS calibration_results (
     avg_cost REAL,
     avg_latency_ms REAL,
     n_queries INTEGER,
+    quality_by_difficulty TEXT,
     created_at TEXT NOT NULL,
     UNIQUE(user_id, tier)
+);
+
+-- RAGFlow-style provider connections. api_key_encrypted is NULL when the
+-- user opted to supply the key per session instead of storing it.
+CREATE TABLE IF NOT EXISTS providers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    api_key_encrypted TEXT,
+    api_base TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(user_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS provider_models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider_id INTEGER NOT NULL REFERENCES providers(id),
+    model_name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(provider_id, model_name)
+);
+
+-- Calibration is keyed by MODEL, not by tier: measured quality is a
+-- property of the model itself, so a model calibrated once can be slotted
+-- as "cheap" in one session and "mid" in another without re-measuring.
+CREATE TABLE IF NOT EXISTS model_calibrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    model_name TEXT NOT NULL,
+    avg_quality REAL,
+    avg_cost REAL,
+    avg_latency_ms REAL,
+    n_queries INTEGER,
+    quality_by_difficulty TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(user_id, model_name)
+);
+
+-- The three models a chat was created with, frozen at creation so a
+-- session's history stays coherent even if the user later reconfigures.
+CREATE TABLE IF NOT EXISTS chat_models (
+    chat_id INTEGER NOT NULL REFERENCES chats(id),
+    tier TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    provider_id INTEGER REFERENCES providers(id),
+    PRIMARY KEY (chat_id, tier)
 );
 
 CREATE TABLE IF NOT EXISTS usage_log (
@@ -131,6 +183,39 @@ def init_chat_db():
         except sqlite3.OperationalError as e:
             if "duplicate column" not in str(e).lower():
                 raise
+        try:
+            conn.execute("ALTER TABLE chats ADD COLUMN mode TEXT NOT NULL DEFAULT 'builtin'")
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
+        for column, decl in (("difficulty", "TEXT"), ("escalation_reasons", "TEXT")):
+            try:
+                conn.execute(f"ALTER TABLE chat_messages ADD COLUMN {column} {decl}")
+                conn.commit()
+            except sqlite3.OperationalError as e:
+                if "duplicate column" not in str(e).lower():
+                    raise
+        try:
+            conn.execute("ALTER TABLE calibration_results ADD COLUMN quality_by_difficulty TEXT")
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
+
+        # Calibration moved from per-(user, tier) to per-(user, model): the
+        # same model can now sit in different tiers in different sessions, so
+        # its measurements belong to the model. Carry existing rows over once
+        # rather than making users re-pay to re-measure. INSERT OR IGNORE
+        # makes this a no-op on every later startup.
+        conn.execute(
+            "INSERT OR IGNORE INTO model_calibrations "
+            "(user_id, model_name, avg_quality, avg_cost, avg_latency_ms, n_queries, "
+            " quality_by_difficulty, created_at) "
+            "SELECT user_id, model_name, avg_quality, avg_cost, avg_latency_ms, n_queries, "
+            "       quality_by_difficulty, created_at FROM calibration_results"
+        )
+        conn.commit()
 
 
 # --- users -------------------------------------------------------------
@@ -179,11 +264,11 @@ def delete_session(token: str):
 
 # --- chats -----------------------------------------------------------------
 
-def create_chat(user_id: int, title: str, timestamp: str) -> int:
+def create_chat(user_id: int, title: str, timestamp: str, mode: str = "builtin") -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO chats (user_id, title, created_at) VALUES (?, ?, ?)",
-            (user_id, title, timestamp),
+            "INSERT INTO chats (user_id, title, mode, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, title, mode, timestamp),
         )
         conn.commit()
         return cur.lastrowid
@@ -192,13 +277,42 @@ def create_chat(user_id: int, title: str, timestamp: str) -> int:
 def list_chats(user_id: int):
     with get_conn() as conn:
         return conn.execute(
-            "SELECT c.id, c.title, c.pinned, c.created_at, "
+            "SELECT c.id, c.title, c.pinned, c.mode, c.created_at, "
             "COALESCE(SUM(m.cost), 0) AS total_cost, "
-            "COALESCE(SUM(m.baseline_cost), 0) AS total_baseline_cost "
+            "COALESCE(SUM(m.baseline_cost), 0) AS total_baseline_cost, "
+            "(SELECT content FROM chat_messages fm WHERE fm.chat_id = c.id AND fm.role = 'user' "
+            "ORDER BY fm.id ASC LIMIT 1) AS preview "
             "FROM chats c LEFT JOIN chat_messages m ON m.chat_id = c.id "
             "WHERE c.user_id = ? GROUP BY c.id ORDER BY c.pinned DESC, c.id DESC",
             (user_id,),
         ).fetchall()
+
+
+def get_chat_stats(user_id: int):
+    """Real aggregate numbers across this user's own chat history -- avg
+    latency and overall percent saved -- used by the sidebar status card
+    instead of a simulated/fabricated metric."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n_messages, "
+            "COALESCE(AVG(m.latency_ms), 0) AS avg_latency_ms, "
+            "COALESCE(SUM(m.cost), 0) AS total_cost, "
+            "COALESCE(SUM(m.baseline_cost), 0) AS total_baseline_cost "
+            "FROM chat_messages m JOIN chats c ON c.id = m.chat_id "
+            "WHERE c.user_id = ? AND m.role = 'assistant'",
+            (user_id,),
+        ).fetchone()
+        total_cost = row["total_cost"]
+        total_baseline = row["total_baseline_cost"]
+        pct_saved = (
+            max(0.0, (total_baseline - total_cost) / total_baseline * 100) if total_baseline > 0 else 0.0
+        )
+        return {
+            "n_messages": row["n_messages"],
+            "avg_latency_ms": row["avg_latency_ms"],
+            "cost_saved": max(0.0, total_baseline - total_cost),
+            "pct_saved": pct_saved,
+        }
 
 
 def rename_chat(chat_id: int, user_id: int, title: str):
@@ -243,13 +357,16 @@ def get_chat(chat_id: int, user_id: int):
 def add_chat_message(chat_id: int, role: str, content: str, timestamp: str,
                       tier: str | None = None, cost: float | None = None,
                       baseline_cost: float | None = None, escalated: bool | None = None,
-                      latency_ms: float | None = None):
+                      latency_ms: float | None = None, difficulty: str | None = None,
+                      escalation_reasons: list | None = None):
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO chat_messages (chat_id, role, content, tier, cost, baseline_cost, "
-            "escalated, latency_ms, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "escalated, latency_ms, difficulty, escalation_reasons, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (chat_id, role, content, tier, cost, baseline_cost,
-             int(escalated) if escalated is not None else None, latency_ms, timestamp),
+             int(escalated) if escalated is not None else None, latency_ms, difficulty,
+             json.dumps(escalation_reasons) if escalation_reasons else None, timestamp),
         )
         conn.commit()
 
@@ -340,21 +457,198 @@ def get_model_configs(user_id: int) -> dict:
         return {r["tier"]: r["model_name"] for r in rows}
 
 
+# --- providers + their models (RAGFlow-style connections) ------------------
+
+def create_provider(user_id: int, name: str, provider: str, api_key_encrypted: str | None,
+                     api_base: str | None, timestamp: str) -> int:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO providers (user_id, name, provider, api_key_encrypted, api_base, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, name, provider, api_key_encrypted, api_base, timestamp),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def list_providers(user_id: int):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT id, name, provider, api_base, created_at, "
+            "(api_key_encrypted IS NOT NULL) AS has_stored_key "
+            "FROM providers WHERE user_id = ? ORDER BY id DESC", (user_id,),
+        ).fetchall()
+
+
+def get_provider(provider_id: int, user_id: int):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM providers WHERE id = ? AND user_id = ?", (provider_id, user_id),
+        ).fetchone()
+
+
+def delete_provider(provider_id: int, user_id: int) -> bool:
+    with get_conn() as conn:
+        owned = conn.execute(
+            "SELECT id FROM providers WHERE id = ? AND user_id = ?", (provider_id, user_id),
+        ).fetchone()
+        if owned is None:
+            return False
+        conn.execute("DELETE FROM provider_models WHERE provider_id = ?", (provider_id,))
+        conn.execute("DELETE FROM providers WHERE id = ?", (provider_id,))
+        conn.commit()
+        return True
+
+
+def set_provider_key(provider_id: int, user_id: int, api_key_encrypted: str | None):
+    """Passing None forgets a stored key, reverting that provider to
+    per-session entry."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE providers SET api_key_encrypted = ? WHERE id = ? AND user_id = ?",
+            (api_key_encrypted, provider_id, user_id),
+        )
+        conn.commit()
+
+
+def add_provider_model(provider_id: int, model_name: str, timestamp: str):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO provider_models (provider_id, model_name, created_at) "
+            "VALUES (?, ?, ?)",
+            (provider_id, model_name, timestamp),
+        )
+        conn.commit()
+
+
+def delete_provider_model(model_id: int, user_id: int) -> bool:
+    with get_conn() as conn:
+        owned = conn.execute(
+            "SELECT m.id FROM provider_models m JOIN providers p ON p.id = m.provider_id "
+            "WHERE m.id = ? AND p.user_id = ?", (model_id, user_id),
+        ).fetchone()
+        if owned is None:
+            return False
+        conn.execute("DELETE FROM provider_models WHERE id = ?", (model_id,))
+        conn.commit()
+        return True
+
+
+def list_user_models(user_id: int):
+    """Every model the user has connected, with its provider -- the pool the
+    chat-creation dropdowns pick from."""
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT m.id, m.model_name, m.provider_id, p.name AS provider_name, "
+            "p.provider, p.api_base, (p.api_key_encrypted IS NOT NULL) AS has_stored_key "
+            "FROM provider_models m JOIN providers p ON p.id = m.provider_id "
+            "WHERE p.user_id = ? ORDER BY p.name, m.model_name", (user_id,),
+        ).fetchall()
+
+
+def get_model_with_provider(user_id: int, model_name: str):
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT m.model_name, p.id AS provider_id, p.provider, p.api_base, "
+            "p.api_key_encrypted FROM provider_models m JOIN providers p ON p.id = m.provider_id "
+            "WHERE p.user_id = ? AND m.model_name = ? LIMIT 1", (user_id, model_name),
+        ).fetchone()
+
+
+# --- per-model calibration (reusable across tiers and sessions) ------------
+
+def set_model_calibration(user_id: int, model_name: str, avg_quality: float, avg_cost: float,
+                           avg_latency_ms: float, n_queries: int, timestamp: str,
+                           quality_by_difficulty: dict | None = None):
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO model_calibrations (user_id, model_name, avg_quality, avg_cost, "
+            "avg_latency_ms, n_queries, quality_by_difficulty, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(user_id, model_name) DO UPDATE SET avg_quality = excluded.avg_quality, "
+            "avg_cost = excluded.avg_cost, avg_latency_ms = excluded.avg_latency_ms, "
+            "n_queries = excluded.n_queries, "
+            "quality_by_difficulty = excluded.quality_by_difficulty, "
+            "created_at = excluded.created_at",
+            (user_id, model_name, avg_quality, avg_cost, avg_latency_ms, n_queries,
+             json.dumps(quality_by_difficulty) if quality_by_difficulty else None, timestamp),
+        )
+        conn.commit()
+
+
+def get_model_calibrations(user_id: int) -> dict:
+    """{model_name: {avg_quality, avg_cost, avg_latency_ms, n_queries,
+    quality_by_difficulty, created_at}}"""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM model_calibrations WHERE user_id = ?", (user_id,),
+        ).fetchall()
+        return {
+            r["model_name"]: {
+                "avg_quality": r["avg_quality"], "avg_cost": r["avg_cost"],
+                "avg_latency_ms": r["avg_latency_ms"], "n_queries": r["n_queries"],
+                "quality_by_difficulty": json.loads(r["quality_by_difficulty"])
+                if r["quality_by_difficulty"] else None,
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        }
+
+
+# --- per-chat model selection (frozen at creation) -------------------------
+
+def set_chat_models(chat_id: int, tier_models: dict, provider_ids: dict | None = None):
+    with get_conn() as conn:
+        for tier, model_name in tier_models.items():
+            conn.execute(
+                "INSERT OR REPLACE INTO chat_models (chat_id, tier, model_name, provider_id) "
+                "VALUES (?, ?, ?, ?)",
+                (chat_id, tier, model_name, (provider_ids or {}).get(tier)),
+            )
+        conn.commit()
+
+
+def get_chat_models(chat_id: int) -> dict:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT tier, model_name FROM chat_models WHERE chat_id = ?", (chat_id,),
+        ).fetchall()
+        return {r["tier"]: r["model_name"] for r in rows}
+
+
 # --- calibration results (derived numbers only, never the keys used) -------
 
 def set_calibration_result(user_id: int, tier: str, model_name: str, avg_quality: float,
-                            avg_cost: float, avg_latency_ms: float, n_queries: int, timestamp: str):
+                            avg_cost: float, avg_latency_ms: float, n_queries: int, timestamp: str,
+                            quality_by_difficulty: dict | None = None):
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO calibration_results (user_id, tier, model_name, avg_quality, avg_cost, "
-            "avg_latency_ms, n_queries, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "avg_latency_ms, n_queries, quality_by_difficulty, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(user_id, tier) DO UPDATE SET model_name = excluded.model_name, "
             "avg_quality = excluded.avg_quality, avg_cost = excluded.avg_cost, "
             "avg_latency_ms = excluded.avg_latency_ms, n_queries = excluded.n_queries, "
+            "quality_by_difficulty = excluded.quality_by_difficulty, "
             "created_at = excluded.created_at",
-            (user_id, tier, model_name, avg_quality, avg_cost, avg_latency_ms, n_queries, timestamp),
+            (user_id, tier, model_name, avg_quality, avg_cost, avg_latency_ms, n_queries,
+             json.dumps(quality_by_difficulty) if quality_by_difficulty else None, timestamp),
         )
         conn.commit()
+
+
+def get_quality_by_tier(user_id: int) -> dict:
+    """{tier: {difficulty: score|None}} -- the input the routing policy needs
+    to decide where each difficulty should start for this account."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT tier, quality_by_difficulty FROM calibration_results WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+        return {
+            r["tier"]: json.loads(r["quality_by_difficulty"])
+            for r in rows if r["quality_by_difficulty"]
+        }
 
 
 def get_calibration_results(user_id: int):
@@ -412,7 +706,7 @@ def get_sessions_overview(user_id: int):
     usage_log, one key = one session)."""
     with get_conn() as conn:
         chat_rows = conn.execute(
-            "SELECT c.id, c.title, c.pinned, c.created_at, COUNT(m.id) AS n_calls, "
+            "SELECT c.id, c.title, c.pinned, c.mode, c.created_at, COUNT(m.id) AS n_calls, "
             "COALESCE(SUM(m.cost), 0) AS total_cost, "
             "COALESCE(SUM(m.baseline_cost), 0) AS total_baseline_cost "
             "FROM chats c LEFT JOIN chat_messages m ON m.chat_id = c.id AND m.role = 'assistant' "
@@ -433,7 +727,7 @@ def get_sessions_overview(user_id: int):
             "created_at": c["created_at"], "n_calls": c["n_calls"],
             "total_cost": c["total_cost"], "total_baseline_cost": c["total_baseline_cost"],
             "cost_saved": max(0.0, c["total_baseline_cost"] - c["total_cost"]),
-            "revoked": False, "pinned": bool(c["pinned"]),
+            "revoked": False, "pinned": bool(c["pinned"]), "mode": c["mode"],
         })
     for k in api_rows:
         sessions.append({

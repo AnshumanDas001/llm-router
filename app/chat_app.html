@@ -20,8 +20,18 @@
   .auth-error { color: var(--critical); font-size: 12px; margin-bottom: 8px; min-height: 14px; }
 
   /* --- chat-list, nested inside the shared nav sidebar --- */
-  #new-chat-btn { margin: 12px 14px 8px; width: calc(100% - 28px); }
+  #new-chat-menu { margin: 2px 14px 12px; display: block; }
+  #new-chat-btn {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 9px 11px; font-weight: 550;
+  }
+  #new-chat-btn .nc-kbd {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--text-muted);
+    background: var(--surface-3); border-radius: 4px; padding: 1px 5px;
+  }
+  #new-chat-dropdown { left: 0; right: 0; top: calc(100% + 4px); }
   #chat-list { flex: 1; overflow-y: auto; padding: 0 8px; min-height: 0; }
+  .chat-item .badge.byom { font-size: 9px; padding: 1px 5px; }
   .chat-item {
     position: relative; padding: 9px 8px 9px 10px; border-radius: 6px; cursor: pointer;
     margin-bottom: 2px; font-size: 12.5px; display: flex; align-items: flex-start; gap: 4px;
@@ -36,7 +46,31 @@
     font-family: inherit; font-size: 12.5px; padding: 2px 5px; border-radius: 4px;
   }
   .chat-item .pin-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
-  .chat-item .saved { color: var(--good); font-size: 11px; margin-top: 2px; }
+  .chat-item .saved {
+    margin-left: auto; flex-shrink: 0; color: var(--good); font-size: 10px; font-weight: 600;
+    background: rgba(12, 163, 12, 0.12); border-radius: 7px; padding: 2px 6px;
+    font-family: "IBM Plex Mono", monospace;
+  }
+  .chat-item .preview {
+    color: var(--text-muted); font-size: 11px; margin-top: 2px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* --- router status card, real numbers from /api/chat-stats -------------- */
+  #router-status { margin: 6px 14px 10px; padding: 11px 12px; }
+  #router-status .rs-title {
+    display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; margin-bottom: 9px;
+  }
+  #router-status .rs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); flex-shrink: 0; }
+  #router-status .rs-pct { margin-left: auto; font-size: 10.5px; color: var(--good); font-family: "IBM Plex Mono", monospace; }
+  #router-status .rs-bar {
+    height: 4px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin-bottom: 9px;
+  }
+  #router-status .rs-bar-fill { height: 100%; background: var(--good); border-radius: 3px; width: 0; }
+  #router-status .rs-row {
+    display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 4px;
+  }
+  #router-status .rs-row .v { color: var(--text-secondary); font-family: "IBM Plex Mono", monospace; }
   .chat-item-kebab {
     background: none; border: none; color: var(--text-muted); padding: 2px 5px; border-radius: 4px;
     cursor: pointer; font-size: 14px; opacity: 0; flex-shrink: 0; line-height: 1;
@@ -44,25 +78,63 @@
   .chat-item:hover .chat-item-kebab, .chat-item.menu-open .chat-item-kebab { opacity: 1; }
   .chat-item-kebab:hover { background: var(--surface-3); color: var(--text-primary); }
   .chat-item-menu { right: 6px; top: 32px; min-width: 150px; }
+  .chat-list-group-label {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
+    padding: 12px 10px 4px; font-weight: 600;
+  }
+  .chat-list-group-label:first-child { padding-top: 4px; }
 
   /* --- chat main pane --- */
   #chat-main { display: flex; flex-direction: column; height: 100vh; min-width: 0; }
   #chat-header {
-    padding: 14px 22px; border-bottom: 1px solid var(--border); display: flex;
-    justify-content: space-between; align-items: center; flex-shrink: 0;
+    padding: 11px 18px; border-bottom: 1px solid var(--border); display: flex;
+    justify-content: space-between; align-items: center; flex-shrink: 0; gap: 16px;
   }
-  #chat-header h2 { font-size: 14px; margin: 0; font-weight: 650; }
-  #cost-saved-stat { font-size: 12.5px; color: var(--good); font-weight: 600; }
-  #cost-saved-stat .label { color: var(--text-muted); font-weight: 400; }
+  .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+  .breadcrumb .bc-muted { color: var(--text-muted); }
+  .breadcrumb .bc-sep { color: var(--text-muted); opacity: 0.6; }
+  .breadcrumb #chat-title {
+    font-size: 13px; margin: 0; font-weight: 600; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .breadcrumb .bc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); flex-shrink: 0; }
 
-  #messages { flex: 1; overflow-y: auto; padding: 22px; }
-  .msg { max-width: 640px; margin-bottom: 18px; }
-  .msg.user { margin-left: auto; }
-  .msg .bubble { padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.5; }
-  .msg.user .bubble { background: var(--accent); color: #001018; white-space: pre-wrap; }
-  .msg.assistant .bubble { background: var(--surface-1); border: 1px solid var(--border); }
+  .header-stats { display: flex; align-items: center; gap: 14px; font-size: 11.5px; color: var(--text-muted); flex-shrink: 0; }
+  .header-stats .hs-item b { color: var(--text-secondary); font-weight: 600; font-family: "IBM Plex Mono", monospace; }
+  .header-stats .hs-sep { opacity: 0.4; }
+  .mode-pill {
+    display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border);
+    background: var(--surface-1); border-radius: 16px; padding: 4px 11px; color: var(--text-secondary);
+  }
+  .mode-pill .mp-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
+  .header-icon-btn {
+    display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+    border-radius: 6px; color: var(--text-muted);
+  }
+  .header-icon-btn:hover { background: var(--surface-2); color: var(--text-primary); }
+  .header-icon-btn svg { width: 15px; height: 15px; }
+  @media (max-width: 860px) { .header-stats .hs-item, .header-stats .hs-sep { display: none; } }
 
-  /* rendered markdown inside assistant bubbles */
+  #messages { flex: 1; overflow-y: auto; padding: 28px 22px 8px; }
+  .messages-inner { max-width: 720px; margin: 0 auto; }
+
+  .msg { margin-bottom: 26px; }
+  .msg.user { display: flex; justify-content: flex-end; }
+  .msg.user .bubble {
+    max-width: 75%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.55;
+    background: var(--accent); color: #001018; white-space: pre-wrap;
+  }
+  .msg.assistant { position: relative; }
+  .msg.assistant .bubble { font-size: 14.5px; line-height: 1.65; color: var(--text-primary); }
+  .msg.assistant:hover .msg-actions { opacity: 1; }
+  .msg-actions { opacity: 0; transition: opacity 0.12s ease; margin-top: 6px; display: flex; gap: 4px; }
+  .msg-actions button {
+    background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 4px 8px;
+    border-radius: 6px; font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .msg-actions button:hover { background: var(--surface-2); color: var(--text-primary); }
+
+  /* rendered markdown inside assistant messages */
   .bubble p { margin: 0 0 10px; }
   .bubble p:last-child { margin-bottom: 0; }
   .bubble ul, .bubble ol { margin: 0 0 10px; padding-left: 22px; }
@@ -78,11 +150,138 @@
   .bubble table { border-collapse: collapse; margin: 0 0 10px; font-size: 0.9em; display: block; overflow-x: auto; max-width: 100%; }
   .bubble th, .bubble td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
   .bubble th { background: var(--surface-2); font-weight: 600; }
-  .msg-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .msg-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 7px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-  #composer { padding: 16px 22px; border-top: 1px solid var(--border); display: flex; gap: 8px; flex-shrink: 0; }
-  #composer input { flex: 1; padding: 10px 12px; font-size: 14px; }
-  #composer button { padding: 10px 18px; font-size: 14px; }
+  /* thinking indicator, shown while a response is routing/generating */
+  .thinking-dots { display: inline-flex; gap: 4px; padding: 4px 0; }
+  .thinking-dots span {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted);
+    animation: thinking-bounce 1.1s infinite ease-in-out;
+  }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.15s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes thinking-bounce {
+    0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-3px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .thinking-dots span { animation: none; opacity: 0.7; }
+  }
+
+  /* --- hero (Gemini/Claude-style greeting screen, shown for a chat with no
+     messages yet -- the composer physically relocates into this view) --- */
+  #messages.messages-hero { display: flex; align-items: center; justify-content: center; }
+  .chat-hero { max-width: 680px; width: 100%; text-align: center; padding: 0 8px; }
+  .routing-pill {
+    display: inline-flex; align-items: center; gap: 7px; background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 20px; padding: 5px 13px; font-size: 11.5px;
+    color: var(--text-secondary); margin-bottom: 18px;
+  }
+  .routing-pill .rp-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--good);
+    box-shadow: 0 0 0 3px rgba(12, 163, 12, 0.18);
+  }
+  .chat-hero h1 {
+    font-size: 28px; font-weight: 600; margin: 0; letter-spacing: -0.015em;
+    color: var(--text-primary); text-wrap: balance; line-height: 1.3;
+  }
+  .chat-hero h1 .hero-question { display: block; color: var(--text-muted); font-weight: 500; }
+  .chat-hero .sub { color: var(--text-muted); font-size: 13.5px; margin: 10px 0 4px; }
+  .active-tiers { color: var(--text-muted); font-size: 11.5px; margin: 0 0 22px; font-family: "IBM Plex Mono", monospace; }
+  .active-tiers .tier-name { color: var(--text-secondary); }
+  .active-tiers .tier-name.predicted { color: var(--accent); font-weight: 600; }
+  .active-tiers .tier-sep { opacity: 0.45; }
+
+  .hero-composer-mount { margin-bottom: 26px; }
+  .hero-composer-mount .composer-inner { padding: 16px 14px 12px; border-radius: 16px; }
+  .hero-composer-mount #composer-input { font-size: 15px; min-height: 76px; }
+
+  #composer-predict { flex-shrink: 0; }
+
+  .suggestions-header {
+    display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px;
+  }
+  .suggestions-header .label {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600;
+  }
+  .suggestion-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: left; }
+  @media (max-width: 640px) { .suggestion-grid { grid-template-columns: 1fr; } }
+  .suggestion-card {
+    background: var(--surface-1); border: 1px solid var(--border); color: var(--text-secondary);
+    padding: 11px 13px; border-radius: 10px; font-size: 12.5px; cursor: pointer; text-align: left;
+    font-family: inherit; display: flex; flex-direction: column; gap: 8px; line-height: 1.4;
+  }
+  .suggestion-card:hover { background: var(--surface-2); border-color: var(--border-strong); color: var(--text-primary); }
+  .suggestion-card .sc-meta { display: flex; justify-content: flex-end; }
+  .suggestion-card .sc-meta .badge { visibility: hidden; }
+  .suggestion-card .sc-meta .badge.ready { visibility: visible; }
+
+  /* --- new BYOM session: pick a model per tier from connected providers --- */
+  .session-setup { max-width: 520px; margin: 0 auto; text-align: left; }
+  .session-setup h3 { font-size: 14px; font-weight: 650; margin: 0 0 4px; }
+  .session-setup .ss-sub { color: var(--text-muted); font-size: 12px; margin: 0 0 16px; line-height: 1.55; }
+  .ss-row { display: grid; grid-template-columns: 74px 1fr; gap: 10px; align-items: center; margin-bottom: 9px; }
+  .ss-row select {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);
+    padding: 8px 10px; border-radius: var(--radius-sm); font-family: inherit; font-size: 12.5px;
+    width: 100%;
+  }
+  .ss-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+  .ss-note { color: var(--text-muted); font-size: 11.5px; }
+
+  /* --- BYOM key entry, shown once per browser session before a BYOM chat
+     can send -- keys live only in a JS variable, never persisted. --- */
+  .byom-key-banner { max-width: 460px; margin: 0 auto; text-align: left; }
+  .byom-key-title { font-weight: 650; font-size: 13.5px; margin-bottom: 4px; }
+  .byom-key-sub { color: var(--text-muted); font-size: 12px; margin: 0 0 14px; line-height: 1.5; }
+  .byom-key-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .byom-key-row .byom-key-model { color: var(--text-muted); font-size: 11.5px; flex-shrink: 0; }
+  .byom-key-row input { flex: 1; min-width: 0; }
+  .byom-key-banner > button { margin-top: 4px; }
+
+  /* The composer unit is physically re-parented between the hero and the
+     bottom dock, so every rule here keys off its own ids/classes rather
+     than "#composer ..." -- a descendant selector silently stops applying
+     the moment the unit is mounted into the hero instead. */
+  #composer { padding: 14px 22px 18px; border-top: 1px solid var(--border); flex-shrink: 0; }
+  #composer.composer-collapsed { display: none; }
+  #composer-unit { max-width: 720px; margin: 0 auto; }
+  .composer-inner {
+    display: flex; flex-direction: column; gap: 6px;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px 12px 10px;
+  }
+  .composer-inner:focus-within { border-color: var(--border-strong); }
+  #composer-input {
+    width: 100%; resize: none; border: none; background: none; color: var(--text-primary);
+    font-family: inherit; font-size: 14px; line-height: 1.55; padding: 0; max-height: 220px;
+    outline: none; min-height: 22px;
+  }
+  #composer-input::placeholder { color: var(--text-muted); }
+  .composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .composer-toolbar-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .ct-hint { font-size: 11px; color: var(--text-muted); }
+  #composer-send {
+    padding: 0; width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 14px;
+  }
+
+  .composer-hint {
+    display: flex; gap: 16px; justify-content: center; font-size: 11px;
+    color: var(--text-muted); flex-wrap: wrap; margin-top: 20px;
+  }
+  .composer-hint kbd {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 1px 5px; font-family: "IBM Plex Mono", monospace; font-size: 10px; color: var(--text-secondary);
+  }
+
+  /* --- "why this route" disclosure on assistant messages ------------------ */
+  .route-info {
+    margin-top: 8px; padding: 9px 11px; background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 8px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;
+  }
+  .route-info .ri-row { display: flex; gap: 6px; }
+  .route-info .ri-row .k { color: var(--text-muted); flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -104,20 +303,60 @@
 <div class="app-shell" id="app-screen" hidden>
   <nav class="app-nav">
     <div id="app-nav-top-mount"></div>
-    <button id="new-chat-btn" class="ghost">+ New chat</button>
+    <div class="menu-anchor" id="new-chat-menu">
+      <button id="new-chat-btn" class="ghost">
+        <span class="nc-label">+ New chat</span><kbd class="nc-kbd">&#8984;K</kbd>
+      </button>
+      <div class="dropdown-menu" id="new-chat-dropdown" hidden>
+        <button type="button" data-mode="builtin">Built-in models<span class="desc">Our cheap/mid/frontier cascade</span></button>
+        <button type="button" data-mode="byom">My models (BYOM)<span class="desc">Uses what's configured in Settings</span></button>
+      </div>
+    </div>
+    <div id="app-nav-links-mount"></div>
+    <div class="card" id="router-status" hidden>
+      <div class="rs-title"><span class="rs-dot"></span>Router status<span class="rs-pct" id="rs-pct"></span></div>
+      <div class="rs-bar"><div class="rs-bar-fill" id="rs-bar-fill"></div></div>
+      <div class="rs-row"><span>Avg latency</span><span class="v" id="rs-latency">&mdash;</span></div>
+      <div class="rs-row"><span>Cost saved</span><span class="v" id="rs-saved">&mdash;</span></div>
+    </div>
     <div id="chat-list"></div>
     <div class="app-nav-spacer" style="flex:0;"></div>
     <div id="app-nav-bottom-mount"></div>
   </nav>
   <main class="app-main" id="chat-main">
     <div id="chat-header">
-      <h2 id="chat-title">Select or start a chat</h2>
-      <div id="cost-saved-stat"></div>
+      <div class="breadcrumb">
+        <span class="bc-muted">Chat</span>
+        <span class="bc-sep">/</span>
+        <h2 id="chat-title">New chat</h2>
+        <span class="bc-dot"></span>
+      </div>
+      <div class="header-stats">
+        <span class="hs-item" id="hs-latency" hidden></span>
+        <span class="hs-sep">&middot;</span>
+        <span class="hs-item" id="hs-saved" hidden></span>
+        <span class="hs-sep">&middot;</span>
+        <span class="hs-item" id="hs-tiers"></span>
+        <span class="mode-pill"><span class="mp-dot"></span>Cheapest capable</span>
+        <a class="header-icon-btn" href="/settings" title="Model &amp; routing settings">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M2 4.5h5M10 4.5h4M2 11.5h4M9 11.5h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="8.5" cy="4.5" r="1.6" stroke="currentColor" stroke-width="1.3"/><circle cx="7.5" cy="11.5" r="1.6" stroke="currentColor" stroke-width="1.3"/></svg>
+        </a>
+      </div>
     </div>
-    <div id="messages"><div class="empty-state">Start a new chat to see the router in action.</div></div>
+    <div id="messages"></div>
     <div id="composer">
-      <input type="text" id="composer-input" placeholder="Ask anything..." autocomplete="off" disabled>
-      <button id="composer-send" disabled>Send</button>
+      <div id="composer-unit">
+        <div class="composer-inner" id="composer-inner">
+          <textarea id="composer-input" placeholder="Ask anything or paste code... (routed by complexity)" rows="1"></textarea>
+          <div class="composer-toolbar">
+            <div class="composer-toolbar-left">
+              <span class="badge" id="composer-predict" hidden></span>
+              <span class="ct-hint" id="composer-predict-hint">Tier picked automatically</span>
+            </div>
+            <button id="composer-send" title="Send">&uarr;</button>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 </div>
@@ -144,6 +383,58 @@
 
   let currentChatId = null;
   let isSignup = false;
+  let currentUsername = null;
+  let currentChatMode = "builtin";
+  let currentByomTiers = {};
+  let builtinTierModels = {};
+  // BYOM provider keys, held only in this tab's memory for this page
+  // session -- sent with each message to a BYOM chat, never persisted
+  // anywhere (matches the /api/v1/route pass-through's "never stored" rule).
+  const byomKeys = {};
+
+  // Only tiers whose provider key isn't saved server-side need prompting.
+  // A session built entirely from stored-key providers starts straight away.
+  let currentByomNeedsKey = [];
+
+  function needsByomKeys(chatId) {
+    return currentChatMode === "byom"
+      && currentByomNeedsKey.length > 0
+      && !byomKeys[chatId];
+  }
+
+  function buildByomKeyBanner(chatId, tiers) {
+    const wrap = document.createElement("div");
+    wrap.className = "card byom-key-banner";
+    wrap.innerHTML = `
+      <div class="byom-key-title">Enter your provider key(s) to continue</div>
+      <p class="byom-key-sub">Held only in this browser tab for this session &mdash; sent with each
+        message to your own models, never stored on our servers. You'll need to re-enter it if
+        you reload the page.</p>
+      <div class="byom-key-rows"></div>
+      <button type="button" class="byom-key-save">Continue</button>
+    `;
+    const rows = wrap.querySelector(".byom-key-rows");
+    Object.entries(tiers).filter(([tier]) => currentByomNeedsKey.includes(tier)).forEach(([tier, model]) => {
+      const row = document.createElement("div");
+      row.className = "byom-key-row";
+      row.innerHTML = `<span class="badge ${tier}">${tier}</span><span class="byom-key-model mono">${escapeHtml(model)}</span>`;
+      const keyInput = document.createElement("input");
+      keyInput.type = "password";
+      keyInput.placeholder = "provider API key (blank if none needed)";
+      keyInput.dataset.tier = tier;
+      row.appendChild(keyInput);
+      rows.appendChild(row);
+    });
+    wrap.querySelector(".byom-key-save").onclick = () => {
+      const keys = {};
+      rows.querySelectorAll("input").forEach(inp => {
+        if (inp.value.trim()) keys[inp.dataset.tier] = inp.value.trim();
+      });
+      byomKeys[chatId] = keys;
+      if (chatId === currentChatId) openChat(chatId);
+    };
+    return wrap;
+  }
 
   const authScreen = document.getElementById("auth-screen");
   const appScreen = document.getElementById("app-screen");
@@ -189,7 +480,8 @@
 
   async function checkSession() {
     try {
-      await api("/auth/me");
+      const me = await api("/auth/me");
+      currentUsername = me.username;
       await enterApp();
     } catch {
       authScreen.hidden = false;
@@ -201,24 +493,287 @@
     appScreen.hidden = false;
     await initNav("chat");
 
+    try {
+      const tiers = await api("/api/tiers");
+      builtinTierModels = tiers.builtin;
+    } catch { /* non-critical -- hero just won't show model names */ }
+    renderHeaderStats();
+    renderRouterStatus();
+
     const params = new URLSearchParams(window.location.search);
     const chatParam = params.get("chat");
     await refreshChatList();
     if (chatParam) await openChat(parseInt(chatParam, 10));
+    else renderHeroState();
+  }
+
+  async function renderRouterStatus() {
+    try {
+      const stats = await api("/api/chat-stats");
+      const card = document.getElementById("router-status");
+      if (stats.n_messages === 0) { card.hidden = true; return; }
+      document.getElementById("rs-latency").textContent = Math.round(stats.avg_latency_ms) + "ms";
+      document.getElementById("rs-saved").textContent = "$" + stats.cost_saved.toFixed(4);
+      document.getElementById("rs-pct").textContent = "-" + stats.pct_saved.toFixed(0) + "% cost";
+      document.getElementById("rs-bar-fill").style.width = Math.min(100, stats.pct_saved) + "%";
+      card.hidden = false;
+    } catch { /* non-critical sidebar decoration */ }
+  }
+
+  // --- hero (greeting) state, shown whenever there's no chat open or the
+  // open chat has no messages yet -- the real composer moves in here. ---
+  const EXAMPLE_PROMPTS = [
+    "Explain how binary search works, step by step",
+    "Draft a short, polite email declining a meeting",
+    "What's the time complexity of quicksort in the worst case?",
+    "Summarize the three-act structure used in most screenplays",
+  ];
+
+  function mountComposer(target) {
+    target.appendChild(document.getElementById("composer-unit"));
+    document.getElementById("composer").classList.add("composer-collapsed");
+  }
+
+  function dockComposer() {
+    const dock = document.getElementById("composer");
+    dock.appendChild(document.getElementById("composer-unit"));
+    dock.classList.remove("composer-collapsed");
+  }
+
+  function renderHeroState() {
+    dockComposer(); // relocate composer-inner out safely before wiping #messages
+    const el = document.getElementById("messages");
+    el.classList.add("messages-hero");
+    el.innerHTML = "";
+
+    const wrap = document.createElement("div");
+    wrap.className = "chat-hero";
+    wrap.innerHTML = `
+      <div class="routing-pill"><span class="rp-dot"></span>Cascade routing active</div>
+      <h1>Hi ${escapeHtml(displayName())},<span class="hero-question">what would you like to solve today?</span></h1>
+      <p class="sub">Every message is classified up front, then routed to the cheapest tier that can handle it.</p>
+      <p class="active-tiers" id="active-tiers-line"></p>
+    `;
+    renderActiveTiersLine(wrap.querySelector("#active-tiers-line"));
+
+    if (needsByomKeys(currentChatId)) {
+      wrap.appendChild(buildByomKeyBanner(currentChatId, currentByomTiers));
+    } else {
+      const mount = document.createElement("div");
+      mount.className = "hero-composer-mount";
+      wrap.appendChild(mount);
+      mountComposer(mount);
+
+      const suggestions = document.createElement("div");
+      suggestions.innerHTML = `
+        <div class="suggestions-header">
+          <span class="label">Suggested prompts</span>
+          <span class="label">Predicted tier</span>
+        </div>
+        <div class="suggestion-grid"></div>
+      `;
+      const gridEl = suggestions.querySelector(".suggestion-grid");
+      EXAMPLE_PROMPTS.forEach(p => {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "suggestion-card";
+        card.innerHTML = `<span>${escapeHtml(p)}</span><div class="sc-meta"><span class="badge">&nbsp;</span></div>`;
+        card.onclick = () => { input.value = p; autoResizeComposer(); schedulePredict(); sendMessage(); };
+        gridEl.appendChild(card);
+
+        const badgeEl = card.querySelector(".sc-meta .badge");
+        api("/api/classify", { method: "POST", body: JSON.stringify({ content: p }) })
+          .then(({ tier }) => {
+            badgeEl.textContent = tier;
+            badgeEl.className = `badge ready ${tier}`;
+          })
+          .catch(() => { badgeEl.parentElement.style.visibility = "hidden"; });
+      });
+      wrap.appendChild(suggestions);
+
+      const hint = document.createElement("div");
+      hint.className = "composer-hint";
+      hint.innerHTML = `
+        <span><kbd>Enter</kbd> to send</span>
+        <span><kbd>Shift+Enter</kbd> for newline</span>
+        <span><kbd>&#8984;+/</kbd> to inspect routing</span>
+      `;
+      wrap.appendChild(hint);
+    }
+
+    el.appendChild(wrap);
+    if (!needsByomKeys(currentChatId)) input.focus();
+  }
+
+  // Usernames are often emails; the greeting reads better without the domain.
+  function displayName() {
+    return (currentUsername || "there").split("@")[0];
+  }
+
+  // "groq/openai/gpt-oss-20b" -> "gpt-oss-20b": the provider prefix is noise
+  // in a one-line summary and pushes the row onto two ragged lines.
+  function shortModelName(model) {
+    return model.split("/").pop();
+  }
+
+  function renderActiveTiersLine(target) {
+    const tiers = currentChatMode === "byom" ? currentByomTiers : builtinTierModels;
+    const order = ["cheap", "mid", "frontier"];
+    const parts = order.filter(t => tiers[t]).map(t =>
+      `<span class="tier-name" data-tier="${t}" title="${escapeHtml(tiers[t])}">${escapeHtml(shortModelName(tiers[t]))}</span>`
+    );
+    target.innerHTML = "Active tiers: " + (parts.join('<span class="tier-sep"> / </span>') || "none configured");
   }
 
   // --- chats ---
-  document.getElementById("new-chat-btn").onclick = async () => {
-    const { id } = await api("/api/chats", { method: "POST", body: JSON.stringify({}) });
-    await refreshChatList();
-    await openChat(id);
+  const newChatDropdown = document.getElementById("new-chat-dropdown");
+  document.getElementById("new-chat-btn").onclick = (e) => {
+    e.stopPropagation();
+    newChatDropdown.hidden = !newChatDropdown.hidden;
   };
+  document.addEventListener("click", () => { newChatDropdown.hidden = true; });
+
+  newChatDropdown.querySelectorAll("[data-mode]").forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      newChatDropdown.hidden = true;
+      if (btn.dataset.mode === "byom") {
+        // BYOM sessions are pinned to specific models, so pick them before
+        // the chat exists rather than inheriting a global config.
+        renderSessionSetup();
+        return;
+      }
+      try {
+        const { id } = await api("/api/chats", { method: "POST", body: JSON.stringify({ mode: "builtin" }) });
+        await refreshChatList();
+        await openChat(id);
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+  });
+
+  async function renderSessionSetup() {
+    currentChatId = null;
+    currentChatMode = "builtin";
+    history.replaceState(null, "", "/app");
+    dockComposer();
+    document.getElementById("composer").classList.add("composer-collapsed");
+
+    const el = document.getElementById("messages");
+    el.classList.add("messages-hero");
+    el.innerHTML = "";
+
+    const wrap = document.createElement("div");
+    wrap.className = "chat-hero";
+    wrap.innerHTML = `
+      <h1>New session<span class="hero-question">pick a model for each tier</span></h1>
+      <div class="card session-setup">
+        <h3>Models for this session</h3>
+        <p class="ss-sub">Only calibrated models can be used &mdash; their measured scores are what
+          decide where each query starts. Leave a tier empty to skip it.</p>
+        <div id="ss-rows"></div>
+        <div class="ss-actions">
+          <button id="ss-start" disabled>Start session</button>
+          <span class="ss-note" id="ss-note"></span>
+        </div>
+      </div>
+    `;
+    el.appendChild(wrap);
+
+    let models = [];
+    try {
+      models = await api("/api/my-models");
+    } catch { /* handled by the empty case below */ }
+
+    const rowsEl = wrap.querySelector("#ss-rows");
+    const noteEl = wrap.querySelector("#ss-note");
+    const startBtn = wrap.querySelector("#ss-start");
+    const calibrated = models.filter(m => m.calibrated);
+
+    if (!calibrated.length) {
+      rowsEl.innerHTML = `<p class="ss-sub">${models.length
+        ? "You have connected models, but none are calibrated yet."
+        : "No providers connected yet."} Head to <a href="/settings?tab=models">Settings &rarr; Models &amp; calibration</a>.</p>`;
+      return;
+    }
+
+    ["cheap", "mid", "frontier"].forEach(tier => {
+      const row = document.createElement("div");
+      row.className = "ss-row";
+      row.innerHTML = `
+        <span class="badge ${tier}">${tier}</span>
+        <select data-tier="${tier}">
+          <option value="">&mdash; none &mdash;</option>
+          ${calibrated.map(m => `<option value="${escapeHtml(m.model_name)}">${escapeHtml(m.model_name)}</option>`).join("")}
+        </select>
+      `;
+      rowsEl.appendChild(row);
+    });
+
+    const selects = rowsEl.querySelectorAll("select");
+    const chosen = () => {
+      const out = {};
+      selects.forEach(s => { if (s.value) out[s.dataset.tier] = s.value; });
+      return out;
+    };
+    const sync = () => {
+      const picked = chosen();
+      startBtn.disabled = Object.keys(picked).length === 0;
+      noteEl.textContent = Object.keys(picked).length
+        ? `${Object.keys(picked).length} tier(s) selected`
+        : "pick at least one tier";
+    };
+    selects.forEach(s => { s.onchange = sync; });
+    sync();
+
+    startBtn.onclick = async () => {
+      startBtn.disabled = true;
+      try {
+        const { id } = await api("/api/chats", {
+          method: "POST", body: JSON.stringify({ mode: "byom", models: chosen() }),
+        });
+        await refreshChatList();
+        await openChat(id);
+      } catch (err) {
+        noteEl.textContent = err.message;
+        startBtn.disabled = false;
+      }
+    };
+  }
+
+  function chatDateGroup(createdAt) {
+    const startOfDay = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    const today = startOfDay(new Date());
+    const diffDays = Math.round((today - startOfDay(new Date(createdAt))) / 86400000);
+    if (diffDays <= 0) return "Today";
+    if (diffDays === 1) return "Yesterday";
+    if (diffDays <= 7) return "Previous 7 Days";
+    return "Older";
+  }
 
   async function refreshChatList() {
     const chats = await api("/api/chats");
     const listEl = document.getElementById("chat-list");
     listEl.innerHTML = "";
-    chats.forEach(c => listEl.appendChild(buildChatItem(c)));
+
+    if (chats.length === 0) {
+      listEl.innerHTML = '<div style="padding:10px 10px;color:var(--text-muted);font-size:12px;">No chats yet.</div>';
+      return;
+    }
+
+    const buckets = { "Pinned": [], "Today": [], "Yesterday": [], "Previous 7 Days": [], "Older": [] };
+    chats.forEach(c => buckets[c.pinned ? "Pinned" : chatDateGroup(c.created_at)].push(c));
+
+    ["Pinned", "Today", "Yesterday", "Previous 7 Days", "Older"].forEach(label => {
+      const list = buckets[label];
+      if (list.length === 0) return;
+      const labelEl = document.createElement("div");
+      labelEl.className = "chat-list-group-label";
+      labelEl.textContent = label;
+      listEl.appendChild(labelEl);
+      list.forEach(c => listEl.appendChild(buildChatItem(c)));
+    });
   }
 
   function buildChatItem(c) {
@@ -232,9 +787,11 @@
       <div class="title-row">
         ${c.pinned ? '<span class="pin-dot" title="Pinned"></span>' : ""}
         <span class="title">${escapeHtml(c.title)}</span>
+        ${c.mode === "byom" ? '<span class="badge byom">BYOM</span>' : ""}
+        ${c.total_baseline_cost > 0
+          ? `<span class="saved" title="saved vs. always using the top tier">$${c.cost_saved.toFixed(3)}</span>` : ""}
       </div>
-      ${(c.total_cost > 0 || c.total_baseline_cost > 0)
-        ? `<div class="saved">saved $${c.cost_saved.toFixed(5)}</div>` : ""}
+      ${c.preview ? `<div class="preview">${escapeHtml(c.preview)}</div>` : ""}
     `;
     main.onclick = () => openChat(c.id);
 
@@ -303,7 +860,11 @@
         await api(`/api/chats/${chat.id}`, { method: "PATCH", body: JSON.stringify({ title: newTitle }) });
       }
       await refreshChatList();
-      if (chat.id === currentChatId) document.getElementById("chat-title").textContent = newTitle || chat.title;
+      if (chat.id === currentChatId) {
+        const title = newTitle || chat.title;
+        document.getElementById("chat-title").innerHTML =
+          escapeHtml(title) + (currentChatMode === "byom" ? ' <span class="badge byom">BYOM</span>' : "");
+      }
     };
     input.addEventListener("blur", save);
     input.addEventListener("keydown", (e) => {
@@ -330,13 +891,13 @@
       await api(`/api/chats/${chat.id}`, { method: "DELETE" });
       if (chat.id === currentChatId) {
         currentChatId = null;
+        currentChatMode = "builtin";
+        currentByomTiers = {};
+        currentByomNeedsKey = [];
         history.replaceState(null, "", "/app");
-        document.getElementById("chat-title").textContent = "Select or start a chat";
-        document.getElementById("cost-saved-stat").innerHTML = "";
-        document.getElementById("composer-input").disabled = true;
-        document.getElementById("composer-send").disabled = true;
-        document.getElementById("messages").innerHTML =
-          '<div class="empty-state">Start a new chat to see the router in action.</div>';
+        document.getElementById("chat-title").textContent = "New chat";
+        renderHeaderStats();
+        renderHeroState();
       }
       await refreshChatList();
     };
@@ -346,27 +907,77 @@
     currentChatId = chatId;
     history.replaceState(null, "", `/app?chat=${chatId}`);
     const chat = await api(`/api/chats/${chatId}`);
-    document.getElementById("chat-title").textContent = chat.title;
-    document.getElementById("composer-input").disabled = false;
-    document.getElementById("composer-send").disabled = false;
-    renderCostSaved(chat.cost_saved);
+    currentChatMode = chat.mode;
+    currentByomTiers = chat.byom_tiers || {};
+    currentByomNeedsKey = chat.byom_needs_key || [];
+    document.getElementById("chat-title").innerHTML =
+      escapeHtml(chat.title) + (chat.mode === "byom" ? ' <span class="badge byom">BYOM</span>' : "");
+    const lastAnswer = [...chat.messages].reverse().find(m => m.role === "assistant");
+    renderHeaderStats({
+      latencyMs: lastAnswer ? lastAnswer.latency_ms : null,
+      totalCost: chat.total_cost,
+      totalBaseline: chat.total_baseline_cost,
+    });
     renderMessages(chat.messages);
     await refreshChatList();
   }
 
-  function renderCostSaved(saved) {
-    document.getElementById("cost-saved-stat").innerHTML =
-      `<span class="label">saved this chat:</span> $${saved.toFixed(5)}`;
+  // Header stats are all real per-chat numbers: the latency of the most
+  // recent answer, this chat's saved share vs. the baseline, and how many
+  // tiers are actually configured for the mode it's running in.
+  function renderHeaderStats({ latencyMs, totalCost, totalBaseline } = {}) {
+    const latencyEl = document.getElementById("hs-latency");
+    const savedEl = document.getElementById("hs-saved");
+    const tiersEl = document.getElementById("hs-tiers");
+
+    if (latencyMs != null) {
+      latencyEl.innerHTML = `Latency <b>${Math.round(latencyMs)}ms</b>`;
+      latencyEl.hidden = false;
+    } else {
+      latencyEl.hidden = true;
+    }
+
+    if (totalBaseline > 0) {
+      const pct = Math.max(0, (totalBaseline - totalCost) / totalBaseline * 100);
+      savedEl.innerHTML = `Saved <b>${pct.toFixed(0)}%</b>`;
+      savedEl.hidden = false;
+    } else {
+      savedEl.hidden = true;
+    }
+
+    const tiers = currentChatMode === "byom" ? currentByomTiers : builtinTierModels;
+    const n = Object.keys(tiers).length;
+    tiersEl.innerHTML = `Tiers <b>${n}</b> ready`;
+  }
+
+  function getMessagesInner() {
+    const el = document.getElementById("messages");
+    let inner = el.querySelector(".messages-inner");
+    if (!inner) {
+      el.innerHTML = "";
+      inner = document.createElement("div");
+      inner.className = "messages-inner";
+      el.appendChild(inner);
+    }
+    return inner;
   }
 
   function renderMessages(messages) {
-    const el = document.getElementById("messages");
+    dockComposer(); // relocate composer-inner out safely before wiping #messages
     if (messages.length === 0) {
-      el.innerHTML = '<div class="empty-state">Send a message to see it routed live.</div>';
+      renderHeroState();
       return;
     }
-    el.innerHTML = "";
-    messages.forEach(m => el.appendChild(renderMessage(m)));
+    const el = document.getElementById("messages");
+    el.classList.remove("messages-hero");
+    const inner = getMessagesInner();
+    inner.innerHTML = "";
+    messages.forEach(m => inner.appendChild(renderMessage(m)));
+
+    if (needsByomKeys(currentChatId)) {
+      document.getElementById("composer").classList.add("composer-collapsed");
+      inner.appendChild(buildByomKeyBanner(currentChatId, currentByomTiers));
+    }
     el.scrollTop = el.scrollHeight;
   }
 
@@ -383,6 +994,42 @@
     }
     wrap.appendChild(bubble);
 
+    let routeInfoEl = null;
+    if (m.role === "assistant" && m.difficulty) {
+      routeInfoEl = document.createElement("div");
+      routeInfoEl.className = "route-info";
+      routeInfoEl.hidden = true;
+      const reasons = m.escalation_reasons && m.escalation_reasons.length
+        ? m.escalation_reasons.join("; ") : "none -- answered at the first tier tried";
+      routeInfoEl.innerHTML = `
+        <div class="ri-row"><span class="k">classified</span><span>${escapeHtml(m.difficulty)}</span></div>
+        <div class="ri-row"><span class="k">escalation</span><span>${escapeHtml(reasons)}</span></div>
+      `;
+    }
+
+    if (m.role === "assistant" && m.content) {
+      const actions = document.createElement("div");
+      actions.className = "msg-actions";
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.textContent = "Copy";
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(m.content).catch(() => {});
+        copyBtn.textContent = "Copied";
+        setTimeout(() => { copyBtn.textContent = "Copy"; }, 1400);
+      };
+      actions.appendChild(copyBtn);
+
+      if (routeInfoEl) {
+        const routeBtn = document.createElement("button");
+        routeBtn.type = "button";
+        routeBtn.textContent = "Why this route?";
+        routeBtn.onclick = () => { routeInfoEl.hidden = !routeInfoEl.hidden; };
+        actions.appendChild(routeBtn);
+      }
+      wrap.appendChild(actions);
+    }
+
     if (m.role === "assistant" && m.tier) {
       const meta = document.createElement("div");
       meta.className = "msg-meta";
@@ -392,6 +1039,7 @@
       meta.innerHTML = html;
       wrap.appendChild(meta);
     }
+    if (routeInfoEl) wrap.appendChild(routeInfoEl);
     return wrap;
   }
 
@@ -405,32 +1053,89 @@
   const input = document.getElementById("composer-input");
   const sendBtn = document.getElementById("composer-send");
 
+  function autoResizeComposer() {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 200) + "px";
+  }
+
+  // --- live "predicted tier" badge, from the same cheap upfront classifier
+  // the cascade itself uses -- no model call, so safe to run on a debounce
+  // while the user is still typing. ---
+  let predictTimer = null;
+  const predictEl = document.getElementById("composer-predict");
+  const predictHintEl = document.getElementById("composer-predict-hint");
+
+  function clearPredict() {
+    clearTimeout(predictTimer);
+    predictEl.hidden = true;
+    predictHintEl.textContent = "Tier picked automatically";
+    document.querySelectorAll(".tier-name.predicted").forEach(el => el.classList.remove("predicted"));
+  }
+
+  function schedulePredict() {
+    clearTimeout(predictTimer);
+    const text = input.value.trim();
+    if (!text) { clearPredict(); return; }
+    predictTimer = setTimeout(async () => {
+      try {
+        const { tier, difficulty } = await api("/api/classify", {
+          method: "POST", body: JSON.stringify({ content: text }),
+        });
+        predictEl.textContent = tier;
+        predictEl.className = `badge ${tier}`;
+        predictEl.hidden = false;
+        predictHintEl.textContent = `classified ${difficulty} -- starts here`;
+        document.querySelectorAll(".tier-name.predicted").forEach(el => el.classList.remove("predicted"));
+        document.querySelector(`.tier-name[data-tier="${tier}"]`)?.classList.add("predicted");
+      } catch { /* non-critical -- just skip the preview this time */ }
+    }, 450);
+  }
+
   async function sendMessage() {
     const content = input.value.trim();
-    if (!content || !currentChatId) return;
+    if (!content || needsByomKeys(currentChatId)) return;
     input.value = "";
+    autoResizeComposer();
+    clearPredict();
     sendBtn.disabled = true;
     input.disabled = true;
 
+    if (!currentChatId) {
+      const { id } = await api("/api/chats", { method: "POST", body: JSON.stringify({}) });
+      currentChatId = id;
+      history.replaceState(null, "", `/app?chat=${id}`);
+      await refreshChatList();
+    }
+
     const messagesEl = document.getElementById("messages");
-    if (messagesEl.querySelector(".empty-state")) messagesEl.innerHTML = "";
-    messagesEl.appendChild(renderMessage({ role: "user", content }));
+    messagesEl.classList.remove("messages-hero");
+    dockComposer();
+    const inner = getMessagesInner();
+    inner.appendChild(renderMessage({ role: "user", content }));
     const loadingEl = document.createElement("div");
     loadingEl.className = "msg assistant";
-    loadingEl.innerHTML = '<div class="bubble loading-text">Routing&hellip;</div>';
-    messagesEl.appendChild(loadingEl);
+    loadingEl.innerHTML = '<div class="bubble"><div class="thinking-dots"><span></span><span></span><span></span></div></div>';
+    inner.appendChild(loadingEl);
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
     try {
+      const body = { content };
+      if (currentChatMode === "byom") body.tier_api_keys = byomKeys[currentChatId] || {};
       const data = await api(`/api/chats/${currentChatId}/messages`, {
-        method: "POST", body: JSON.stringify({ content }),
+        method: "POST", body: JSON.stringify(body),
       });
       loadingEl.replaceWith(renderMessage({
         role: "assistant", content: data.content, tier: data.tier,
         cost: data.cost, latency_ms: data.latency_ms, escalated: data.escalated,
+        difficulty: data.difficulty, escalation_reasons: data.escalation_reasons,
       }));
-      renderCostSaved(data.chat_cost_saved);
+      renderHeaderStats({
+        latencyMs: data.latency_ms,
+        totalCost: data.chat_total_cost,
+        totalBaseline: data.chat_total_baseline_cost,
+      });
       await refreshChatList();
+      renderRouterStatus();
     } catch (err) {
       loadingEl.querySelector(".bubble").textContent = "Error: " + err.message;
       loadingEl.querySelector(".bubble").style.color = "var(--critical)";
@@ -443,7 +1148,28 @@
   }
 
   sendBtn.onclick = sendMessage;
-  input.addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
+  input.addEventListener("input", () => { autoResizeComposer(); schedulePredict(); });
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  // --- keyboard shortcuts: Cmd/Ctrl+K for a new session, Cmd/Ctrl+/ to
+  // toggle every "why this route" disclosure open/closed at once. ---
+  document.addEventListener("keydown", e => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      newChatDropdown.hidden = !newChatDropdown.hidden;
+    } else if (mod && e.key === "/") {
+      e.preventDefault();
+      const panels = document.querySelectorAll(".route-info");
+      const anyHidden = Array.from(panels).some(p => p.hidden);
+      panels.forEach(p => { p.hidden = !anyHidden; });
+    }
+  });
 
   checkSession();
 </script>

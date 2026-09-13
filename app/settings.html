@@ -7,19 +7,13 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
 <style>
-  .tier-row {
-    display: grid; grid-template-columns: 70px 1fr 1fr auto; gap: 8px; align-items: center;
-    margin-bottom: 8px;
-  }
-  @media (max-width: 640px) { .tier-row { grid-template-columns: 1fr; } }
-  .tier-row input { width: 100%; }
-  .tier-row-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
 </style>
 </head>
 <body>
 <div class="app-shell">
   <nav class="app-nav">
     <div id="app-nav-top-mount"></div>
+    <div id="app-nav-links-mount"></div>
     <div class="app-nav-spacer"></div>
     <div id="app-nav-bottom-mount"></div>
   </nav>
@@ -29,13 +23,15 @@
       <div class="page-header">
         <div>
           <h1>Settings</h1>
-          <p class="sub">Manage API keys and bring-your-own-model configuration. See <a href="/sessions">Sessions</a> for usage and cost-saved history.</p>
+          <p class="sub">Account-level API keys for programmatic routing.</p>
         </div>
       </div>
 
-      <section>
-        <h2>API keys</h2>
-        <p class="section-sub">For programmatic access to <code>/api/v1/route</code>. We never store your upstream model provider keys &mdash; only these, which identify your account. Each key is its own session (see Sessions).</p>
+      <section style="margin-bottom:0;">
+        <p class="section-sub">For programmatic access to <code>/api/v1/route</code>. These identify
+          your account &mdash; they are not your model provider keys, which live under
+          <a href="/models">Models &amp; calibration</a>. Each key is its own session (see
+          <a href="/sessions">Sessions</a>).</p>
         <div class="card">
           <div id="new-key-banner"></div>
           <table id="keys-table"><thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody></tbody></table>
@@ -43,44 +39,6 @@
             <input type="text" id="new-key-name" placeholder="key name (optional)">
             <button id="create-key-btn">+ New API key</button>
           </div>
-        </div>
-      </section>
-
-      <section>
-        <h2>Model configuration &amp; calibration</h2>
-        <p class="section-sub">Bring your own models. Enter a <a href="https://docs.litellm.ai/docs/providers" target="_blank">litellm-style model string</a> per tier (e.g. <code>groq/llama-3.1-8b-instant</code>) and your key for that provider &mdash; used once, transiently, to run a quick calibration; never stored.</p>
-        <div class="card">
-          <div class="tier-row">
-            <span class="tier-row-label">Tier</span><span class="tier-row-label">Model</span><span class="tier-row-label">API key</span><span></span>
-          </div>
-          <div class="tier-row">
-            <span class="badge cheap">cheap</span>
-            <input type="text" id="model-cheap" placeholder="e.g. groq/llama-3.1-8b-instant">
-            <input type="password" id="key-cheap" placeholder="provider API key">
-            <span></span>
-          </div>
-          <div class="tier-row">
-            <span class="badge mid">mid</span>
-            <input type="text" id="model-mid" placeholder="e.g. openai/gpt-4o-mini">
-            <input type="password" id="key-mid" placeholder="provider API key">
-            <span></span>
-          </div>
-          <div class="tier-row">
-            <span class="badge frontier">frontier</span>
-            <input type="text" id="model-frontier" placeholder="e.g. anthropic/claude-...">
-            <input type="password" id="key-frontier" placeholder="provider API key">
-            <span></span>
-          </div>
-          <div style="margin-top:8px; display:flex; align-items:center; gap:10px;">
-            <button id="calibrate-btn">Run calibration</button>
-            <span id="calibrate-status" style="color:var(--text-muted); font-size:12.5px;"></span>
-          </div>
-          <div id="calibrate-warnings"></div>
-
-          <table id="calibration-table" style="margin-top:16px;" hidden>
-            <thead><tr><th>Tier</th><th>Model</th><th>Avg quality</th><th>Avg cost</th><th>Avg latency</th></tr></thead>
-            <tbody></tbody>
-          </table>
         </div>
       </section>
 
@@ -134,71 +92,9 @@
     loadKeys();
   };
 
-  async function loadModels() {
-    const models = await api("/api/models");
-    for (const tier of ["cheap", "mid", "frontier"]) {
-      if (models[tier]) document.getElementById(`model-${tier}`).value = models[tier];
-    }
-  }
-
-  document.getElementById("calibrate-btn").onclick = async () => {
-    const tiers = {};
-    for (const tier of ["cheap", "mid", "frontier"]) {
-      const model = document.getElementById(`model-${tier}`).value.trim();
-      const key = document.getElementById(`key-${tier}`).value.trim();
-      if (model) tiers[tier] = { model, api_key: key || null };
-    }
-    if (Object.keys(tiers).length === 0) return;
-
-    const statusEl = document.getElementById("calibrate-status");
-    const btn = document.getElementById("calibrate-btn");
-    btn.disabled = true;
-    statusEl.textContent = "Running calibration (this can take a minute or two)...";
-    document.getElementById("calibrate-warnings").innerHTML = "";
-
-    try {
-      const data = await api("/api/calibrate", { method: "POST", body: JSON.stringify({ tiers }) });
-      statusEl.textContent = "Done.";
-      renderCalibration(data.results);
-      if (data.warnings.length) {
-        document.getElementById("calibrate-warnings").innerHTML = data.warnings
-          .map(w => `<div class="warning-box">${esc(w)}</div>`).join("");
-      }
-      for (const tier of ["cheap", "mid", "frontier"]) document.getElementById(`key-${tier}`).value = "";
-    } catch (err) {
-      statusEl.textContent = "Error: " + err.message;
-    } finally {
-      btn.disabled = false;
-    }
-  };
-
-  function renderCalibration(results) {
-    const table = document.getElementById("calibration-table");
-    table.hidden = false;
-    table.querySelector("tbody").innerHTML = Object.entries(results).map(([tier, r]) => `
-      <tr>
-        <td><span class="badge ${tier}">${tier}</span></td>
-        <td class="mono">${esc(r.model)}</td>
-        <td class="mono">${(r.avg_quality * 100).toFixed(0)}%</td>
-        <td class="mono">${fmt(r.avg_cost)}</td>
-        <td class="mono">${r.avg_latency_ms.toFixed(0)}ms</td>
-      </tr>
-    `).join("");
-  }
-
-  async function loadCalibrationHistory() {
-    const results = await api("/api/calibration");
-    if (results.length === 0) return;
-    const byTier = {};
-    results.forEach(r => { byTier[r.tier] = r; });
-    renderCalibration(byTier);
-  }
-
   (async function init() {
     await initNav("settings");
     loadKeys();
-    loadModels();
-    loadCalibrationHistory();
   })();
 </script>
 </body>
