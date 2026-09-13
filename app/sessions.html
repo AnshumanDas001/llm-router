@@ -7,18 +7,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
 <style>
-  .new-session-menu { position: relative; display: inline-block; }
-  .new-session-dropdown {
-    position: absolute; right: 0; top: calc(100% + 6px); background: var(--surface-2);
-    border: 1px solid var(--border); border-radius: var(--radius); min-width: 180px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 10; overflow: hidden;
-  }
-  .new-session-dropdown button {
-    display: block; width: 100%; text-align: left; background: none; color: var(--text-primary);
-    border: none; border-radius: 0; padding: 10px 14px; font-weight: 500;
-  }
-  .new-session-dropdown button:hover { background: var(--surface-3); }
-  .new-session-dropdown .desc { color: var(--text-muted); font-size: 11px; display: block; margin-top: 1px; font-weight: 400; }
+  .new-session-dropdown { right: 0; top: calc(100% + 6px); min-width: 200px; }
 </style>
 </head>
 <body>
@@ -37,9 +26,9 @@
             <h1>Sessions</h1>
             <p class="sub">Every chat and API key, each its own session. Click one for the full call log.</p>
           </div>
-          <div class="new-session-menu">
+          <div class="menu-anchor">
             <button id="new-session-btn">+ New session</button>
-            <div class="new-session-dropdown" id="new-session-dropdown" hidden>
+            <div class="dropdown-menu new-session-dropdown" id="new-session-dropdown" hidden>
               <button id="new-chat-session-btn">New chat<span class="desc">Interactive, in the chat UI</span></button>
               <button id="new-api-session-btn">New API session<span class="desc">Issues a key for programmatic use</span></button>
             </div>
@@ -100,7 +89,7 @@
     const tbody = document.querySelector("#sessions-table tbody");
     tbody.innerHTML = sessions.map(s => `
       <tr class="clickable" data-type="${s.type}" data-id="${s.id}">
-        <td>${esc(s.name)}${s.revoked ? ' <span class="badge revoked">revoked</span>' : ""}</td>
+        <td>${esc(s.name)}${s.pinned ? ' <span class="badge pinned">pinned</span>' : ""}${s.revoked ? ' <span class="badge revoked">revoked</span>' : ""}</td>
         <td><span class="badge ${s.type === "chat" ? "chat-type" : "api-type"}">${s.type}</span></td>
         <td class="mono">${s.n_calls}</td>
         <td class="mono">${fmt(s.total_cost)}</td>

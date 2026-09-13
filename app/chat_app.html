@@ -22,11 +22,28 @@
   /* --- chat-list, nested inside the shared nav sidebar --- */
   #new-chat-btn { margin: 12px 14px 8px; width: calc(100% - 28px); }
   #chat-list { flex: 1; overflow-y: auto; padding: 0 8px; min-height: 0; }
-  .chat-item { padding: 9px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 2px; font-size: 12.5px; }
-  .chat-item:hover { background: var(--surface-2); }
+  .chat-item {
+    position: relative; padding: 9px 8px 9px 10px; border-radius: 6px; cursor: pointer;
+    margin-bottom: 2px; font-size: 12.5px; display: flex; align-items: flex-start; gap: 4px;
+  }
+  .chat-item:hover, .chat-item.menu-open { background: var(--surface-2); }
   .chat-item.active { background: var(--surface-2); border: 1px solid var(--border); }
+  .chat-item-main { flex: 1; min-width: 0; }
+  .chat-item .title-row { display: flex; align-items: center; gap: 5px; }
   .chat-item .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chat-item .title-input {
+    width: 100%; background: var(--surface-3); border: 1px solid var(--accent); color: var(--text-primary);
+    font-family: inherit; font-size: 12.5px; padding: 2px 5px; border-radius: 4px;
+  }
+  .chat-item .pin-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
   .chat-item .saved { color: var(--good); font-size: 11px; margin-top: 2px; }
+  .chat-item-kebab {
+    background: none; border: none; color: var(--text-muted); padding: 2px 5px; border-radius: 4px;
+    cursor: pointer; font-size: 14px; opacity: 0; flex-shrink: 0; line-height: 1;
+  }
+  .chat-item:hover .chat-item-kebab, .chat-item.menu-open .chat-item-kebab { opacity: 1; }
+  .chat-item-kebab:hover { background: var(--surface-3); color: var(--text-primary); }
+  .chat-item-menu { right: 6px; top: 32px; min-width: 150px; }
 
   /* --- chat main pane --- */
   #chat-main { display: flex; flex-direction: column; height: 100vh; min-width: 0; }
@@ -201,15 +218,128 @@
     const chats = await api("/api/chats");
     const listEl = document.getElementById("chat-list");
     listEl.innerHTML = "";
-    chats.forEach(c => {
-      const el = document.createElement("div");
-      el.className = "chat-item" + (c.id === currentChatId ? " active" : "");
-      el.innerHTML = `<div class="title">${escapeHtml(c.title)}</div>` +
-        (c.total_cost > 0 || c.total_baseline_cost > 0
-          ? `<div class="saved">saved $${c.cost_saved.toFixed(5)}</div>` : "");
-      el.onclick = () => openChat(c.id);
-      listEl.appendChild(el);
+    chats.forEach(c => listEl.appendChild(buildChatItem(c)));
+  }
+
+  function buildChatItem(c) {
+    const el = document.createElement("div");
+    el.className = "chat-item" + (c.id === currentChatId ? " active" : "");
+    el.dataset.id = c.id;
+
+    const main = document.createElement("div");
+    main.className = "chat-item-main";
+    main.innerHTML = `
+      <div class="title-row">
+        ${c.pinned ? '<span class="pin-dot" title="Pinned"></span>' : ""}
+        <span class="title">${escapeHtml(c.title)}</span>
+      </div>
+      ${(c.total_cost > 0 || c.total_baseline_cost > 0)
+        ? `<div class="saved">saved $${c.cost_saved.toFixed(5)}</div>` : ""}
+    `;
+    main.onclick = () => openChat(c.id);
+
+    const kebab = document.createElement("button");
+    kebab.className = "chat-item-kebab";
+    kebab.textContent = "⋮"; // vertical ellipsis
+    kebab.onclick = (e) => { e.stopPropagation(); toggleChatMenu(el, c); };
+
+    el.appendChild(main);
+    el.appendChild(kebab);
+    return el;
+  }
+
+  let openMenuEl = null;
+  function closeChatMenu() {
+    if (openMenuEl) {
+      openMenuEl.querySelector(".chat-item-menu")?.remove();
+      openMenuEl.classList.remove("menu-open");
+      openMenuEl = null;
+    }
+  }
+  document.addEventListener("click", closeChatMenu);
+
+  function toggleChatMenu(itemEl, chat) {
+    const alreadyOpenForThis = openMenuEl === itemEl;
+    closeChatMenu();
+    if (alreadyOpenForThis) return;
+
+    itemEl.classList.add("menu-open");
+    openMenuEl = itemEl;
+    const menu = document.createElement("div");
+    menu.className = "dropdown-menu chat-item-menu";
+    menu.innerHTML = `
+      <button data-action="rename">Rename</button>
+      <button data-action="pin">${chat.pinned ? "Unpin" : "Pin"}</button>
+      <hr>
+      <button data-action="delete" class="danger-item">Delete</button>
+    `;
+    menu.onclick = (e) => e.stopPropagation();
+    menu.querySelector('[data-action="rename"]').onclick = () => { closeChatMenu(); startRename(itemEl, chat); };
+    menu.querySelector('[data-action="pin"]').onclick = async () => {
+      closeChatMenu();
+      await api(`/api/chats/${chat.id}`, { method: "PATCH", body: JSON.stringify({ pinned: !chat.pinned }) });
+      await refreshChatList();
+    };
+    menu.querySelector('[data-action="delete"]').onclick = () => confirmDeleteChat(itemEl, chat);
+    itemEl.appendChild(menu);
+  }
+
+  function startRename(itemEl, chat) {
+    const titleRow = itemEl.querySelector(".title-row");
+    const span = titleRow.querySelector(".title");
+    const input = document.createElement("input");
+    input.className = "title-input";
+    input.value = chat.title;
+    titleRow.replaceChild(input, span);
+    input.focus();
+    input.select();
+
+    let done = false;
+    const save = async () => {
+      if (done) return;
+      done = true;
+      const newTitle = input.value.trim();
+      if (newTitle && newTitle !== chat.title) {
+        await api(`/api/chats/${chat.id}`, { method: "PATCH", body: JSON.stringify({ title: newTitle }) });
+      }
+      await refreshChatList();
+      if (chat.id === currentChatId) document.getElementById("chat-title").textContent = newTitle || chat.title;
+    };
+    input.addEventListener("blur", save);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") input.blur();
+      if (e.key === "Escape") { done = true; refreshChatList(); }
     });
+  }
+
+  function confirmDeleteChat(itemEl, chat) {
+    closeChatMenu();
+    const box = document.createElement("div");
+    box.className = "confirm-box";
+    box.onclick = (e) => e.stopPropagation();
+    box.innerHTML = `
+      Delete "${escapeHtml(chat.title)}"? This can't be undone.
+      <div class="row">
+        <button class="ghost" data-cancel>Cancel</button>
+        <button class="danger" data-confirm>Delete</button>
+      </div>
+    `;
+    itemEl.querySelector(".chat-item-main").appendChild(box);
+    box.querySelector("[data-cancel]").onclick = () => box.remove();
+    box.querySelector("[data-confirm]").onclick = async () => {
+      await api(`/api/chats/${chat.id}`, { method: "DELETE" });
+      if (chat.id === currentChatId) {
+        currentChatId = null;
+        history.replaceState(null, "", "/app");
+        document.getElementById("chat-title").textContent = "Select or start a chat";
+        document.getElementById("cost-saved-stat").innerHTML = "";
+        document.getElementById("composer-input").disabled = true;
+        document.getElementById("composer-send").disabled = true;
+        document.getElementById("messages").innerHTML =
+          '<div class="empty-state">Start a new chat to see the router in action.</div>';
+      }
+      await refreshChatList();
+    };
   }
 
   async function openChat(chatId) {

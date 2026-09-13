@@ -53,6 +53,11 @@ class CreateChatRequest(BaseModel):
     title: str | None = None
 
 
+class UpdateChatRequest(BaseModel):
+    title: str | None = None
+    pinned: bool | None = None
+
+
 class SendMessageRequest(BaseModel):
     content: str
 
@@ -170,6 +175,7 @@ def api_list_chats(user=Depends(get_current_user)):
         {
             "id": c["id"],
             "title": c["title"] or "New chat",
+            "pinned": bool(c["pinned"]),
             "created_at": c["created_at"],
             "total_cost": c["total_cost"],
             "total_baseline_cost": c["total_baseline_cost"],
@@ -185,6 +191,29 @@ def api_create_chat(req: CreateChatRequest, user=Depends(get_current_user)):
     return {"id": chat_id}
 
 
+@app.patch("/api/chats/{chat_id}")
+def api_update_chat(chat_id: int, req: UpdateChatRequest, user=Depends(get_current_user)):
+    chat = chat_db.get_chat(chat_id, user["id"])
+    if chat is None:
+        raise HTTPException(status_code=404, detail="chat not found")
+    if req.title is not None:
+        title = req.title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="title must not be empty")
+        chat_db.rename_chat(chat_id, user["id"], title)
+    if req.pinned is not None:
+        chat_db.set_chat_pinned(chat_id, user["id"], req.pinned)
+    return {"ok": True}
+
+
+@app.delete("/api/chats/{chat_id}")
+def api_delete_chat(chat_id: int, user=Depends(get_current_user)):
+    deleted = chat_db.delete_chat(chat_id, user["id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="chat not found")
+    return {"ok": True}
+
+
 @app.get("/api/chats/{chat_id}")
 def api_get_chat(chat_id: int, user=Depends(get_current_user)):
     chat = chat_db.get_chat(chat_id, user["id"])
@@ -196,6 +225,7 @@ def api_get_chat(chat_id: int, user=Depends(get_current_user)):
     return {
         "id": chat["id"],
         "title": chat["title"] or "New chat",
+        "pinned": bool(chat["pinned"]),
         "messages": [
             {
                 "role": m["role"], "content": m["content"], "tier": m["tier"],

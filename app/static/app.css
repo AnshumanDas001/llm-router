@@ -170,3 +170,41 @@ input[type=text]:focus, input[type=password]:focus { outline: none; border-color
   padding: 12px; font-size: 12.5px; margin-bottom: 12px; color: var(--text-primary);
 }
 .success-box .key { display: block; margin: 6px 0; font-weight: 600; word-break: break-all; color: var(--good); }
+
+/* --- callouts (note/warn), matching the Guide page's pattern -------------- */
+
+.callout { border-radius: 8px; padding: 12px 14px; margin: 12px 0; font-size: 13px; line-height: 1.6; border: 1px solid; display: flex; gap: 10px; }
+.callout.note { background: rgba(57, 135, 229, 0.08); border-color: rgba(57, 135, 229, 0.35); }
+.callout.warn { background: rgba(250, 178, 25, 0.08); border-color: rgba(250, 178, 25, 0.35); }
+.callout .icon { flex-shrink: 0; font-weight: 700; }
+.callout.note .icon { color: var(--series-cheap); }
+.callout.warn .icon { color: var(--warning); }
+.callout p { margin: 0; color: var(--text-secondary); }
+
+/* --- dropdown menu (new-session menu, chat item actions, etc.) ------------ */
+
+.menu-anchor { position: relative; display: inline-block; }
+.dropdown-menu {
+  position: absolute; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); min-width: 170px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 30; overflow: hidden;
+}
+.dropdown-menu button {
+  display: block; width: 100%; text-align: left; background: none; color: var(--text-primary);
+  border: none; border-radius: 0; padding: 9px 13px; font-weight: 500; font-size: 12.5px;
+}
+.dropdown-menu button:hover { background: var(--surface-3); }
+.dropdown-menu button.danger-item { color: var(--critical); }
+.dropdown-menu .desc { color: var(--text-muted); font-size: 11px; display: block; margin-top: 1px; font-weight: 400; }
+.dropdown-menu hr { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+
+.badge.pinned { background: rgba(57, 135, 229, 0.16); color: var(--series-cheap); }
+
+/* --- lightweight inline confirm (destructive actions) --------------------- */
+
+.confirm-box {
+  background: var(--surface-3); border: 1px solid var(--critical); border-radius: var(--radius-sm);
+  padding: 8px 10px; font-size: 12px; margin-top: 4px;
+}
+.confirm-box .row { display: flex; gap: 6px; margin-top: 6px; }
+.confirm-box button { padding: 5px 10px; font-size: 11.5px; }

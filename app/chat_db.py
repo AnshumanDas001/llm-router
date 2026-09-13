@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS chats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
     title TEXT,
+    pinned INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
 
@@ -124,6 +125,12 @@ def init_chat_db():
         except sqlite3.OperationalError as e:
             if "duplicate column" not in str(e).lower():
                 raise
+        try:
+            conn.execute("ALTER TABLE chats ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
 
 
 # --- users -------------------------------------------------------------
@@ -185,13 +192,45 @@ def create_chat(user_id: int, title: str, timestamp: str) -> int:
 def list_chats(user_id: int):
     with get_conn() as conn:
         return conn.execute(
-            "SELECT c.id, c.title, c.created_at, "
+            "SELECT c.id, c.title, c.pinned, c.created_at, "
             "COALESCE(SUM(m.cost), 0) AS total_cost, "
             "COALESCE(SUM(m.baseline_cost), 0) AS total_baseline_cost "
             "FROM chats c LEFT JOIN chat_messages m ON m.chat_id = c.id "
-            "WHERE c.user_id = ? GROUP BY c.id ORDER BY c.id DESC",
+            "WHERE c.user_id = ? GROUP BY c.id ORDER BY c.pinned DESC, c.id DESC",
             (user_id,),
         ).fetchall()
+
+
+def rename_chat(chat_id: int, user_id: int, title: str):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE chats SET title = ? WHERE id = ? AND user_id = ?", (title, chat_id, user_id),
+        )
+        conn.commit()
+
+
+def set_chat_pinned(chat_id: int, user_id: int, pinned: bool):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE chats SET pinned = ? WHERE id = ? AND user_id = ?",
+            (int(pinned), chat_id, user_id),
+        )
+        conn.commit()
+
+
+def delete_chat(chat_id: int, user_id: int):
+    with get_conn() as conn:
+        # Ownership check via the WHERE clause on chats; only delete messages
+        # if the chat itself actually belonged to this user.
+        owned = conn.execute(
+            "SELECT id FROM chats WHERE id = ? AND user_id = ?", (chat_id, user_id),
+        ).fetchone()
+        if owned is None:
+            return False
+        conn.execute("DELETE FROM chat_messages WHERE chat_id = ?", (chat_id,))
+        conn.execute("DELETE FROM chats WHERE id = ? AND user_id = ?", (chat_id, user_id))
+        conn.commit()
+        return True
 
 
 def get_chat(chat_id: int, user_id: int):
@@ -373,7 +412,7 @@ def get_sessions_overview(user_id: int):
     usage_log, one key = one session)."""
     with get_conn() as conn:
         chat_rows = conn.execute(
-            "SELECT c.id, c.title, c.created_at, COUNT(m.id) AS n_calls, "
+            "SELECT c.id, c.title, c.pinned, c.created_at, COUNT(m.id) AS n_calls, "
             "COALESCE(SUM(m.cost), 0) AS total_cost, "
             "COALESCE(SUM(m.baseline_cost), 0) AS total_baseline_cost "
             "FROM chats c LEFT JOIN chat_messages m ON m.chat_id = c.id AND m.role = 'assistant' "
@@ -394,7 +433,7 @@ def get_sessions_overview(user_id: int):
             "created_at": c["created_at"], "n_calls": c["n_calls"],
             "total_cost": c["total_cost"], "total_baseline_cost": c["total_baseline_cost"],
             "cost_saved": max(0.0, c["total_baseline_cost"] - c["total_cost"]),
-            "revoked": False,
+            "revoked": False, "pinned": bool(c["pinned"]),
         })
     for k in api_rows:
         sessions.append({
@@ -402,7 +441,7 @@ def get_sessions_overview(user_id: int):
             "created_at": k["created_at"], "n_calls": k["n_calls"],
             "total_cost": k["total_cost"], "total_baseline_cost": k["total_baseline_cost"],
             "cost_saved": max(0.0, k["total_baseline_cost"] - k["total_cost"]),
-            "revoked": bool(k["revoked"]),
+            "revoked": bool(k["revoked"]), "pinned": False,
         })
     sessions.sort(key=lambda s: s["created_at"], reverse=True)
     return sessions
