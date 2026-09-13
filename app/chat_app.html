@@ -2,15 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>LLM Router Chat</title>
+<title>ThriftLLM &mdash; Chat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <link rel="stylesheet" href="/static/app.css">
 <style>
   /* --- auth screen --- */
-  #auth-screen { height: 100vh; display: flex; align-items: center; justify-content: center; }
-  .auth-box { width: 320px; }
+  #auth-screen { height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; }
+  .auth-box { width: 340px; position: relative; z-index: 1; padding: 26px; }
+  .auth-brand {
+    display: block; font-weight: 700; font-size: 16px; letter-spacing: -0.02em;
+    text-decoration: none; color: var(--text-primary); margin-bottom: 20px;
+  }
+  .auth-brand .dot { color: var(--accent); }
   .auth-box h1 { font-size: 16px; margin: 0 0 4px; }
   .auth-box .sub { color: var(--text-muted); font-size: 12.5px; margin: 0 0 20px; }
   .auth-box input { width: 100%; margin-bottom: 10px; }
@@ -152,6 +157,16 @@
   .bubble th { background: var(--surface-2); font-weight: 600; }
   .msg-meta { font-size: 11.5px; color: var(--text-muted); margin-top: 7px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
+  .stream-caret {
+    display: inline-block; width: 7px; height: 15px; background: var(--accent);
+    vertical-align: text-bottom; margin-left: 2px; animation: pulse-dot 1s steps(2) infinite;
+  }
+  .escalated-note {
+    border-left: 2px solid var(--warning); background: rgba(250, 178, 25, 0.07);
+    padding: 8px 11px; border-radius: 0 7px 7px 0; font-size: 12.5px;
+    color: var(--warning); margin-bottom: 10px;
+  }
+
   /* thinking indicator, shown while a response is routing/generating */
   .thinking-dots { display: inline-flex; gap: 4px; padding: 4px 0; }
   .thinking-dots span {
@@ -283,13 +298,21 @@
   .route-info .ri-row { display: flex; gap: 6px; }
   .route-info .ri-row .k { color: var(--text-muted); flex-shrink: 0; }
 </style>
+<script>document.documentElement.classList.add("js-motion");</script>
 </head>
 <body>
 
 <div id="auth-screen">
-  <div class="card auth-box">
+  <div class="ambient" aria-hidden="true">
+    <div class="grid"></div>
+    <div class="orb a"></div>
+    <div class="orb b"></div>
+    <div class="orb c"></div>
+  </div>
+  <div class="card auth-box animate-in">
+    <a href="/" class="auth-brand">Thrift<span class="dot">LLM</span></a>
     <h1 id="auth-title">Log in</h1>
-    <p class="sub">LLM Router &mdash; cost-saving chat</p>
+    <p class="sub">Route every prompt to the cheapest model that can handle it.</p>
     <div class="auth-error" id="auth-error"></div>
     <input type="text" id="auth-username" placeholder="Username" autocomplete="username">
     <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
@@ -301,6 +324,12 @@
 </div>
 
 <div class="app-shell" id="app-screen" hidden>
+  <div class="ambient" aria-hidden="true">
+    <div class="grid"></div>
+    <div class="orb a"></div>
+    <div class="orb b"></div>
+  </div>
+
   <nav class="app-nav">
     <div id="app-nav-top-mount"></div>
     <div class="menu-anchor" id="new-chat-menu">
@@ -1058,6 +1087,27 @@
     input.style.height = Math.min(input.scrollHeight, 200) + "px";
   }
 
+  const STREAM_CARET = '<span class="stream-caret"></span>';
+
+  /** Reads an SSE body, handing each parsed event to `onEvent`. Frames can
+   *  be split across network chunks, so hold the trailing partial back. */
+  async function readSse(response, onEvent) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let carry = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      carry += decoder.decode(value, { stream: true });
+      const frames = carry.split("\n\n");
+      carry = frames.pop();
+      for (const frame of frames) {
+        const line = frame.split("\n").find(l => l.startsWith("data: "));
+        if (line) onEvent(JSON.parse(line.slice(6)));
+      }
+    }
+  }
+
   // --- live "predicted tier" badge, from the same cheap upfront classifier
   // the cascade itself uses -- no model call, so safe to run on a debounce
   // while the user is still typing. ---
@@ -1121,18 +1171,49 @@
     try {
       const body = { content };
       if (currentChatMode === "byom") body.tier_api_keys = byomKeys[currentChatId] || {};
-      const data = await api(`/api/chats/${currentChatId}/messages`, {
-        method: "POST", body: JSON.stringify(body),
+      const resp = await fetch(`/api/chats/${currentChatId}/messages/stream`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body), credentials: "same-origin",
       });
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}));
+        throw new Error(errBody.detail || `request failed (${resp.status})`);
+      }
+
+      const bubble = loadingEl.querySelector(".bubble");
+      let answer = "";
+      let finalEvent = null;
+
+      await readSse(resp, (ev) => {
+        if (ev.type === "token") {
+          answer += ev.text;
+          bubble.innerHTML = renderMarkdown(answer) + STREAM_CARET;
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        } else if (ev.type === "escalated") {
+          // What was streamed failed its check; drop it and say why, so the
+          // text being replaced doesn't look like a glitch.
+          answer = "";
+          bubble.innerHTML =
+            `<div class="escalated-note">${escapeHtml(ev.from)} didn't pass the check` +
+            `${ev.to ? ` &mdash; escalating to ${escapeHtml(ev.to)}` : ""}.</div>` + STREAM_CARET;
+        } else if (ev.type === "done") {
+          finalEvent = ev;
+        } else if (ev.type === "error") {
+          throw new Error(ev.detail);
+        }
+      });
+
+      if (!finalEvent) throw new Error("the response ended unexpectedly");
       loadingEl.replaceWith(renderMessage({
-        role: "assistant", content: data.content, tier: data.tier,
-        cost: data.cost, latency_ms: data.latency_ms, escalated: data.escalated,
-        difficulty: data.difficulty, escalation_reasons: data.escalation_reasons,
+        role: "assistant", content: finalEvent.text, tier: finalEvent.final_tier,
+        cost: finalEvent.total_cost, latency_ms: finalEvent.total_latency_ms,
+        escalated: finalEvent.escalated, difficulty: finalEvent.difficulty,
+        escalation_reasons: finalEvent.escalation_reasons,
       }));
       renderHeaderStats({
-        latencyMs: data.latency_ms,
-        totalCost: data.chat_total_cost,
-        totalBaseline: data.chat_total_baseline_cost,
+        latencyMs: finalEvent.total_latency_ms,
+        totalCost: finalEvent.chat_total_cost,
+        totalBaseline: finalEvent.chat_total_baseline_cost,
       });
       await refreshChatList();
       renderRouterStatus();

@@ -1,12 +1,13 @@
 import json
 import sqlite3
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -23,7 +24,12 @@ from app.auth import (
 )
 from app.baseline_cost import estimate_cost_for_model, estimate_frontier_cost
 from app.calibration import DEFAULT_MAX_QUERIES, calibrate_model
-from app.cascade import DEFAULT_TIER_MODELS, AllTiersUnavailable, run_cascade
+from app.cascade import (
+    DEFAULT_TIER_MODELS,
+    AllTiersUnavailable,
+    run_cascade,
+    run_cascade_stream,
+)
 from app.classifier import classify_initial_tier
 from app.db import init_db, log_cascade
 from app.routing_policy import derive_tier_map
@@ -48,6 +54,8 @@ DEMO_HTML_PATH = Path(__file__).resolve().parent / "demo.html"
 CHAT_APP_HTML_PATH = Path(__file__).resolve().parent / "chat_app.html"
 SETTINGS_HTML_PATH = Path(__file__).resolve().parent / "settings.html"
 MODELS_HTML_PATH = Path(__file__).resolve().parent / "models.html"
+LANDING_HTML_PATH = Path(__file__).resolve().parent / "landing.html"
+TRY_HTML_PATH = Path(__file__).resolve().parent / "try.html"
 SESSIONS_HTML_PATH = Path(__file__).resolve().parent / "sessions.html"
 GUIDE_HTML_PATH = Path(__file__).resolve().parent / "guide.html"
 
@@ -120,10 +128,37 @@ def on_startup():
     init_db()
     chat_db.init_chat_db()
 
+    # The embedding classifier takes ~10s to load its model and encode the
+    # reference set. Left lazy, that cost lands on whoever sends the first
+    # prompt -- on the signed-out demo, that's a visitor watching a blank
+    # screen. Warm it on a background thread so boot isn't blocked either.
+    def _warm():
+        try:
+            classify_initial_tier("warmup")
+        except Exception:
+            pass  # a failed warmup just means the first real call pays for it
+    threading.Thread(target=_warm, daemon=True).start()
+
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse)
+def landing(router_session: str | None = Cookie(default=None)):
+    """Signed-in users get the app as their home screen; the marketing page
+    is for people who aren't in yet."""
+    try:
+        get_current_user(router_session)
+        return RedirectResponse(url="/app", status_code=307)
+    except HTTPException:
+        return HTMLResponse(LANDING_HTML_PATH.read_text())
+
+
+@app.get("/try", response_class=HTMLResponse)
+def try_page():
+    return TRY_HTML_PATH.read_text()
 
 
 @app.get("/demo", response_class=HTMLResponse)
@@ -232,6 +267,67 @@ def api_chat_stats(user=Depends(get_current_user)):
     """Real aggregate numbers (not simulated) behind the sidebar's router
     status card -- computed from this user's own chat_messages history."""
     return chat_db.get_chat_stats(user["id"])
+
+
+DEMO_COOKIE_NAME = "tl_demo"
+DEMO_PROMPT_LIMIT = 3
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event)}\n\n"
+
+
+@app.get("/api/try/quota")
+def api_try_quota(tl_demo: str | None = Cookie(default=None)):
+    used = chat_db.get_demo_count(tl_demo) if tl_demo else 0
+    return {"used": min(used, DEMO_PROMPT_LIMIT), "limit": DEMO_PROMPT_LIMIT,
+            "remaining": max(0, DEMO_PROMPT_LIMIT - used)}
+
+
+@app.post("/api/try")
+def api_try(req: ClassifyRequest, response: Response, tl_demo: str | None = Cookie(default=None)):
+    """Signed-out landing demo: a few prompts through the built-in tiers,
+    streamed. The cap is per browser and deliberately soft -- it exists to
+    bound cost per casual visitor, not to be unbypassable."""
+    content = req.content.strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="content must not be empty")
+
+    demo_id = tl_demo or uuid.uuid4().hex
+    if chat_db.get_demo_count(demo_id) >= DEMO_PROMPT_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Demo limit reached ({DEMO_PROMPT_LIMIT} prompts). Create a free account to keep going.",
+        )
+    used = chat_db.bump_demo_count(demo_id, datetime.now(timezone.utc).isoformat())
+
+    def event_stream():
+        try:
+            for event in run_cascade_stream([{"role": "user", "content": content}]):
+                if event["type"] == "done":
+                    baseline = estimate_frontier_cost(event["tokens_in"], event["tokens_out"])
+                    event["baseline_cost"] = baseline
+                    event["saved"] = max(0.0, baseline - event["total_cost"])
+                    event["remaining"] = max(0, DEMO_PROMPT_LIMIT - used)
+                    log_cascade(
+                        query=content, difficulty=event["difficulty"],
+                        initial_tier=event["initial_tier"], final_tier=event["final_tier"],
+                        escalated=event["escalated"], escalation_reasons=event["escalation_reasons"],
+                        total_cost=event["total_cost"], total_latency_ms=event["total_latency_ms"],
+                        tokens_in=event["tokens_in"], tokens_out=event["tokens_out"],
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    )
+                yield _sse(event)
+        except AllTiersUnavailable:
+            yield _sse({"type": "error", "detail": "All model tiers are busy right now. Try again shortly."})
+        except Exception:
+            yield _sse({"type": "error", "detail": "Something went wrong generating a response."})
+
+    stream = StreamingResponse(event_stream(), media_type="text/event-stream",
+                               headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+    stream.set_cookie(DEMO_COOKIE_NAME, demo_id, max_age=60 * 60 * 24 * 30,
+                      httponly=True, samesite="lax")
+    return stream
 
 
 @app.post("/api/classify")
@@ -348,6 +444,102 @@ def api_get_chat(chat_id: int, user=Depends(get_current_user)):
         "total_baseline_cost": totals["total_baseline_cost"],
         "cost_saved": max(0.0, totals["total_baseline_cost"] - totals["total_cost"]),
     }
+
+
+def _prepare_send(chat_id: int, req: SendMessageRequest, user):
+    """Shared setup for both the blocking and streaming send paths: validate,
+    persist the user turn, and resolve this chat's models and routing map."""
+    chat = chat_db.get_chat(chat_id, user["id"])
+    if chat is None:
+        raise HTTPException(status_code=404, detail="chat not found")
+    if not req.content.strip():
+        raise HTTPException(status_code=400, detail="content must not be empty")
+
+    now = datetime.now(timezone.utc).isoformat()
+    history = chat_db.get_chat_messages(chat_id)
+    chat_db.add_chat_message(chat_id, "user", req.content, now)
+
+    messages = [{"role": m["role"], "content": m["content"]} for m in history]
+    messages.append({"role": "user", "content": req.content})
+
+    is_byom = chat["mode"] == "byom"
+    tier_models = chat_db.get_chat_models(chat_id) if is_byom else None
+    if is_byom and not tier_models:
+        raise HTTPException(
+            status_code=400,
+            detail="this session has no models attached -- start a new session and pick models",
+        )
+
+    tier_api_keys = None
+    if is_byom:
+        tier_api_keys = {
+            tier: key for tier, model_name in tier_models.items()
+            if (key := _resolve_provider_key(user["id"], model_name,
+                                             req.tier_api_keys.get(tier))) is not None
+        }
+    return messages, is_byom, tier_models, tier_api_keys
+
+
+def _finish_send(chat_id: int, user_id: int, content: str, result: dict,
+                  is_byom: bool, tier_models: dict | None) -> dict:
+    """Shared teardown: price the answer, persist it, and return the totals
+    both send paths report back."""
+    if is_byom:
+        order = ["frontier", "mid", "cheap"]
+        strongest = next((t for t in order if t in tier_models), result["final_tier"])
+        baseline_cost = estimate_cost_for_model(
+            tier_models[strongest], result["tokens_in"], result["tokens_out"])
+    else:
+        baseline_cost = estimate_frontier_cost(result["tokens_in"], result["tokens_out"])
+
+    chat_db.add_chat_message(
+        chat_id, "assistant", result["text"], datetime.now(timezone.utc).isoformat(),
+        tier=result["final_tier"], cost=result["total_cost"], baseline_cost=baseline_cost,
+        escalated=result["escalated"], latency_ms=result["total_latency_ms"],
+        difficulty=result["difficulty"], escalation_reasons=result["escalation_reasons"],
+    )
+    log_cascade(
+        query=content, difficulty=result["difficulty"], initial_tier=result["initial_tier"],
+        final_tier=result["final_tier"], escalated=result["escalated"],
+        escalation_reasons=result["escalation_reasons"], total_cost=result["total_cost"],
+        total_latency_ms=result["total_latency_ms"], tokens_in=result["tokens_in"],
+        tokens_out=result["tokens_out"], timestamp=datetime.now(timezone.utc).isoformat(),
+    )
+    totals = chat_db.get_chat_totals(chat_id)
+    return {
+        "baseline_cost": baseline_cost,
+        "chat_total_cost": totals["total_cost"],
+        "chat_total_baseline_cost": totals["total_baseline_cost"],
+        "chat_cost_saved": max(0.0, totals["total_baseline_cost"] - totals["total_cost"]),
+    }
+
+
+@app.post("/api/chats/{chat_id}/messages/stream")
+def api_send_message_stream(chat_id: int, req: SendMessageRequest, user=Depends(get_current_user)):
+    """Streaming form of the send path. Setup runs before the response starts
+    so validation failures are still real HTTP errors rather than an error
+    event buried in a 200 stream."""
+    messages, is_byom, tier_models, tier_api_keys = _prepare_send(chat_id, req, user)
+    difficulty_to_tier = _tier_map_for(user["id"], tier_models) if is_byom else None
+
+    def event_stream():
+        try:
+            for event in run_cascade_stream(
+                messages, tier_models=tier_models, tier_api_keys=tier_api_keys,
+                difficulty_to_tier=difficulty_to_tier,
+            ):
+                if event["type"] == "done":
+                    event.update(_finish_send(chat_id, user["id"], req.content, event,
+                                              is_byom, tier_models))
+                yield _sse(event)
+        except AllTiersUnavailable:
+            yield _sse({"type": "error",
+                        "detail": "All model tiers are temporarily rate limited. Try again shortly."})
+        except Exception:
+            yield _sse({"type": "error", "detail": "Something went wrong generating a response."})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
 
 
 @app.post("/api/chats/{chat_id}/messages")

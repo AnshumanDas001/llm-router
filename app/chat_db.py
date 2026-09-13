@@ -136,6 +136,14 @@ CREATE TABLE IF NOT EXISTS chat_models (
     PRIMARY KEY (chat_id, tier)
 );
 
+-- Soft quota for the signed-out landing demo. Not a security boundary
+-- (clearing cookies resets it) -- it exists to cap cost per casual visitor.
+CREATE TABLE IF NOT EXISTS demo_usage (
+    demo_id TEXT PRIMARY KEY,
+    n_prompts INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS usage_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
@@ -754,3 +762,27 @@ def get_api_session_detail(api_key_id: int, user_id: int):
             "SELECT * FROM usage_log WHERE api_key_id = ? ORDER BY id DESC", (api_key_id,),
         ).fetchall()
         return key, calls
+
+
+# --- signed-out demo quota --------------------------------------------------
+
+def get_demo_count(demo_id: str) -> int:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT n_prompts FROM demo_usage WHERE demo_id = ?", (demo_id,),
+        ).fetchone()
+        return row["n_prompts"] if row else 0
+
+
+def bump_demo_count(demo_id: str, timestamp: str) -> int:
+    """Increments and returns the new count, atomically."""
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO demo_usage (demo_id, n_prompts, created_at) VALUES (?, 1, ?) "
+            "ON CONFLICT(demo_id) DO UPDATE SET n_prompts = n_prompts + 1",
+            (demo_id, timestamp),
+        )
+        conn.commit()
+        return conn.execute(
+            "SELECT n_prompts FROM demo_usage WHERE demo_id = ?", (demo_id,),
+        ).fetchone()["n_prompts"]
