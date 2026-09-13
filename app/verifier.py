@@ -1,4 +1,4 @@
-"""Week 3: verification layer for the cascade.
+"""Verification layer for the cascade.
 
 Two different verification strategies, chosen by *position* in the tier
 sequence being tried, not the literal tier name -- this generalizes to a
@@ -6,11 +6,11 @@ BYOM user who configures a different subset/order of tiers than our own
 cheap/mid/frontier:
 
 - the FIRST (cheapest) tier's answer gets a paid LLM-judge completeness/
-  coherence check, run on the SECOND tier. Week 2 showed the cheapest tier
+  coherence check, run on the SECOND tier. The eval set showed the cheapest tier
   has real, substantive failure modes (dropped sub-requests,
   self-contradictory reasoning), so this call earns its cost.
 - any LATER tier's answer gets a free structural check only (non-empty,
-  not a refusal). Week 2 showed failure rates drop sharply after the first
+  not a refusal). The eval set showed failure rates drop sharply after the first
   tier, and verification cost scales with response length -- a full
   LLM-judge call here was the dominant cost driver in the cascade (82.5%
   of total cost from "hard" queries alone) for very little real safety

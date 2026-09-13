@@ -1,17 +1,17 @@
-# Failure Analysis (Week 4)
+# Failure Analysis
 
 This documents concrete cases where a cheaper tier was wrong or flawed, and whether
-the Week 3 cascade's verification layer caught it. All examples are from the real
+the cascade's verification layer caught it. All examples are from the real
 61-query eval set and a real run of the live cascade router — nothing here is
 hypothetical.
 
 ## Scope note
 
 Cheap tier's known quality problems mostly live in queries the cascade never
-sends to cheap in the first place. The Week 3 classifier routes "hard" queries
-straight to mid (Week 2 showed cheap collapses to 0.72-0.83 quality on hard
+sends to cheap in the first place. The classifier routes "hard" queries
+straight to mid (the eval set showed cheap collapses to 0.64-0.85 quality on hard
 queries), so cheap only ever answers easy/medium queries live. Of the ten
-sub-1.0 cheap-tier scores documented in Week 2, only two fall on easy/medium
+sub-1.0 cheap-tier scores in the eval set, only two fall on easy/medium
 queries -- meaning only two are actually reachable through the live router.
 This section covers exactly those two, plus a case of the opposite failure
 mode: the verifier escalating a defensible answer.

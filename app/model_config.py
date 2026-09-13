@@ -24,7 +24,7 @@ TIER_MODEL_LIST = [
             "model": "groq/openai/gpt-oss-20b",
             "api_key": os.getenv("GROQ_API_KEY"),
             # Without this, long answers were silently truncating mid-sentence
-            # (observed on 4 of the longest Week 2 eval queries).
+            # (observed on 4 of the longest eval queries).
             "max_tokens": 4096,
         },
     },
@@ -42,6 +42,3 @@ TIER_MODEL_LIST = [
 
 router = Router(model_list=TIER_MODEL_LIST)
 
-# Week 1: router service is a single-tier passthrough. This is the one line
-# that changes in Week 3 when real routing logic replaces the hardcode.
-DEFAULT_TIER = "frontier"

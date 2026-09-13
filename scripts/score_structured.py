@@ -1,4 +1,4 @@
-"""Week 2: automatic scoring for queries with a deterministic correctness check
+"""Automatic scoring for queries with a deterministic correctness check
 (exact_match, exact_match_set, exact_match_numeric, exact_match_contains_any,
 schema_json, schema_pattern). LLM-judge queries are left for score_judge.py.
 

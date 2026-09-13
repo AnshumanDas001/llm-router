@@ -1,4 +1,4 @@
-"""Load Claude's manual judge scores (Week 2 ground-truth quality scores for
+"""Load Claude's manual judge scores (ground-truth quality scores for
 open-ended queries) into eval_scores, source='judge_claude'."""
 import json
 import sys

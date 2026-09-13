@@ -7,7 +7,7 @@ the cascade produced at the reference model's per-token rate, rather than
 calling that model a second time just to measure a baseline. A real
 response from that model to the same query would likely use a different
 token count, so treat this as directionally correct, not exact -- the
-same limitation as Week 1's baseline-vs-cascade comparisons throughout
+same limitation as the baseline-vs-cascade comparisons throughout
 this project.
 """
 import litellm

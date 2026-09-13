@@ -1,4 +1,4 @@
-"""Week 1 baseline run: sends every sample query through the frontier-only
+"""Baseline run: sends every sample query through the frontier-only
 router endpoint and prints summary cost/latency stats. Requires the FastAPI
 server to be running (uvicorn app.main:app) and GEMINI_API_KEY set in .env.
 """

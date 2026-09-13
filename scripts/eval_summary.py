@@ -1,4 +1,4 @@
-"""Week 2 deliverable: combined quality/cost/latency matrix across all three
+"""Combined quality/cost/latency matrix across all three
 tiers, for the full 61-query eval set."""
 import sys
 from pathlib import Path

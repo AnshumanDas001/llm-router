@@ -142,9 +142,9 @@
 
 <div class="viz-root" id="root">
   <header>
-    <p class="eyebrow">LLM Router · Week 4</p>
+    <p class="eyebrow">LLM Router</p>
     <h1>Cost vs. quality across four routing configurations</h1>
-    <p class="sub">61-query eval set, three real model tiers (Llama 3.2 3B / Groq gpt-oss-20b / Gemini 3.5 Flash-Lite). Quality is average score against Week 2's labeled ground truth.</p>
+    <p class="sub">61-query eval set, three real model tiers (Llama 3.2 3B / Groq gpt-oss-20b / Gemini 3.5 Flash-Lite). Quality is average score against the labeled ground truth.</p>
   </header>
 
   <div class="chart-card">
@@ -168,7 +168,7 @@
 
   <div class="table-wrap">
     <table>
-      <caption>Exact figures, 61-query eval set (Week 1 baseline used for frontier-only; see footnote)</caption>
+      <caption>Exact figures, 61-query eval set (baseline used for frontier-only; see footnote)</caption>
       <thead>
         <tr><th>Configuration</th><th>Total cost</th><th>Avg quality</th><th>Avg latency</th></tr>
       </thead>
@@ -177,7 +177,7 @@
   </div>
 
   <footer>
-    Router figure is a real live run (60/61 queries — one transient Groq 502 succeeded on manual retry but isn't counted in the total). Frontier-only cost uses the original Week 1 baseline measurement ($0.05695); an independent Week 2 remeasurement of the same 61 queries got $0.05757 (+1.1%), consistent with normal run-to-run token variance. Mid-only and cheap-only totals are summed from Week 2's per-tier eval responses.
+    Router figure is a real live run (60/61 queries — one transient Groq 502 succeeded on manual retry but isn't counted in the total). Frontier-only cost uses the original baseline measurement ($0.05695); an independent remeasurement of the same 61 queries got $0.05757 (+1.1%), consistent with normal run-to-run token variance. Mid-only and cheap-only totals are summed from the per-tier eval responses.
   </footer>
 </div>
 

@@ -1,4 +1,4 @@
-"""Week 4 demo: type a query, watch the cascade router's live decision.
+"""Demo: type a query, watch the cascade router's live decision.
 
 Run: ./venv/bin/python3 scripts/demo_cli.py
 """

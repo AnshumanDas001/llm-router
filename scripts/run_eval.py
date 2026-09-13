@@ -1,5 +1,5 @@
-"""Week 2: run every labeled eval query through all three tiers and store the
-full response text (needed for scoring, unlike the Week 1 baseline log which
+"""Run every labeled eval query through all three tiers and store the
+full response text (needed for scoring, unlike the baseline log which
 only kept metadata). Resumable: skips (query_id, tier) pairs already logged.
 """
 import json

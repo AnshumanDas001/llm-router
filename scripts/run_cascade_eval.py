@@ -1,5 +1,5 @@
-"""Week 3 deliverable: run the full 61-query eval set through the live
-cascade router and compute % traffic per tier, cost vs. the Week 1
+"""Run the full eval set through the live
+cascade router and compute % traffic per tier, cost vs. the
 frontier-only baseline, and quality retained vs. that baseline.
 """
 import json
@@ -15,9 +15,9 @@ from app.db import get_conn, init_db
 ROUTER_URL = "http://localhost:8000/v1/chat/completions"
 QUERIES_PATH = Path(__file__).resolve().parent.parent / "data" / "eval_queries.json"
 
-# Week 1's frontier-only baseline (61 queries, gemini-3.5-flash-lite).
+# The frontier-only baseline (61 queries, gemini-3.5-flash-lite).
 BASELINE_TOTAL_COST = 0.05695
-BASELINE_AVG_QUALITY = 1.0  # frontier scored 1.000 across the board in Week 2
+BASELINE_AVG_QUALITY = 1.0  # frontier scored 1.000 across the board
 
 
 def main():
@@ -74,7 +74,7 @@ def main():
     for r in rows:
         tier_counts[r[3]] += 1
 
-    print("\n--- Week 3 cascade summary ---")
+    print("\n--- cascade summary ---")
     print(f"Total requests: {n}")
     print(f"Escalated: {escalated_count} ({100 * escalated_count / n:.1f}%)")
     print("\n% of traffic per final tier:")
@@ -82,20 +82,20 @@ def main():
         print(f"  {tier:10} {count:3} ({100 * count / n:.1f}%)")
 
     print(f"\nTotal cost (cascade):     ${total_cost:.5f}")
-    print(f"Total cost (Week 1 baseline, frontier-only): ${BASELINE_TOTAL_COST:.5f}")
+    print(f"Total cost (baseline, frontier-only): ${BASELINE_TOTAL_COST:.5f}")
     savings_pct = 100 * (1 - total_cost / BASELINE_TOTAL_COST)
     print(f"Cost saved vs. baseline:  {savings_pct:.1f}%")
 
     if quality_scores:
         avg_quality = sum(quality_scores) / len(quality_scores)
         retained_pct = 100 * avg_quality / BASELINE_AVG_QUALITY
-        print(f"\nAvg quality (cascade, using each query's Week 2 score for its "
+        print(f"\nAvg quality (cascade, using each query's eval score for its "
               f"final tier): {avg_quality:.3f} ({len(quality_scores)}/{n} queries matched)")
-        print(f"Avg quality (Week 1/2 baseline, frontier-only): {BASELINE_AVG_QUALITY:.3f}")
+        print(f"Avg quality (baseline, frontier-only): {BASELINE_AVG_QUALITY:.3f}")
         print(f"Quality retained vs. baseline: {retained_pct:.1f}%")
-    print("\nNote: quality here reuses each query's Week 2 per-tier score rather than "
+    print("\nNote: quality here reuses each query's per-tier eval score rather than "
           "re-scoring fresh cascade output -- a reasonable proxy given the same models, "
-          "but real given the run-to-run non-determinism documented in Week 2.")
+          "but real given the run-to-run non-determinism seen across eval runs.")
 
 
 if __name__ == "__main__":
