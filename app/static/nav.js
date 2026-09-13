@@ -37,7 +37,7 @@ async function initNav(activePage) {
   // button between the brand and the links); otherwise links follow the brand.
   const linksMount = document.getElementById("app-nav-links-mount");
   topMount.innerHTML = `
-    <div class="brand"><span class="brand-name">LLM<span class="dot">Router</span></span><span class="brand-version">v1</span></div>
+    <div class="brand"><span class="brand-name">Thrift<span class="dot">LLM</span></span><span class="brand-version">v1</span></div>
     ${linksMount ? "" : linksHtml}
   `;
   if (linksMount) linksMount.innerHTML = linksHtml;

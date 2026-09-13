@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.baseline_cost import estimate_frontier_cost
 from app.db import get_conn
 
-OUT_DIR = Path(__file__).resolve().parent.parent / "reports" / "charts"
+OUT_DIR = Path(__file__).resolve().parent.parent / "app" / "static" / "charts"
 
 TIERS = ["cheap", "mid", "frontier"]
 DIFFICULTIES = ["easy", "medium", "hard"]

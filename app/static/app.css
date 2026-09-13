@@ -247,3 +247,75 @@ input[type=text]:focus, input[type=password]:focus { outline: none; border-color
 }
 .confirm-box .row { display: flex; gap: 6px; margin-top: 6px; }
 .confirm-box button { padding: 5px 10px; font-size: 11.5px; }
+
+/* --- motion ---------------------------------------------------------------
+   One shared layer so pages animate consistently. Everything here is
+   opt-in via a class, and everything collapses to "no motion, final state"
+   under prefers-reduced-motion -- the page must be fully readable at rest.  */
+
+@keyframes fade-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  33%  { transform: translate3d(3%, -4%, 0) scale(1.06); }
+  66%  { transform: translate3d(-3%, 3%, 0) scale(0.97); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes shimmer { from { background-position: -420px 0; } to { background-position: 420px 0; } }
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* Motion is gated behind html.js-motion, which a tiny inline script adds.
+   Without JS -- or in a static snapshot that never runs animations -- these
+   elements keep their natural, fully visible state instead of being parked
+   at opacity 0 with nothing to reveal them. */
+.js-motion .animate-in { animation: fade-up 0.85s cubic-bezier(0.22, 0.7, 0.3, 1) both; }
+.js-motion .animate-fade { animation: fade-in 1s ease both; }
+.stagger-1 { animation-delay: 0.12s; }
+.stagger-2 { animation-delay: 0.24s; }
+.stagger-3 { animation-delay: 0.36s; }
+.stagger-4 { animation-delay: 0.48s; }
+
+/* Scroll reveal: elements start hidden and are revealed by an
+   IntersectionObserver adding .in-view (see static/reveal.js). */
+.js-motion .reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.9s ease, transform 0.9s cubic-bezier(0.22, 0.7, 0.3, 1); }
+.js-motion .reveal.in-view { opacity: 1; transform: none; }
+
+/* Ambient drifting glows for otherwise-empty dark backgrounds. */
+.ambient { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.ambient .orb { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.16; will-change: transform; }
+.ambient .orb.a { width: 420px; height: 420px; background: var(--series-cheap);    top: -8%;  left: 8%;  animation: drift 40s ease-in-out infinite; }
+.ambient .orb.b { width: 360px; height: 360px; background: var(--series-frontier); bottom: -10%; right: 10%; animation: drift 48s ease-in-out infinite reverse; }
+.ambient .orb.c { width: 300px; height: 300px; background: var(--series-mid);      top: 45%;  left: 55%; animation: drift 56s ease-in-out infinite; opacity: 0.10; }
+.ambient .grid {
+  position: absolute; inset: 0;
+  background-image: linear-gradient(var(--border) 1px, transparent 1px),
+                    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 54px 54px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 20%, transparent 75%);
+  opacity: 0.5;
+}
+
+/* Skeleton placeholder for content that is still loading. */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 420px 100%; border-radius: var(--radius-sm);
+  animation: shimmer 1.3s linear infinite; color: transparent !important;
+}
+.live-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--good); animation: pulse-dot 1.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in, .animate-fade { animation: none; opacity: 1; transform: none; }
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .ambient .orb, .skeleton, .live-dot { animation: none; }
+}
+
+/* Ambient backdrop inside the app shell. Sits behind the nav and content,
+   which both get their own surface colours, so it reads as a faint glow at
+   the edges rather than washing out the UI. */
+.app-shell { position: relative; }
+.app-shell > .ambient { position: absolute; z-index: 0; }
+.app-shell > .ambient .orb { opacity: 0.09; }
+.app-shell > .ambient .grid { opacity: 0.28; }
+.app-shell > .app-nav, .app-shell > .app-main { position: relative; z-index: 1; }
+.app-shell > .app-nav { background: color-mix(in srgb, var(--surface-1) 88%, transparent); backdrop-filter: blur(8px); }

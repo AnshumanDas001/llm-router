@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Sessions</title>
+<title>ThriftLLM &mdash; Sessions</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
@@ -26,9 +26,16 @@
     .session-card .stat-col, .session-card .created { text-align: left; }
   }
 </style>
+<script>document.documentElement.classList.add("js-motion");</script>
 </head>
 <body>
 <div class="app-shell">
+  <div class="ambient" aria-hidden="true">
+    <div class="grid"></div>
+    <div class="orb a"></div>
+    <div class="orb b"></div>
+  </div>
+
   <nav class="app-nav">
     <div id="app-nav-top-mount"></div>
     <div class="app-nav-spacer"></div>
@@ -38,7 +45,7 @@
     <div class="app-content">
 
       <div id="overview-view">
-        <div class="page-header">
+        <div class="page-header animate-in">
           <div>
             <h1>Sessions</h1>
             <p class="sub">Every chat and API key, each its own session. Click one for the full call log.</p>
@@ -80,6 +87,7 @@
   </main>
 </div>
 
+<script src="/static/reveal.js"></script>
 <script src="/static/nav.js"></script>
 <script>
   function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }

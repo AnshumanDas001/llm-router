@@ -2,15 +2,22 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Settings</title>
+<title>ThriftLLM &mdash; Settings</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
 <style>
 </style>
+<script>document.documentElement.classList.add("js-motion");</script>
 </head>
 <body>
 <div class="app-shell">
+  <div class="ambient" aria-hidden="true">
+    <div class="grid"></div>
+    <div class="orb a"></div>
+    <div class="orb b"></div>
+  </div>
+
   <nav class="app-nav">
     <div id="app-nav-top-mount"></div>
     <div id="app-nav-links-mount"></div>
@@ -20,19 +27,19 @@
   <main class="app-main">
     <div class="app-content">
 
-      <div class="page-header">
+      <div class="page-header animate-in">
         <div>
           <h1>Settings</h1>
           <p class="sub">Account-level API keys for programmatic routing.</p>
         </div>
       </div>
 
-      <section style="margin-bottom:0;">
+      <section class="reveal" style="margin-bottom:0;">
         <p class="section-sub">For programmatic access to <code>/api/v1/route</code>. These identify
           your account &mdash; they are not your model provider keys, which live under
           <a href="/models">Models &amp; calibration</a>. Each key is its own session (see
           <a href="/sessions">Sessions</a>).</p>
-        <div class="card">
+        <div class="card reveal">
           <div id="new-key-banner"></div>
           <table id="keys-table"><thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody></tbody></table>
           <div style="margin-top:12px; display:flex; gap:8px;">
@@ -46,6 +53,7 @@
   </main>
 </div>
 
+<script src="/static/reveal.js"></script>
 <script src="/static/nav.js"></script>
 <script>
   async function api(path, opts = {}) {

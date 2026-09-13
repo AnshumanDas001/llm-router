@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Models &amp; calibration</title>
+<title>ThriftLLM &mdash; Models</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
@@ -40,9 +40,16 @@
   .models-title { font-size: 13px; font-weight: 650; margin: 22px 0 4px; }
 
 </style>
+<script>document.documentElement.classList.add("js-motion");</script>
 </head>
 <body>
 <div class="app-shell">
+  <div class="ambient" aria-hidden="true">
+    <div class="grid"></div>
+    <div class="orb a"></div>
+    <div class="orb b"></div>
+  </div>
+
   <nav class="app-nav">
     <div id="app-nav-top-mount"></div>
     <div id="app-nav-links-mount"></div>
@@ -52,7 +59,7 @@
   <main class="app-main">
     <div class="app-content">
 
-      <div class="page-header">
+      <div class="page-header animate-in">
         <div>
           <h1>Models &amp; calibration</h1>
           <p class="sub">Connect your providers, list their models, and calibrate each one. A
@@ -60,14 +67,14 @@
         </div>
       </div>
 
-        <section style="margin-bottom:0;">
+        <section class="reveal" style="margin-bottom:0;">
           <p class="section-sub">Connect a provider, list the models you want to use from it, then
             calibrate each one. Calibration is per <em>model</em>, so a model you measure once can be
             slotted as cheap in one session and mid in another without re-measuring.</p>
 
           <div id="provider-list"></div>
 
-          <div class="card" style="margin-top:12px;">
+          <div class="card reveal" style="margin-top:12px;">
             <div class="add-provider-title">Connect a provider</div>
             <div class="provider-form">
               <label>Provider
@@ -102,7 +109,7 @@
 
           <h3 class="models-title">Connected models</h3>
           <p class="section-sub">A model must be calibrated before you can start a session with it.</p>
-          <div class="card">
+          <div class="card reveal">
             <div id="calibrate-warnings"></div>
             <table id="models-table">
               <thead><tr>
@@ -119,6 +126,7 @@
   </main>
 </div>
 
+<script src="/static/reveal.js"></script>
 <script src="/static/nav.js"></script>
 <script>
   async function api(path, opts = {}) {

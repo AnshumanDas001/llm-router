@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ThriftLLM — route every prompt to the cheapest model that can handle it</title>
+<meta name="description" content="ThriftLLM classifies each prompt, sends it to the cheapest model tier that can handle it, verifies the answer, and escalates only when the check fails.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/static/app.css">
+<style>
+  body { overflow-x: hidden; }
+  .page { position: relative; z-index: 1; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+
+  /* --- top bar --- */
+  .top {
+    position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px);
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    border-bottom: 1px solid var(--border);
+  }
+  .top .wrap { display: flex; align-items: center; gap: 18px; height: 58px; }
+  .logo { font-weight: 700; font-size: 15px; letter-spacing: -0.02em; text-decoration: none; color: var(--text-primary); }
+  .logo .dot { color: var(--accent); }
+  .top nav { margin-left: auto; display: flex; align-items: center; gap: 20px; }
+  .top nav a { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
+  .top nav a:hover { color: var(--text-primary); }
+  @media (max-width: 700px) { .top nav .hide-sm { display: none; } }
+
+  /* --- hero --- */
+  .hero { padding: 92px 0 64px; text-align: center; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px; font-family: "IBM Plex Mono", monospace;
+    color: var(--text-secondary); border: 1px solid var(--border); background: var(--surface-1);
+    border-radius: 20px; padding: 5px 13px; margin-bottom: 26px;
+  }
+  h1 {
+    font-size: clamp(34px, 6vw, 58px); line-height: 1.05; letter-spacing: -0.035em; font-weight: 700;
+    margin: 0 0 20px; text-wrap: balance;
+  }
+  h1 .muted { color: var(--text-muted); }
+  .lede { font-size: clamp(15px, 2vw, 17.5px); color: var(--text-secondary); max-width: 60ch; margin: 0 auto 34px; line-height: 1.6; }
+
+  .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .cta {
+    display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; text-decoration: none;
+    border-radius: 12px; padding: 13px 20px; border: 1px solid var(--border-strong); min-width: 208px;
+    text-align: left; transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .cta:hover { transform: translateY(-2px); border-color: var(--accent); }
+  .cta .label { font-size: 14px; font-weight: 650; color: var(--text-primary); }
+  .cta .sub { font-size: 11.5px; color: var(--text-muted); font-family: "IBM Plex Mono", monospace; }
+  .cta.primary { background: var(--accent); border-color: var(--accent); }
+  .cta.primary .label { color: #001018; }
+  .cta.primary .sub { color: rgba(0, 16, 24, 0.7); }
+  .cta.primary:hover { background: #4d95ea; }
+  .cta.ghost { background: var(--surface-1); }
+
+  /* --- headline metrics --- */
+  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 56px; }
+  @media (max-width: 640px) { .metrics { grid-template-columns: 1fr; } }
+  .metric { background: var(--surface-1); padding: 22px 18px; text-align: left; }
+  .metric .n { font-size: 30px; font-weight: 700; font-family: "IBM Plex Mono", monospace; letter-spacing: -0.03em; }
+  .metric .n.good { color: var(--good); }
+  .metric .k { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
+
+  /* --- numbered sections, px0-style --- */
+  section.block { padding: 72px 0; border-top: 1px solid var(--border); }
+  .block-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+  .block-num { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--accent); font-weight: 600; }
+  .block-head h2 { font-size: clamp(21px, 3vw, 27px); margin: 0; font-weight: 650; letter-spacing: -0.02em; }
+  .block-sub { color: var(--text-secondary); font-size: 14.5px; line-height: 1.65; max-width: 68ch; margin: 0 0 26px; }
+  .block-sub + .block-sub { margin-top: -14px; }
+
+  figure { margin: 26px 0 0; }
+  figure img { width: 100%; height: auto; display: block; }
+  figcaption { color: var(--text-muted); font-size: 12px; margin-top: 10px; line-height: 1.6; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 24px; }
+  .feat { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 17px; }
+  .feat h3 { font-size: 13.5px; margin: 0 0 6px; font-weight: 650; }
+  .feat p { font-size: 12.5px; color: var(--text-muted); margin: 0; line-height: 1.6; }
+  .feat .tag { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--accent); }
+
+  .flow { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
+  .step { flex: 1 1 170px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 15px; }
+  .step .i { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--text-muted); }
+  .step h4 { font-size: 13px; margin: 5px 0 5px; font-weight: 650; }
+  .step p { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.55; }
+
+  pre.code {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 15px 17px;
+    overflow-x: auto; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; line-height: 1.65;
+    color: var(--text-secondary); margin: 22px 0 0;
+  }
+  pre.code .c { color: var(--text-muted); }
+  pre.code .k { color: var(--series-cheap); }
+
+  footer { border-top: 1px solid var(--border); padding: 34px 0 48px; color: var(--text-muted); font-size: 12.5px; }
+  footer .wrap { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  footer a { color: var(--text-secondary); text-decoration: none; }
+  footer a:hover { color: var(--text-primary); }
+  footer .spacer { margin-left: auto; }
+</style>
+<script>document.documentElement.classList.add("js-motion");</script>
+</head>
+<body>
+
+<div class="ambient" aria-hidden="true">
+  <div class="grid"></div>
+  <div class="orb a"></div>
+  <div class="orb b"></div>
+  <div class="orb c"></div>
+</div>
+
+<div class="page">
+  <div class="top">
+    <div class="wrap">
+      <a href="/" class="logo">Thrift<span class="dot">LLM</span></a>
+      <nav>
+        <a href="#how" class="hide-sm">How it works</a>
+        <a href="#numbers" class="hide-sm">Numbers</a>
+        <a href="/guide" class="hide-sm">Docs</a>
+        <a href="/app">Sign in</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <header class="hero">
+      <div class="eyebrow animate-in"><span class="live-dot"></span> classify · route · verify · escalate</div>
+      <h1 class="animate-in stagger-1">Most of your LLM spend<br><span class="muted">buys nothing.</span></h1>
+      <p class="lede animate-in stagger-2">
+        Plenty of prompts don't need your most expensive model &mdash; but you pay for it anyway.
+        ThriftLLM reads each prompt, sends it to the cheapest model that can handle it, checks the
+        answer, and moves up a tier only when that check fails.
+      </p>
+      <div class="cta-row animate-in stagger-3">
+        <a class="cta primary" href="/try">
+          <span class="label">Try the demo</span>
+          <span class="sub">3 prompts · no signup</span>
+        </a>
+        <a class="cta ghost" href="/app">
+          <span class="label">Try it out</span>
+          <span class="sub">full app · free account</span>
+        </a>
+      </div>
+
+      <div class="metrics animate-in stagger-4">
+        <div class="metric">
+          <div class="n good">73%</div>
+          <div class="k">cheaper than sending every query to the frontier model, over 81 routed queries</div>
+        </div>
+        <div class="metric">
+          <div class="n">0.64</div>
+          <div class="k">what the cheap model scores on hard questions &mdash; vs 1.00 on easy ones</div>
+        </div>
+        <div class="metric">
+          <div class="n">~7ms</div>
+          <div class="k">to classify a prompt, before any model is called. No LLM in the routing decision</div>
+        </div>
+      </div>
+    </header>
+  </div>
+
+  <div class="wrap">
+    <section class="block reveal" id="problem">
+      <div class="block-head"><span class="block-num">01</span><h2>The cheap model is fine, until it isn't</h2></div>
+      <p class="block-sub">
+        Scored across a 115-question eval set, a small local model keeps up with far bigger ones on
+        easy questions and then falls off a cliff. That gap is the entire opportunity: one model
+        forces you to pay frontier prices for "what is 2+2", or ship a 0.64 on the questions
+        that actually matter.
+      </p>
+      <figure>
+        <img src="/static/charts/quality-by-difficulty.svg" alt="Answer quality by difficulty. The cheap tier scores 0.97 on easy, 0.85 on medium and 0.64 on hard, while mid and frontier stay near 1.0." loading="lazy">
+        <figcaption>Measured, not illustrative. The dashed line is the 0.80 threshold a model has to clear on a difficulty band before ThriftLLM will start questions there.</figcaption>
+      </figure>
+    </section>
+
+    <section class="block reveal" id="how">
+      <div class="block-head"><span class="block-num">02</span><h2>How a prompt moves through it</h2></div>
+      <p class="block-sub">
+        The routing decision costs nothing: difficulty is classified with sentence embeddings before
+        any model is called. Only the cheapest tier's answer gets a real judge call &mdash; later
+        tiers fail rarely enough that judging them cost more than it saved.
+      </p>
+      <div class="flow">
+        <div class="step"><div class="i">01</div><h4>Classify</h4><p>Embedding match against a labelled set decides easy, medium or hard. ~7ms, no model call.</p></div>
+        <div class="step"><div class="i">02</div><h4>Route</h4><p>Easy and medium start cheap. Hard skips straight to mid &mdash; a doomed cheap call costs more than not trying.</p></div>
+        <div class="step"><div class="i">03</div><h4>Verify</h4><p>The cheapest tier's answer is judged by the tier above. Later tiers get a free structural check.</p></div>
+        <div class="step"><div class="i">04</div><h4>Escalate</h4><p>Only when the check fails. 13 of 81 queries escalated; the rest were answered where they started.</p></div>
+      </div>
+      <figure>
+        <img src="/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier. Cheap is free but slow at 10.2s, mid costs $0.00018 at 1.2s, frontier costs $0.00085 at 2.7s." loading="lazy">
+      </figure>
+    </section>
+
+    <section class="block reveal" id="numbers">
+      <div class="block-head"><span class="block-num">03</span><h2>What it actually saved</h2></div>
+      <p class="block-sub">
+        Every number on this page comes out of the project's own eval database and regenerates with
+        the data &mdash; there are no illustrative figures here.
+      </p>
+      <figure>
+        <img src="/static/charts/cascade-savings.svg" alt="Cascade cost of $0.02941 versus $0.10944 for frontier-only, across 81 routed queries: 73% cheaper." loading="lazy">
+      </figure>
+    </section>
+
+    <section class="block reveal" id="byom">
+      <div class="block-head"><span class="block-num">04</span><h2>Bring your own models</h2></div>
+      <p class="block-sub">
+        Connect a provider, list its models, and calibrate them. Calibration runs a stratified set of
+        objectively-scoreable questions and scores each difficulty band separately &mdash; those
+        scores <em>are</em> the routing map. Change the models and the map re-derives itself.
+      </p>
+      <div class="cards">
+        <div class="feat"><span class="tag">per model</span><h3>Calibrate once</h3><p>Measurements belong to the model, not the slot. Use the same model as cheap in one session and mid in another without re-measuring.</p></div>
+        <div class="feat"><span class="tag">your choice</span><h3>Keys stay yours</h3><p>By default a provider key lives in your browser for the session and is never written to disk. Opt in and it's encrypted at rest instead.</p></div>
+        <div class="feat"><span class="tag">per session</span><h3>Pinned models</h3><p>A chat freezes the three models it was created with, so its history stays coherent when you reconfigure later.</p></div>
+        <div class="feat"><span class="tag">OpenAI-shaped</span><h3>One endpoint</h3><p>POST your messages and a tier&rarr;model map. You get a normal completion back, plus what it routed to and what it saved.</p></div>
+      </div>
+      <pre class="code"><span class="c"># route a request through your own models</span>
+curl -X POST https://your-host/api/v1/route \
+  -H <span class="k">"Authorization: Bearer rtr_your_key"</span> \
+  -d '{
+    "messages": [{"role": "user", "content": "What is 2+2?"}],
+    "models": {"cheap": "groq/openai/gpt-oss-20b", "frontier": "openai/gpt-4o"}
+  }'</pre>
+    </section>
+
+    <section class="block reveal">
+      <div class="block-head"><span class="block-num">05</span><h2>See it route something</h2></div>
+      <p class="block-sub">
+        The demo gives you three prompts and shows which tier each one landed on, what it cost, and
+        whether it had to escalate. No account needed.
+      </p>
+      <div class="cta-row" style="justify-content:flex-start; margin-top:22px;">
+        <a class="cta primary" href="/try"><span class="label">Try the demo</span><span class="sub">3 prompts · no signup</span></a>
+        <a class="cta ghost" href="/app"><span class="label">Try it out</span><span class="sub">full app · free account</span></a>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="wrap">
+      <span>ThriftLLM</span>
+      <a href="/guide">Docs</a>
+      <a href="/demo">Single-shot demo</a>
+      <a href="https://github.com/AnshumanDas001/llm-router" target="_blank" rel="noopener">GitHub &#8599;</a>
+      <span class="spacer"></span>
+      <span>Every figure measured on a 116-query eval set.</span>
+    </div>
+  </footer>
+</div>
+
+<script src="/static/reveal.js"></script>
+</body>
+</html>

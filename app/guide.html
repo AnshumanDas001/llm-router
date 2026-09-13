@@ -133,7 +133,7 @@
 <body>
 
 <div id="topbar">
-  <a href="/app" class="brand">LLM<span class="dot">Router</span></a>
+  <a href="/" class="brand">Thrift<span class="dot">LLM</span></a>
   <div id="topbar-spacer"></div>
   <input type="text" id="search-box" placeholder="Filter docs...">
   <a href="https://github.com/AnshumanDas001/llm-router" target="_blank" class="gh">GitHub &#8599;</a>
@@ -162,11 +162,11 @@
   <main id="content">
 
     <h1>Documentation</h1>
-    <p class="lead">LLM Router classifies each request, routes it to the cheapest model tier likely to handle it, and verifies the answer before trusting it &mdash; escalating only when needed. This page covers both the web app and the API.</p>
+    <p class="lead">ThriftLLM classifies each request, routes it to the cheapest model tier likely to handle it, and verifies the answer before trusting it &mdash; escalating only when needed. This page covers both the web app and the API.</p>
 
     <section id="introduction">
       <h2>Introduction</h2>
-      <p>Most LLM traffic doesn't need your most expensive model. LLM Router sits in front of three tiers &mdash; <strong>cheap</strong>, <strong>mid</strong>, <strong>frontier</strong> &mdash; and for each request:</p>
+      <p>Most LLM traffic doesn't need your most expensive model. ThriftLLM sits in front of three tiers &mdash; <strong>cheap</strong>, <strong>mid</strong>, <strong>frontier</strong> &mdash; and for each request:</p>
       <ol>
         <li>Classifies difficulty using embedding similarity against a labeled reference set (no model call, instant)</li>
         <li>Generates an answer with the cheapest tier likely to succeed</li>
