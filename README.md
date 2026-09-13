@@ -1,4 +1,4 @@
-# LLM Router
+# ThriftLLM
 
 Most LLM traffic doesn't need your most expensive model. This routes each
 request to the cheapest model that can actually handle it, checks the answer,
@@ -7,7 +7,7 @@ and escalates only when the check fails.
 **On a 81-query run, that was 73% cheaper than sending everything to the
 frontier model** — at the same measured answer quality.
 
-<img src="reports/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only: $0.02941 against $0.10944, 73% cheaper" width="720">
+<img src="app/static/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only: $0.02941 against $0.10944, 73% cheaper" width="720">
 
 ---
 
@@ -17,7 +17,7 @@ Because the cheap model is fine right up until it isn't. Scored across a
 115-question eval set, the small local model matches the big ones on easy
 questions and falls off a cliff on hard ones:
 
-<img src="reports/charts/quality-by-difficulty.svg" alt="Answer quality by difficulty: cheap scores 0.97 easy, 0.85 medium, 0.64 hard; mid and frontier stay near 1.0" width="720">
+<img src="app/static/charts/quality-by-difficulty.svg" alt="Answer quality by difficulty: cheap scores 0.97 easy, 0.85 medium, 0.64 hard; mid and frontier stay near 1.0" width="720">
 
 That 0.64 is the whole argument. A single-model setup makes you choose between
 paying frontier prices for "what is 2+2", or shipping a 0.64 on the questions
@@ -26,7 +26,7 @@ that matter. The cascade lets each question find its own level.
 The cost gap it's exploiting is large — and note the cheapest tier is also the
 *slowest* here, because it runs locally on CPU:
 
-<img src="reports/charts/cost-vs-quality.svg" alt="Cost against quality per tier: cheap $0.00000 at 0.762, mid $0.00018 at 0.997, frontier $0.00085 at 0.991" width="720">
+<img src="app/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier: cheap $0.00000 at 0.762, mid $0.00018 at 0.997, frontier $0.00085 at 0.991" width="720">
 
 | tier | model | quality | cost / query | latency |
 |---|---|---|---|---|
@@ -37,7 +37,74 @@ The cost gap it's exploiting is large — and note the cheapest tier is also the
 Measured over 115 queries; automatic scoring for objective answers, LLM-judge
 for the rest. Regenerate with `./venv/bin/python scripts/eval_summary.py`.
 
-## How a request flows
+## The routing decision
+
+Routing is a **similarity-weighted k-nearest-neighbour vote** over sentence
+embeddings, followed by a **calibrated threshold rule**. No LLM is involved in
+deciding where a prompt goes — the whole decision costs ~7ms.
+
+```
+                        ┌──────────────────────────────┐
+   [ prompt ]──────────▶│  all-MiniLM-L6-v2 encoder    │
+                        └──────────────┬───────────────┘
+                                       │  E(q) ∈ ℝ³⁸⁴
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  cosine vs 116 labelled qs   │
+                        │  top-k = 5 neighbours        │
+                        └──────────────┬───────────────┘
+                                       │  weighted vote
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  difficulty: easy/med/hard   │
+                        │  + structural overrides      │
+                        └──────────────┬───────────────┘
+                                       │
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  threshold rule on measured  │
+                        │  quality  Q(tier,difficulty) │
+                        └──────────────┬───────────────┘
+                         ┌─────────────┴─────────────┐
+                         ▼                           ▼
+                 [ cheap tier ]                [ mid / frontier ]
+                 llama3.2:3b                   gpt-oss-20b, gemini
+                         │                           ▲
+                         ▼                           │
+                 ┌───────────────┐   fails check     │
+                 │  verifier     │───────────────────┘
+                 └───────┬───────┘   (escalate)
+                         ▼ passes
+                    [ answer ]
+```
+
+**Step 1 — difficulty by weighted similarity.** Each prompt $q$ is encoded with
+`all-MiniLM-L6-v2` into $E(q) \in \mathbb{R}^{384}$ and scored against 116
+labelled reference queries. The predicted difficulty is the similarity-weighted
+majority over the $k$ nearest neighbours:
+
+$$\hat{d}(q)=\arg\max_{d\,\in\,\{\text{easy},\text{med},\text{hard}\}}\ \sum_{i\,\in\,\mathcal{N}_k(q)}\cos\!\big(E(q),E(x_i)\big)\cdot\mathbb{1}[y_i=d],\qquad k=5$$
+
+Weighting by similarity rather than counting votes matters because the
+reference set is 52% `hard`: an unweighted vote inherits that skew. Structural
+overrides then catch what embeddings miss — length, multi-step phrasing, and
+short recall questions, which are topically similar to hard questions but are
+not hard.
+
+**Step 2 — tier by calibrated threshold.** Each tier $t$ has a *measured*
+quality $Q(t,d)$ on difficulty band $d$, from calibration. A difficulty starts
+at the cheapest tier that clears the bar:
+
+$$\text{tier}(d)=\min\{\,t\in T:\ Q(t,d)\ \ge\ \tau\,\},\qquad \tau=0.80$$
+
+with $T$ ordered cheapest-first, falling back to the strongest configured tier
+if none clear it. This is why the map is *derived*, not hardcoded: feeding in
+the built-in tiers' own measurements reproduces `easy→cheap, medium→cheap,
+hard→mid` exactly, and swapping in different models re-derives it.
+
+**Step 3 — verify, then escalate.** The cheapest tier's answer is judged by the
+tier above it; later tiers get a free structural check. Escalation happens only
+on failure.
 
 ```mermaid
 flowchart LR
@@ -55,17 +122,24 @@ flowchart LR
 
 Three things make this cheap rather than expensive:
 
-- **Hard questions skip the cheap tier entirely.** Classification happens
-  before any model call, using sentence embeddings against a labelled set — no
-  LLM call, ~7ms. Spending a doomed cheap call before escalating is worse than
-  not trying.
+- **Hard questions skip the cheap tier entirely.** Spending a doomed cheap call
+  before escalating is worse than not trying.
 - **Only the cheapest tier gets a real judge call.** Verification cost scales
   with response length, and later tiers rarely fail. Judging every tier once
-  cost 82% of total cascade spend; now later tiers get a free structural check
-  (empty? refusal?) instead.
+  cost 82% of total cascade spend.
 - **The last tier is never checked.** There's nothing left to escalate to.
 
-Where the traffic actually landed over 81 routed queries:
+### How well does the routing itself do?
+
+Classifier accuracy, leave-one-out across all 116 labelled queries — the number
+that actually moved when the algorithm changed:
+
+| classifier | exact-label accuracy | over-routed (paid too much) | under-routed (caught by verifier) |
+|---|---|---|---|
+| 1-nearest-neighbour | 56.0% | 21 | 23 |
+| **weighted k=5 vote + overrides** | **64.7%** | **14** | **15** |
+
+And where the traffic landed over 81 routed queries:
 
 ```mermaid
 pie showData
@@ -76,6 +150,30 @@ pie showData
 ```
 
 13 of those 81 escalated. Everything else was answered where it started.
+
+### Strategy comparison
+
+Per-query averages over the 115-query eval set, plus the cascade measured on
+its own 81-query run:
+
+| strategy | quality | cost / query | latency | notes |
+|---|---|---|---|---|
+| cheap only (`llama3.2:3b`) | 0.762 | $0.00000 | 10.2s | free, local, collapses on hard questions |
+| mid only (`gpt-oss-20b`) | 0.997 | $0.00018 | 1.2s | strong, but paid on every trivial prompt |
+| frontier only (`gemini-3.5-flash-lite`) | 0.991 | $0.00085 | 2.7s | the baseline being avoided |
+| **ThriftLLM cascade** | — | **$0.00036** | — | **73% under frontier on the same queries** |
+
+Read the caveats before quoting these:
+
+- **The cascade's quality is not scored on this set.** Its cost was measured on
+  a separate 81-query run against a frontier baseline priced over the *same*
+  tokens, which is why the 73% is apples-to-apples but the quality cell is
+  empty rather than filled with a flattering guess.
+- **Mid beats frontier on quality here** (0.997 vs 0.991). That is within noise
+  on 115 queries and mostly reflects the eval set's bias toward objectively
+  scoreable answers.
+- **The cheap tier's latency is a local-CPU artifact**, not a property of small
+  models. A hosted 8B would be faster than both paid tiers.
 
 ## Bring your own models
 
@@ -195,9 +293,13 @@ reports/             Pareto chart, generated README charts
   used against frontier's rate. Frontier tends to write longer answers, so the
   real saving is probably larger — but this number is computed, not measured
   head-to-head.
-- **The classifier is the weak link.** It's 1-nearest-neighbour over 116
-  labelled examples. It still mislabels some trivial arithmetic as hard, which
-  costs money by starting too high.
+- **The classifier is still the weak link.** 64.7% exact-label accuracy is
+  better than the 56.0% it replaced, but it's a k-NN over 116 examples, and
+  embedding similarity measures *topic* rather than difficulty — "what's the
+  worst case of quicksort" sits next to "explain why naive quicksort degrades
+  to O(n²)" because both are about quicksort, though one is recall and the
+  other is analysis. The structural overrides patch the worst of that; a
+  learned difficulty model trained on the escalation log would do better.
 - **Calibration samples are small.** ~8 questions per difficulty band, so the
   0.80 gate is a coarse filter, not a precise measurement.
 - **Auth is project-grade, not production-grade.** bcrypt passwords and cookie
