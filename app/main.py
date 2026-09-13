@@ -31,6 +31,7 @@ DEMO_HTML_PATH = Path(__file__).resolve().parent / "demo.html"
 CHAT_APP_HTML_PATH = Path(__file__).resolve().parent / "chat_app.html"
 SETTINGS_HTML_PATH = Path(__file__).resolve().parent / "settings.html"
 SESSIONS_HTML_PATH = Path(__file__).resolve().parent / "sessions.html"
+DOCS_HTML_PATH = Path(__file__).resolve().parent / "docs.html"
 
 
 class Message(BaseModel):
@@ -103,6 +104,11 @@ def settings_page():
 @app.get("/sessions", response_class=HTMLResponse)
 def sessions_page():
     return SESSIONS_HTML_PATH.read_text()
+
+
+@app.get("/docs", response_class=HTMLResponse)
+def docs_page():
+    return DOCS_HTML_PATH.read_text()
 
 
 # --- auth ------------------------------------------------------------------
@@ -367,23 +373,22 @@ def api_get_calibration(user=Depends(get_current_user)):
     ]
 
 
-@app.post("/api/calibrate")
-def api_calibrate(req: CalibrateRequest, user=Depends(get_current_user)):
-    if not req.tiers:
+def _run_calibration(user_id: int, tiers: dict[str, TierModelConfig]) -> dict:
+    if not tiers:
         raise HTTPException(status_code=400, detail="provide at least one tier to calibrate")
-    for tier in req.tiers:
+    for tier in tiers:
         if tier not in ("cheap", "mid", "frontier"):
             raise HTTPException(status_code=400, detail=f"unknown tier '{tier}'")
 
     now = datetime.now(timezone.utc).isoformat()
     results = {}
-    for tier, cfg in req.tiers.items():
+    for tier, cfg in tiers.items():
         stats = calibrate_model(cfg.model, cfg.api_key, max_queries=DEFAULT_MAX_QUERIES)
         # Persist the model name + derived numbers; cfg.api_key never gets
         # written anywhere past this point.
-        chat_db.set_model_config(user["id"], tier, cfg.model, now)
+        chat_db.set_model_config(user_id, tier, cfg.model, now)
         chat_db.set_calibration_result(
-            user["id"], tier, cfg.model, stats["avg_quality"], stats["avg_cost"],
+            user_id, tier, cfg.model, stats["avg_quality"], stats["avg_cost"],
             stats["avg_latency_ms"], stats["n_queries"], now,
         )
         results[tier] = {"model": cfg.model, **stats}
@@ -402,6 +407,19 @@ def api_calibrate(req: CalibrateRequest, user=Depends(get_current_user)):
             )
 
     return {"results": results, "warnings": warnings}
+
+
+@app.post("/api/calibrate")
+def api_calibrate(req: CalibrateRequest, user=Depends(get_current_user)):
+    """Calibrate via the logged-in web session (Settings page)."""
+    return _run_calibration(user["id"], req.tiers)
+
+
+@app.post("/api/v1/calibrate")
+def api_v1_calibrate(req: CalibrateRequest, user=Depends(get_user_from_api_key)):
+    """Calibrate programmatically via an API key -- same effect as the
+    Settings-page flow, for integrations that never touch the web UI."""
+    return _run_calibration(user["id"], req.tiers)
 
 
 # --- BYOM: pass-through routing endpoint (API mode) -------------------------

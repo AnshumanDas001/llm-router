@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Docs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<style>
+  :root {
+    --bg: #141413; --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2b2b29;
+    --border: rgba(255,255,255,0.10); --border-strong: rgba(255,255,255,0.18);
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --series-cheap: #3987e5; --series-mid: #d95926; --series-frontier: #199e70;
+    --accent: var(--series-cheap); --good: #0ca30c; --warning: #fab219; --critical: #e66767;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text-primary); margin: 0;
+    font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; font-size: 14.5px;
+  }
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  a { color: var(--accent); }
+  code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.88em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  [hidden] { display: none !important; }
+
+  /* --- top bar --- */
+  #topbar {
+    height: 54px; border-bottom: 1px solid var(--border); display: flex; align-items: center;
+    padding: 0 20px; gap: 16px; position: sticky; top: 0; background: var(--bg); z-index: 20;
+  }
+  #topbar .brand { font-weight: 650; font-size: 14.5px; text-decoration: none; color: var(--text-primary); }
+  #topbar .brand .dot { color: var(--series-cheap); }
+  #topbar-spacer { flex: 1; }
+  #search-box {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px; color: var(--text-secondary); font-size: 12.5px; width: 220px;
+    font-family: inherit;
+  }
+  #search-box:focus { outline: none; border-color: var(--accent); color: var(--text-primary); }
+  #topbar a.launch {
+    background: var(--accent); color: #001018; padding: 7px 14px; border-radius: 6px;
+    font-weight: 600; font-size: 12.5px; text-decoration: none;
+  }
+  #topbar a.gh { color: var(--text-muted); font-size: 12.5px; text-decoration: none; }
+
+  /* --- three-pane layout --- */
+  #layout { display: flex; max-width: 1320px; margin: 0 auto; }
+  #toc-sidebar {
+    width: 230px; flex-shrink: 0; padding: 24px 14px; position: sticky; top: 54px;
+    height: calc(100vh - 54px); overflow-y: auto;
+  }
+  #toc-sidebar .group-label {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
+    padding: 14px 10px 6px; font-weight: 600;
+  }
+  #toc-sidebar .group-label:first-child { padding-top: 0; }
+  .toc-link {
+    display: block; padding: 6px 10px; border-radius: 6px; color: var(--text-secondary);
+    text-decoration: none; font-size: 13px; margin-bottom: 1px;
+  }
+  .toc-link:hover { background: var(--surface-2); color: var(--text-primary); }
+  .toc-link.active { background: var(--surface-2); color: var(--text-primary); font-weight: 600; }
+
+  main { flex: 1; min-width: 0; padding: 32px 40px 100px; max-width: 760px; }
+  main h1 { font-size: 26px; margin: 0 0 6px; font-weight: 650; letter-spacing: -0.01em; }
+  main .lead { color: var(--text-secondary); font-size: 15px; margin: 0 0 32px; line-height: 1.6; }
+  main section { margin-bottom: 48px; scroll-margin-top: 70px; }
+  main h2 { font-size: 19px; margin: 0 0 12px; font-weight: 650; padding-top: 8px; border-top: 1px solid var(--border); }
+  main section:first-of-type h2 { border-top: none; padding-top: 0; }
+  main h3 { font-size: 15px; margin: 22px 0 8px; font-weight: 650; }
+  main p { line-height: 1.65; color: var(--text-secondary); margin: 0 0 14px; }
+  main ul, main ol { color: var(--text-secondary); line-height: 1.65; padding-left: 22px; }
+  main li { margin-bottom: 6px; }
+  main strong { color: var(--text-primary); font-weight: 600; }
+  main table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 14px 0; }
+  main th { text-align: left; color: var(--text-muted); font-size: 11px; text-transform: uppercase; padding: 6px 10px; border-bottom: 1px solid var(--border-strong); }
+  main td { padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+  main td code { color: var(--text-primary); }
+
+  #right-toc {
+    width: 190px; flex-shrink: 0; padding: 24px 14px; position: sticky; top: 54px;
+    height: calc(100vh - 54px); overflow-y: auto; font-size: 12px;
+  }
+  #right-toc .label { color: var(--text-muted); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.04em; margin-bottom: 8px; font-weight: 600; }
+  #right-toc a { display: block; color: var(--text-secondary); text-decoration: none; padding: 4px 0; border-left: 2px solid transparent; padding-left: 10px; }
+  #right-toc a.active { color: var(--text-primary); border-left-color: var(--accent); }
+  #right-toc a:hover { color: var(--text-primary); }
+
+  @media (max-width: 1100px) { #right-toc { display: none; } }
+  @media (max-width: 800px) { #toc-sidebar { display: none; } main { padding: 24px 20px; max-width: 100%; } #search-box { display: none; } }
+
+  /* --- callouts --- */
+  .callout {
+    border-radius: 8px; padding: 12px 14px; margin: 16px 0; font-size: 13px; line-height: 1.6;
+    border: 1px solid; display: flex; gap: 10px;
+  }
+  .callout.note { background: rgba(57,135,229,0.08); border-color: rgba(57,135,229,0.35); }
+  .callout.warn { background: rgba(250,178,25,0.08); border-color: rgba(250,178,25,0.35); }
+  .callout .icon { flex-shrink: 0; font-weight: 700; }
+  .callout.note .icon { color: var(--series-cheap); }
+  .callout.warn .icon { color: var(--warning); }
+  .callout p { margin: 0; color: var(--text-secondary); }
+
+  /* --- badges --- */
+  .badge { padding: 2px 8px; border-radius: 9px; font-weight: 600; font-size: 10.5px; }
+  .badge.get { background: rgba(25,158,112,0.18); color: #2bc98f; }
+  .badge.post { background: rgba(57,135,229,0.16); color: var(--series-cheap); }
+  .badge.delete { background: rgba(230,103,103,0.16); color: var(--critical); }
+  .endpoint-title { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .endpoint-title code { font-size: 0.95em; background: none; padding: 0; }
+
+  /* --- tabbed code blocks --- */
+  .code-block { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 14px 0; background: #0a0a0a; }
+  .code-tabs { display: flex; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .code-tab {
+    background: none; border: none; color: var(--text-muted); padding: 8px 14px; font-size: 12px;
+    cursor: pointer; font-family: inherit; font-weight: 500; border-bottom: 2px solid transparent;
+  }
+  .code-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
+  .code-tab-spacer { flex: 1; }
+  .copy-btn {
+    background: none; border: none; color: var(--text-muted); padding: 8px 12px; font-size: 11.5px;
+    cursor: pointer; font-family: inherit;
+  }
+  .copy-btn:hover { color: var(--text-primary); }
+  .code-block pre { margin: 0; padding: 14px 16px; overflow-x: auto; }
+  .code-block pre code { background: none; padding: 0; font-size: 13px; line-height: 1.55; }
+  .code-pane { display: none; }
+  .code-pane.active { display: block; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <a href="/app" class="brand">LLM<span class="dot">Router</span></a>
+  <div id="topbar-spacer"></div>
+  <input type="text" id="search-box" placeholder="Filter docs...">
+  <a href="https://github.com/AnshumanDas001/llm-router" target="_blank" class="gh">GitHub &#8599;</a>
+  <a href="/app" class="launch">Launch app</a>
+</div>
+
+<div id="layout">
+  <nav id="toc-sidebar">
+    <div class="group-label">Get started</div>
+    <a class="toc-link" href="#introduction">Introduction</a>
+    <a class="toc-link" href="#authentication">Authentication</a>
+    <a class="toc-link" href="#quickstart">Quickstart</a>
+    <div class="group-label">Concepts</div>
+    <a class="toc-link" href="#tiers">Tiers</a>
+    <a class="toc-link" href="#cascade">Classifier &amp; cascade</a>
+    <a class="toc-link" href="#verification">Verification</a>
+    <div class="group-label">Calibration</div>
+    <a class="toc-link" href="#calibration-ui">Via the web UI</a>
+    <a class="toc-link" href="#calibration-api">Via the API</a>
+    <div class="group-label">API reference</div>
+    <a class="toc-link" href="#ref-route">POST /api/v1/route</a>
+    <a class="toc-link" href="#ref-calibrate">POST /api/v1/calibrate</a>
+    <a class="toc-link" href="#ref-errors">Errors</a>
+  </nav>
+
+  <main id="content">
+
+    <h1>Documentation</h1>
+    <p class="lead">LLM Router classifies each request, routes it to the cheapest model tier likely to handle it, and verifies the answer before trusting it &mdash; escalating only when needed. This page covers both the web app and the API.</p>
+
+    <section id="introduction">
+      <h2>Introduction</h2>
+      <p>Most LLM traffic doesn't need your most expensive model. LLM Router sits in front of three tiers &mdash; <strong>cheap</strong>, <strong>mid</strong>, <strong>frontier</strong> &mdash; and for each request:</p>
+      <ol>
+        <li>Classifies difficulty using embedding similarity against a labeled reference set (no model call, instant)</li>
+        <li>Generates an answer with the cheapest tier likely to succeed</li>
+        <li>Verifies the answer &mdash; a real check for the cheapest tier, a free structural check for the rest</li>
+        <li>Escalates to the next tier only if verification fails</li>
+      </ol>
+      <p>You can use your own models end to end: we never store your upstream provider keys, only the routing decisions and derived cost/quality numbers.</p>
+      <div class="callout note"><span class="icon">i</span><p>Two ways to use this: the <a href="/app">chat app</a> for interactive use, or the API for programmatic integration &mdash; covered below.</p></div>
+    </section>
+
+    <section id="authentication">
+      <h2>Authentication</h2>
+      <p>API requests authenticate with a key you create in <a href="/sessions">Sessions</a> or <a href="/settings">Settings</a>, sent as a bearer token:</p>
+      <div class="code-block">
+        <div class="code-tabs"><button class="code-tab active">Header</button></div>
+        <div class="code-pane active"><pre><code class="language-http">Authorization: Bearer rtr_your_key_here</code></pre></div>
+      </div>
+      <p>Each key is its own <strong>session</strong> &mdash; every call made with it groups together in <a href="/sessions">Sessions</a> for cost/usage tracking. Create a separate key per integration if you want them tracked separately.</p>
+      <div class="callout warn"><span class="icon">!</span><p>Keys are shown once, at creation. We store only a SHA-256 hash, the same way Stripe and GitHub hash their own issued tokens &mdash; there's no way to retrieve a lost key, only revoke and recreate.</p></div>
+    </section>
+
+    <section id="quickstart">
+      <h2>Quickstart</h2>
+      <p>Three steps: create a key, calibrate your models (or skip this to use our built-in tiers), then route a request.</p>
+      <div class="code-block">
+        <div class="code-tabs">
+          <button class="code-tab active" data-lang="bash">cURL</button>
+          <button class="code-tab" data-lang="python">Python</button>
+          <button class="code-tab" data-lang="javascript">JavaScript</button>
+          <span class="code-tab-spacer"></span>
+          <button class="copy-btn" data-copy>Copy</button>
+        </div>
+        <div class="code-pane active" data-lang="bash"><pre><code class="language-bash">curl -X POST https://your-router-host/api/v1/route \
+  -H "Authorization: Bearer rtr_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{"role": "user", "content": "What is the capital of France?"}],
+    "tier_api_keys": {"cheap": "your-groq-key", "frontier": "your-gemini-key"}
+  }'</code></pre></div>
+        <div class="code-pane" data-lang="python"><pre><code class="language-python">import requests
+
+resp = requests.post(
+    "https://your-router-host/api/v1/route",
+    headers={"Authorization": "Bearer rtr_your_key_here"},
+    json={
+        "messages": [{"role": "user", "content": "What is the capital of France?"}],
+        "tier_api_keys": {"cheap": "your-groq-key", "frontier": "your-gemini-key"},
+    },
+)
+data = resp.json()
+print(data["choices"][0]["message"]["content"])
+print(data["_router"])  # tier used, cost, escalated, etc.</code></pre></div>
+        <div class="code-pane" data-lang="javascript"><pre><code class="language-javascript">const resp = await fetch("https://your-router-host/api/v1/route", {
+  method: "POST",
+  headers: {
+    "Authorization": "Bearer rtr_your_key_here",
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    messages: [{ role: "user", content: "What is the capital of France?" }],
+    tier_api_keys: { cheap: "your-groq-key", frontier: "your-gemini-key" },
+  }),
+});
+const data = await resp.json();
+console.log(data.choices[0].message.content);
+console.log(data._router);</code></pre></div>
+      </div>
+      <p>Your upstream provider keys (<code>tier_api_keys</code>) are used only for this one request and never written to disk.</p>
+    </section>
+
+    <section id="tiers">
+      <h2>Tiers</h2>
+      <p>Three named tiers, each mapped to a real model. Our defaults, or bring your own via calibration:</p>
+      <table>
+        <thead><tr><th>Tier</th><th>Role</th><th>Our default</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge get">cheap</span></td><td>Handles most easy/medium traffic, free or near-free</td><td class="mono">ollama/llama3.2:3b</td></tr>
+          <tr><td><span class="badge post">mid</span></td><td>Handles hard traffic directly; nearly frontier-quality at a fraction of the cost</td><td class="mono">groq/openai/gpt-oss-20b</td></tr>
+          <tr><td><span class="badge delete">frontier</span></td><td>Last resort &mdash; genuinely ambiguous tasks and rare escalations</td><td class="mono">gemini/gemini-3.5-flash-lite</td></tr>
+        </tbody>
+      </table>
+      <p>You don't need all three configured &mdash; the cascade works over whichever subset you provide.</p>
+    </section>
+
+    <section id="cascade">
+      <h2>Classifier &amp; cascade</h2>
+      <p>The classifier compares your query's embedding against a labeled reference set (61+ hand-scored examples, growing via an active-learning loop from real escalations) using 1-nearest-neighbor, then combines that with cheap text heuristics (query length, code/multi-step keywords) to guess a starting tier. This costs nothing &mdash; no model call.</p>
+      <p>From there: generate with the guessed tier, verify, escalate to the next tier only on failure. The cascade never revisits a tier once it's been tried and failed.</p>
+    </section>
+
+    <section id="verification">
+      <h2>Verification</h2>
+      <p>Two strategies, chosen by <em>position</em> in the tier sequence, not the literal tier name:</p>
+      <ul>
+        <li><strong>The cheapest configured tier</strong> gets a real, paid LLM-judge check by the next tier up &mdash; asking whether the response addresses every part of the request and stays coherent.</li>
+        <li><strong>Every later tier</strong> gets a free structural check only (non-empty, not a refusal). Verification cost scales with response length, and later tiers' failure rates are low enough that a full judge call there isn't worth the cost.</li>
+        <li><strong>The last tier</strong> in the sequence is never checked &mdash; there's nothing left to escalate to.</li>
+      </ul>
+      <div class="callout note"><span class="icon">i</span><p>If a tier is temporarily rate limited, the cascade skips it and moves to the next one rather than failing the whole request.</p></div>
+    </section>
+
+    <section id="calibration-ui">
+      <h2>Calibration &mdash; via the web UI</h2>
+      <p>In <a href="/settings">Settings</a>, enter a model string and your provider key per tier, then click <strong>Run calibration</strong>. This runs ~25 objectively-scoreable queries (math, logic, code-tracing &mdash; no LLM judge needed) against your model live, using your key once, transiently. Only the resulting quality/cost/latency numbers are stored.</p>
+    </section>
+
+    <section id="calibration-api">
+      <h2>Calibration &mdash; via the API</h2>
+      <p>The same calibration, without touching the browser &mdash; useful if your integration is entirely programmatic. Authenticate with your API key instead of a login session:</p>
+      <div class="code-block">
+        <div class="code-tabs">
+          <button class="code-tab active" data-lang="bash">cURL</button>
+          <button class="code-tab" data-lang="python">Python</button>
+          <span class="code-tab-spacer"></span>
+          <button class="copy-btn" data-copy>Copy</button>
+        </div>
+        <div class="code-pane active" data-lang="bash"><pre><code class="language-bash">curl -X POST https://your-router-host/api/v1/calibrate \
+  -H "Authorization: Bearer rtr_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tiers": {
+      "cheap": {"model": "groq/llama-3.1-8b-instant", "api_key": "your-groq-key"}
+    }
+  }'</code></pre></div>
+        <div class="code-pane" data-lang="python"><pre><code class="language-python">import requests
+
+resp = requests.post(
+    "https://your-router-host/api/v1/calibrate",
+    headers={"Authorization": "Bearer rtr_your_key_here"},
+    json={"tiers": {"cheap": {"model": "groq/llama-3.1-8b-instant", "api_key": "your-groq-key"}}},
+)
+print(resp.json())  # {"results": {...}, "warnings": [...]}</code></pre></div>
+      </div>
+      <p>Response includes a <code>warnings</code> list if your configured tiers don't follow the expected quality ordering (e.g. "mid" scoring below "cheap") &mdash; worth checking before you route real traffic.</p>
+    </section>
+
+    <section id="ref-route">
+      <h2>API reference</h2>
+      <div class="endpoint-title"><span class="badge post">POST</span><code>/api/v1/route</code></div>
+      <p>Routes one chat completion through the cascade using your configured models.</p>
+      <h3>Request body</h3>
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>messages</code></td><td>array</td><td>OpenAI-style <code>{role, content}</code> messages</td></tr>
+          <tr><td><code>tier_api_keys</code></td><td>object</td><td>Your upstream keys per tier, used transiently, never stored</td></tr>
+        </tbody>
+      </table>
+      <h3>Response</h3>
+      <p>OpenAI-shaped chat completion, plus a <code>_router</code> block:</p>
+      <div class="code-block">
+        <div class="code-tabs"><button class="code-tab active">JSON</button></div>
+        <div class="code-pane active"><pre><code class="language-json">{
+  "choices": [{"message": {"role": "assistant", "content": "..."}}],
+  "usage": {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
+  "_router": {
+    "difficulty": "easy",
+    "initial_tier": "cheap",
+    "final_tier": "cheap",
+    "escalated": false,
+    "escalation_reasons": [],
+    "cost": 0.00003,
+    "baseline_cost": 0.00097,
+    "latency_ms": 812.4
+  }
+}</code></pre></div>
+      </div>
+    </section>
+
+    <section id="ref-calibrate">
+      <div class="endpoint-title"><span class="badge post">POST</span><code>/api/v1/calibrate</code></div>
+      <p>See <a href="#calibration-api">Calibration via the API</a> above.</p>
+    </section>
+
+    <section id="ref-errors">
+      <h2>Errors</h2>
+      <table>
+        <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">401</td><td>Missing, invalid, or revoked API key</td></tr>
+          <tr><td class="mono">400</td><td>No models configured, or empty <code>messages</code></td></tr>
+          <tr><td class="mono">502</td><td>Unexpected upstream failure</td></tr>
+          <tr><td class="mono">503</td><td>Every configured tier is temporarily rate limited &mdash; retry shortly</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+
+  <nav id="right-toc">
+    <div class="label">On this page</div>
+    <div id="right-toc-links"></div>
+  </nav>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+  document.querySelectorAll("main pre code").forEach(el => {
+    try { hljs.highlightElement(el); } catch {}
+  });
+
+  // --- tabbed code blocks ---
+  document.querySelectorAll(".code-block").forEach(block => {
+    const tabs = block.querySelectorAll(".code-tab[data-lang]");
+    const panes = block.querySelectorAll(".code-pane[data-lang]");
+    tabs.forEach(tab => {
+      tab.onclick = () => {
+        tabs.forEach(t => t.classList.remove("active"));
+        panes.forEach(p => p.classList.remove("active"));
+        tab.classList.add("active");
+        block.querySelector(`.code-pane[data-lang="${tab.dataset.lang}"]`).classList.add("active");
+      };
+    });
+    const copyBtn = block.querySelector("[data-copy]");
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        const activePane = block.querySelector(".code-pane.active");
+        const text = activePane.querySelector("code").textContent;
+        navigator.clipboard.writeText(text).then(() => {
+          const original = copyBtn.textContent;
+          copyBtn.textContent = "Copied";
+          setTimeout(() => { copyBtn.textContent = original; }, 1500);
+        });
+      };
+    }
+  });
+
+  // --- left TOC filter ---
+  document.getElementById("search-box").addEventListener("input", (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll("#toc-sidebar .toc-link").forEach(link => {
+      link.style.display = link.textContent.toLowerCase().includes(q) ? "" : "none";
+    });
+    document.querySelectorAll("#toc-sidebar .group-label").forEach(label => {
+      let el = label.nextElementSibling;
+      let anyVisible = false;
+      while (el && el.classList.contains("toc-link")) {
+        if (el.style.display !== "none") anyVisible = true;
+        el = el.nextElementSibling;
+      }
+      label.style.display = anyVisible ? "" : "none";
+    });
+  });
+
+  // --- right "on this page" toc, auto-built from h2s, with scroll-spy ---
+  const rightLinks = document.getElementById("right-toc-links");
+  const h2s = Array.from(document.querySelectorAll("main h2"));
+  h2s.forEach(h2 => {
+    const section = h2.closest("section");
+    if (!section || !section.id) return;
+    const a = document.createElement("a");
+    a.href = `#${section.id}`;
+    a.textContent = h2.textContent;
+    a.dataset.target = section.id;
+    rightLinks.appendChild(a);
+  });
+
+  const leftLinks = document.querySelectorAll("#toc-sidebar .toc-link");
+  const sections = Array.from(document.querySelectorAll("main section[id]"));
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.id;
+        document.querySelectorAll("#right-toc a").forEach(a => a.classList.toggle("active", a.dataset.target === id));
+        leftLinks.forEach(l => l.classList.toggle("active", l.getAttribute("href") === `#${id}`));
+      }
+    });
+  }, { rootMargin: "-10% 0px -70% 0px" });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
