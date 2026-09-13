@@ -12,7 +12,7 @@ async function initNav(activePage) {
     { key: "chat", href: "/app", label: "Chat" },
     { key: "sessions", href: "/sessions", label: "Sessions" },
     { key: "settings", href: "/settings", label: "Settings" },
-    { key: "docs", href: "/docs", label: "Docs" },
+    { key: "docs", href: "/guide", label: "Docs" },
   ];
 
   topMount.innerHTML = `

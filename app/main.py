@@ -31,7 +31,7 @@ DEMO_HTML_PATH = Path(__file__).resolve().parent / "demo.html"
 CHAT_APP_HTML_PATH = Path(__file__).resolve().parent / "chat_app.html"
 SETTINGS_HTML_PATH = Path(__file__).resolve().parent / "settings.html"
 SESSIONS_HTML_PATH = Path(__file__).resolve().parent / "sessions.html"
-DOCS_HTML_PATH = Path(__file__).resolve().parent / "docs.html"
+GUIDE_HTML_PATH = Path(__file__).resolve().parent / "guide.html"
 
 
 class Message(BaseModel):
@@ -106,9 +106,11 @@ def sessions_page():
     return SESSIONS_HTML_PATH.read_text()
 
 
-@app.get("/docs", response_class=HTMLResponse)
-def docs_page():
-    return DOCS_HTML_PATH.read_text()
+@app.get("/guide", response_class=HTMLResponse)
+def guide_page():
+    # Deliberately not "/docs" -- FastAPI reserves that path for its own
+    # auto-generated Swagger UI, and our custom route was shadowing it.
+    return GUIDE_HTML_PATH.read_text()
 
 
 # --- auth ------------------------------------------------------------------
