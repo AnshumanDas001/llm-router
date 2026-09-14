@@ -126,6 +126,7 @@ CREATE TABLE IF NOT EXISTS model_calibrations (
     avg_latency_ms REAL,
     n_queries INTEGER,
     quality_by_difficulty TEXT,
+    cost_by_difficulty TEXT,
     created_at TEXT NOT NULL,
     UNIQUE(user_id, model_name)
 );
@@ -226,6 +227,12 @@ def init_chat_db():
         # its measurements belong to the model. Carry existing rows over once
         # rather than making users re-pay to re-measure. INSERT OR IGNORE
         # makes this a no-op on every later startup.
+        try:
+            conn.execute("ALTER TABLE model_calibrations ADD COLUMN cost_by_difficulty TEXT")
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
         conn.execute(
             "INSERT OR IGNORE INTO model_calibrations "
             "(user_id, model_name, avg_quality, avg_cost, avg_latency_ms, n_queries, "
@@ -587,19 +594,22 @@ def get_model_with_provider(user_id: int, model_name: str):
 
 def set_model_calibration(user_id: int, model_name: str, avg_quality: float, avg_cost: float,
                            avg_latency_ms: float, n_queries: int, timestamp: str,
-                           quality_by_difficulty: dict | None = None):
+                           quality_by_difficulty: dict | None = None,
+                           cost_by_difficulty: dict | None = None):
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO model_calibrations (user_id, model_name, avg_quality, avg_cost, "
-            "avg_latency_ms, n_queries, quality_by_difficulty, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "avg_latency_ms, n_queries, quality_by_difficulty, cost_by_difficulty, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(user_id, model_name) DO UPDATE SET avg_quality = excluded.avg_quality, "
             "avg_cost = excluded.avg_cost, avg_latency_ms = excluded.avg_latency_ms, "
             "n_queries = excluded.n_queries, "
             "quality_by_difficulty = excluded.quality_by_difficulty, "
+            "cost_by_difficulty = excluded.cost_by_difficulty, "
             "created_at = excluded.created_at",
             (user_id, model_name, avg_quality, avg_cost, avg_latency_ms, n_queries,
-             json.dumps(quality_by_difficulty) if quality_by_difficulty else None, timestamp),
+             json.dumps(quality_by_difficulty) if quality_by_difficulty else None,
+             json.dumps(cost_by_difficulty) if cost_by_difficulty else None, timestamp),
         )
         conn.commit()
 
@@ -617,6 +627,8 @@ def get_model_calibrations(user_id: int) -> dict:
                 "avg_latency_ms": r["avg_latency_ms"], "n_queries": r["n_queries"],
                 "quality_by_difficulty": json.loads(r["quality_by_difficulty"])
                 if r["quality_by_difficulty"] else None,
+                "cost_by_difficulty": json.loads(r["cost_by_difficulty"])
+                if r["cost_by_difficulty"] else None,
                 "created_at": r["created_at"],
             }
             for r in rows

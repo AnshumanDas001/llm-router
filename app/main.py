@@ -33,6 +33,7 @@ from app.cascade import (
 )
 from app.classifier import classify_initial_tier
 from app.db import init_db, log_cascade
+from app.model_config import BUILTIN_CALIBRATION
 from app.routing_policy import derive_tier_map
 
 app = FastAPI(title="LLM Router")
@@ -317,7 +318,8 @@ def api_try(req: ClassifyRequest, response: Response, tl_demo: str | None = Cook
 
     def event_stream():
         try:
-            for event in run_cascade_stream([{"role": "user", "content": content}]):
+            for event in run_cascade_stream([{"role": "user", "content": content}],
+                                            difficulty_to_tier=_tier_map_for(0, None)):
                 if event["type"] == "done":
                     baseline = estimate_frontier_cost(event["tokens_in"], event["tokens_out"])
                     event["baseline_cost"] = baseline
@@ -542,7 +544,7 @@ def api_send_message_stream(chat_id: int, req: SendMessageRequest, user=Depends(
     so validation failures are still real HTTP errors rather than an error
     event buried in a 200 stream."""
     messages, is_byom, tier_models, tier_api_keys, direct = _prepare_send(chat_id, req, user)
-    difficulty_to_tier = _tier_map_for(user["id"], tier_models) if is_byom else None
+    difficulty_to_tier = _tier_map_for(user["id"], tier_models)
 
     def event_stream():
         try:
@@ -605,7 +607,7 @@ def api_send_message(chat_id: int, req: SendMessageRequest, user=Depends(get_cur
             # BYOM routes by what this session's own models measured; the
             # built-in stack keeps the default map, which is what the eval set
             # measured for it.
-            difficulty_to_tier=_tier_map_for(user["id"], tier_models) if is_byom else None,
+            difficulty_to_tier=_tier_map_for(user["id"], tier_models),
             skip_cheapest=chat["routing_mode"] == "direct",
         )
     except AllTiersUnavailable:
@@ -664,7 +666,8 @@ def chat_completions(req: ChatRequest):
         raise HTTPException(status_code=400, detail="messages must not be empty")
 
     try:
-        result = run_cascade([m.model_dump() for m in req.messages])
+        result = run_cascade([m.model_dump() for m in req.messages],
+                             difficulty_to_tier=_tier_map_for(0, None))
     except AllTiersUnavailable:
         raise HTTPException(
             status_code=503,
@@ -933,6 +936,7 @@ def _calibrate_one_model(user_id: int, raw_model_name: str, supplied_key: str | 
         user_id, model_name, stats["avg_quality"], stats["avg_cost"],
         stats["avg_latency_ms"], stats["n_queries"], datetime.now(timezone.utc).isoformat(),
         quality_by_difficulty=stats["quality_by_difficulty"],
+        cost_by_difficulty=stats["cost_by_difficulty"],
     )
     return {"model_name": model_name, "stats": stats, "warnings": warnings}
 
@@ -958,19 +962,41 @@ def api_get_calibration(user=Depends(get_current_user)):
     }
 
 
-def _tier_map_for(user_id: int, tier_models: dict) -> dict:
-    """The difficulty->tier map implied by the models in *this session*.
+JUDGE_PROBE_TOKENS = (450, 30)   # question + answer in; a low-effort YES/NO out
 
-    Calibration is stored per model, so the same model keeps its scores
+
+def _judge_cost_estimate(tiers: list[str], tier_models: dict | None) -> float:
+    """What one verdict costs: the second-cheapest configured tier priced
+    at a typical judge call. Zero if there's only one tier (nothing judges)."""
+    if len(tiers) < 2:
+        return 0.0
+    judge_model = tier_models[tiers[1]] if tier_models else DEFAULT_TIER_MODELS[tiers[1]]
+    return estimate_cost_for_model(judge_model, *JUDGE_PROBE_TOKENS)
+
+
+def _tier_map_for(user_id: int, tier_models: dict | None) -> dict:
+    """The difficulty->tier map implied by the models in *this session*,
+    routing by expected cost with a quality floor (see routing_policy).
+
+    Calibration is stored per model, so the same model keeps its numbers
     whether it's slotted as cheap here and mid somewhere else; the map is
-    assembled per session from whichever three models it was created with.
+    assembled per session from whichever tiers it was created with. The
+    built-in stack uses the eval set's measurements of itself.
     """
-    calibrations = chat_db.get_model_calibrations(user_id)
-    quality_by_tier = {
-        tier: (calibrations.get(model_name) or {}).get("quality_by_difficulty")
-        for tier, model_name in tier_models.items()
-    }
-    return derive_tier_map(quality_by_tier, list(tier_models.keys()))
+    if tier_models is None:
+        tiers = list(BUILTIN_CALIBRATION.keys())
+        quality = {t: BUILTIN_CALIBRATION[t]["quality"] for t in tiers}
+        cost = {t: BUILTIN_CALIBRATION[t]["cost"] for t in tiers}
+    else:
+        tiers = list(tier_models.keys())
+        calibrations = chat_db.get_model_calibrations(user_id)
+        quality = {t: (calibrations.get(m) or {}).get("quality_by_difficulty") for t, m in tier_models.items()}
+        cost = {t: (calibrations.get(m) or {}).get("cost_by_difficulty") for t, m in tier_models.items()}
+        # Older calibrations predate per-band cost; without it, fall back to
+        # the quality-floor rule rather than pricing every tier at zero.
+        if any(v is None for v in cost.values()):
+            cost = None
+    return derive_tier_map(quality, tiers, cost, _judge_cost_estimate(tiers, tier_models))
 
 
 @app.post("/api/v1/calibrate")

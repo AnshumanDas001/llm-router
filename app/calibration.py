@@ -81,6 +81,7 @@ def calibrate_model(model_name: str, api_key: str | None,
 
     scores, costs, latencies = [], [], []
     scores_by_difficulty = {d: [] for d in DIFFICULTIES}
+    costs_by_difficulty = {d: [] for d in DIFFICULTIES}
     n_errors = 0
     n_rate_limited = 0
     # The provider's own message ("model X does not exist or you do not have
@@ -107,6 +108,7 @@ def calibrate_model(model_name: str, api_key: str | None,
                 score = score_one(q, text)
                 scores.append(score)
                 scores_by_difficulty[q["difficulty"]].append(score)
+                costs_by_difficulty[q["difficulty"]].append(cost)
                 costs.append(cost)
                 latencies.append(latency_ms)
                 break
@@ -135,5 +137,11 @@ def calibrate_model(model_name: str, api_key: str | None,
         # routing policy can tell "measured as bad" from "never measured".
         "quality_by_difficulty": {
             d: (sum(s) / len(s) if s else None) for d, s in scores_by_difficulty.items()
+        },
+        # Per band, not one average: a mid model's easy answers can be 7x
+        # cheaper than its overall mean, and routing by the mean makes a
+        # cheap tier look like a win on easy questions when it isn't.
+        "cost_by_difficulty": {
+            d: (sum(c) / len(c) if c else None) for d, c in costs_by_difficulty.items()
         },
     }

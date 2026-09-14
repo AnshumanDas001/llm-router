@@ -58,3 +58,29 @@ TIER_MODEL_LIST = [
 
 router = Router(model_list=TIER_MODEL_LIST)
 
+
+
+# What the routing policy needs to know about the built-in tiers, measured
+# on the 115-query eval set (scripts/eval_summary.py, plus per-band cost from
+# eval_responses). BYOM tiers get the same numbers from calibration; these
+# are the built-in stack's equivalent, stated once here because the eval
+# database isn't shipped with the app.
+#
+# The frontier row is computed, not measured: gemini-3.5-flash priced at the
+# token counts the previous frontier model produced per band. Its quality is
+# not gated (the top tier is always a legal start), so only its cost matters
+# for routing, and only as the escalation target.
+BUILTIN_CALIBRATION = {
+    "cheap": {
+        "quality": {"easy": 0.966, "medium": 0.852, "hard": 0.638},
+        "cost":    {"easy": 0.0,   "medium": 0.0,   "hard": 0.0},     # local Ollama
+    },
+    "mid": {
+        "quality": {"easy": 1.000, "medium": 0.991, "hard": 1.000},
+        "cost":    {"easy": 0.000053, "medium": 0.000107, "hard": 0.000270},
+    },
+    "frontier": {
+        "quality": {"easy": 1.000, "medium": 1.000, "hard": 0.983},   # flash-lite's; not gated
+        "cost":    {"easy": 0.000363, "medium": 0.002579, "hard": 0.004325},
+    },
+}

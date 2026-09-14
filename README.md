@@ -99,16 +99,25 @@ overrides then catch what embeddings miss — length, multi-step phrasing, and
 short recall questions, which are topically similar to hard questions but are
 not hard.
 
-**Step 2 — tier by calibrated threshold.** Each tier $t$ has a *measured*
-quality $Q(t,d)$ on difficulty band $d$, from calibration. A difficulty starts
-at the cheapest tier that clears the bar:
+**Step 2 — tier by expected cost, under a quality floor.** Each tier $t$ has a
+*measured* quality $Q(t,d)$ and generation cost $c(t,d)$ on difficulty band
+$d$, from calibration — per band, because a mid model's easy answers cost
+7× less than its overall mean. A tier may start a band only if it clears the
+floor $\tau = 0.80$; among those, pick the lowest expected total cost, which
+prices the whole path — generation, the judge call if this is the cheapest
+tier, and the failure-weighted cost of escalating:
 
-$$\text{tier}(d)=\min\{\,t\in T:\ Q(t,d)\ \ge\ \tau\,\},\qquad \tau=0.80$$
+$$E_i(d)=c(t_i,d)+J\cdot\mathbb{1}[i=0]+\big(1-Q(t_i,d)\big)\,E_{i+1}(d),\qquad E_n(d)=c(t_n,d)$$
 
-with $T$ ordered cheapest-first, falling back to the strongest configured tier
-if none clear it. This is why the map is *derived*, not hardcoded: feeding in
-the built-in tiers' own measurements reproduces `easy→cheap, medium→cheap,
-hard→mid` exactly, and swapping in different models re-derives it.
+$$\text{tier}(d)=\arg\min_{\,i:\ Q(t_i,d)\ge\tau\ \lor\ i=n}\ E_i(d)$$
+
+The judge term is what stops a cascade from losing to its own mid tier: on a
+stack whose mid model is very cheap, the cheap tier's verdict can cost as much
+as mid's own answer, and a cheaper-first rule routes into a loss. Pricing the
+path makes the policy route *around* a cheap tier that can't pay for its
+verification, and *to* one that can. Fed the built-in tiers' own measurements
+it derives `easy→cheap, medium→cheap, hard→mid`; give it a cheap tier that
+clears 0.80 on hard and it derives `hard→cheap`.
 
 **Step 3 — verify, then escalate.** The cheapest tier's answer is judged by the
 tier above it; later tiers get a free structural check. Escalation happens only
@@ -181,10 +190,18 @@ Read that carefully: **a single good mid-tier model also beats frontier by
 alternative", and here the honest result is:
 
 - **Under normal operation (115 of 116 queries) the cascade ties mid-only:**
-  $0.01803 vs $0.01776. The cheap tier answers 48 queries for $0.00004 each,
-  but those are the short easy ones, and mid would have answered them for
-  about $0.00005. When the mid model is as cheap as gpt-oss-20b on Groq,
-  there is almost no room beneath it for a cheap tier to save.
+  $0.01803 vs $0.01776. The expected-cost model predicts a ~15% edge for the
+  cascade; the measurement says a tie. The gap is the judge's false
+  positives — it escalated 24% of medium questions where calibration says
+  15% actually fail — and the fact that the escalated questions are the
+  expensive ones. Either way the effect is within noise, because the cheap
+  tier only ever touches the 20% of spend that isn't hard questions.
+- **The hard questions are 80% of mid-only's spend, and the cascade sends
+  them to mid too.** That is the real ceiling. Beating mid-only meaningfully
+  needs a cheap tier that clears 0.80 on hard, and every candidate reachable
+  from this stack was measured and fell short: `llama3:8b` scored 0.50, and
+  every hosted model at list price costs more than gpt-oss-20b, which is one
+  of the cheapest capable models available. There is nothing beneath it.
 - **The other $0.0176 was one query.** Groq rate-limited mid on a hard
   question; the cascade fell through to frontier, which wrote a 1,953-token
   answer. Mid-only would have paid $0.00059 — if mid had been up. It wasn't.

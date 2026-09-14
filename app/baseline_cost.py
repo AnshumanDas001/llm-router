@@ -20,9 +20,14 @@ FRONTIER_MODEL = next(
 
 
 def estimate_cost_for_model(model_name: str, tokens_in: int, tokens_out: int) -> float:
+    # litellm rejects non-integer token counts, and the except below turns
+    # that into a silent $0 -- which is how an average like 14.3 tokens came
+    # back as "free". Round so averages price correctly.
     try:
         prompt_cost, completion_cost = litellm.cost_per_token(
-            model=model_name, prompt_tokens=tokens_in or 0, completion_tokens=tokens_out or 0,
+            model=model_name,
+            prompt_tokens=int(round(tokens_in or 0)),
+            completion_tokens=int(round(tokens_out or 0)),
         )
         return prompt_cost + completion_cost
     except Exception:
