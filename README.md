@@ -4,10 +4,12 @@ Most LLM traffic doesn't need your most expensive model. This routes each
 request to the cheapest model that can actually handle it, checks the answer,
 and escalates only when the check fails.
 
-**On a 81-query run, that was 73% cheaper than sending everything to the
-frontier model** — at the same measured answer quality.
+**On a 116-query run it cost 93% less than sending everything to the
+frontier model.** It also, honestly, cost about the same as sending everything
+to the mid-tier model — and the reason why is the most useful thing in this
+README (see [Strategy comparison](#strategy-comparison)).
 
-<img src="app/static/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only: $0.02941 against $0.10944, 73% cheaper" width="720">
+<img src="app/static/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only and mid-only over 116 queries: $0.03564 against $0.54365 frontier-only and $0.01834 mid-only" width="720">
 
 ---
 
@@ -36,6 +38,12 @@ The cost gap it's exploiting is large — and note the cheapest tier is also the
 
 Measured over 115 queries; automatic scoring for objective answers, LLM-judge
 for the rest. Regenerate with `./venv/bin/python scripts/eval_summary.py`.
+
+The frontier tier has since moved to `gemini-3.5-flash` (~4× the price), which
+is not yet scored on this set. It replaced flash-lite because flash-lite was
+*dominated* by mid — lower quality, 4.7× the cost, 2× the latency — so
+escalating to it bought a worse answer for more money. A frontier tier only
+earns its slot by being stronger than mid.
 
 ## The routing decision
 
@@ -124,9 +132,12 @@ Three things make this cheap rather than expensive:
 
 - **Hard questions skip the cheap tier entirely.** Spending a doomed cheap call
   before escalating is worse than not trying.
-- **Only the cheapest tier gets a real judge call.** Verification cost scales
-  with response length, and later tiers rarely fail. Judging every tier once
-  cost 82% of total cascade spend.
+- **Only the cheapest tier gets a real judge call, at low reasoning effort.**
+  Verification cost scales with response length, and later tiers rarely fail;
+  judging every tier once cost 82% of total spend. Then the judge itself
+  turned out to be the cheap tier's entire cost — gpt-oss emits hidden
+  reasoning tokens billed as output, $0.00016 per verdict against $0.00005
+  nominal. `reasoning_effort="low"` cut that 4× with identical verdicts.
 - **The last tier is never checked.** There's nothing left to escalate to.
 
 ### How well does the routing itself do?
@@ -139,41 +150,55 @@ that actually moved when the algorithm changed:
 | 1-nearest-neighbour | 56.0% | 21 | 23 |
 | **weighted k=5 vote + overrides** | **64.7%** | **14** | **15** |
 
-And where the traffic landed over 81 routed queries:
+And where the traffic landed over 116 routed queries:
 
 ```mermaid
 pie showData
     title Final tier used
-    "cheap" : 42
-    "mid" : 36
-    "frontier" : 3
+    "cheap" : 48
+    "mid" : 67
+    "frontier" : 1
 ```
 
-13 of those 81 escalated. Everything else was answered where it started.
+13 of those 116 escalated: 12 because the judge caught a real error in the cheap
+answer, 1 because mid was rate-limited and frontier caught it. Everything else
+was answered where it started.
 
 ### Strategy comparison
 
-Per-query averages over the 115-query eval set, plus the cascade measured on
-its own 81-query run:
+The same 116 queries, priced three ways over identical token counts, so the
+comparison is apples-to-apples:
 
-| strategy | quality | cost / query | latency | notes |
-|---|---|---|---|---|
-| cheap only (`llama3.2:3b`) | 0.762 | $0.00000 | 10.2s | free, local, collapses on hard questions |
-| mid only (`gpt-oss-20b`) | 0.997 | $0.00018 | 1.2s | strong, but paid on every trivial prompt |
-| frontier only (`gemini-3.5-flash-lite`) | 0.991 | $0.00085 | 2.7s | the baseline being avoided |
-| **ThriftLLM cascade** | — | **$0.00036** | — | **73% under frontier on the same queries** |
+| strategy | total cost | per query | vs frontier |
+|---|---|---|---|
+| frontier for everything (`gemini-3.5-flash`) | $0.54365 | $0.00469 | — |
+| mid for everything (`gpt-oss-20b`) | $0.01834 | $0.00016 | 97% cheaper |
+| **ThriftLLM cascade** | **$0.03564** | **$0.00031** | **93% cheaper** |
 
-Read the caveats before quoting these:
+Read that carefully: **a single good mid-tier model also beats frontier by
+97%, and beats the cascade.** The question a router has to answer is not
+"cheaper than the most expensive option" — it's "cheaper than the obvious
+alternative", and here the honest result is:
 
-- **The cascade's quality is not scored on this set.** Its cost was measured on
-  a separate 81-query run against a frontier baseline priced over the *same*
-  tokens, which is why the 73% is apples-to-apples but the quality cell is
-  empty rather than filled with a flattering guess.
-- **Mid beats frontier on quality here** (0.997 vs 0.991). That is within noise
-  on 115 queries and mostly reflects the eval set's bias toward objectively
-  scoreable answers.
-- **The cheap tier's latency is a local-CPU artifact**, not a property of small
-  models. A hosted 8B would be faster than both paid tiers.
+- **Under normal operation (115 of 116 queries) the cascade ties mid-only:**
+  $0.01803 vs $0.01776. The cheap tier answers 48 queries for $0.00004 each,
+  but those are the short easy ones, and mid would have answered them for
+  about $0.00005. When the mid model is as cheap as gpt-oss-20b on Groq,
+  there is almost no room beneath it for a cheap tier to save.
+- **The other $0.0176 was one query.** Groq rate-limited mid on a hard
+  question; the cascade fell through to frontier, which wrote a 1,953-token
+  answer. Mid-only would have paid $0.00059 — if mid had been up. It wasn't.
+  That's the price of an answer instead of an error, and it's also a real
+  cost tail: one availability fallback doubled the run's spend.
+
+So what the cascade buys over mid-only is not money, on this stack. It's the
+judge catching 12 wrong cheap answers before they shipped, and an answer when
+the mid provider is down. It *would* buy money on a stack where mid is a
+typical $2–10/M model rather than one of the cheapest capable models
+available; the saving is bounded by the cheap/mid price gap, and here that gap
+is tiny.
+
+Regenerate with `./venv/bin/python scripts/compare_strategies.py`.
 
 ## Bring your own models
 
@@ -289,10 +314,15 @@ reports/             Pareto chart, generated README charts
 
 ## Honest limitations
 
-- **"Cost saved" is an estimate.** It prices the tokens the cascade actually
-  used against frontier's rate. Frontier tends to write longer answers, so the
-  real saving is probably larger — but this number is computed, not measured
-  head-to-head.
+- **"Cost saved" is against frontier, and frontier is not the fair baseline.**
+  Mid-only is, and the cascade ties it. The saving over frontier is real and
+  large; the saving over "just use the good cheap model" is roughly zero on
+  this stack. Both are stated above rather than picking the flattering one.
+- **The escalation cost tail is real.** A single rate-limit fallback to
+  frontier cost as much as the other 115 queries combined. Bounding it (a
+  short retry on the throttled tier before escalating; a max-tokens cap on
+  frontier) is a tradeoff against latency and answer completeness that this
+  version hasn't made.
 - **The classifier is still the weak link.** 64.7% exact-label accuracy is
   better than the 56.0% it replaced, but it's a k-NN over 116 examples, and
   embedding similarity measures *topic* rather than difficulty — "what's the

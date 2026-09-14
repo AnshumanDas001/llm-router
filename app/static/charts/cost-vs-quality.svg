@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 370" width="720" height="370" role="img" aria-label="Cost against quality per tier">
 <text x="0.0" y="22.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="15" fill="#9b9b9b" text-anchor="start" font-weight="600">Cost against quality, per tier</text>
-<text x="0.0" y="38.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="11.5" fill="#767676" text-anchor="start" font-weight="400">Average per query across 115 queries - up and to the left is better</text>
+<text x="0.0" y="38.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="11.5" fill="#767676" text-anchor="start" font-weight="400">Average per query, 115 queries. Frontier point is gemini-3.5-flash-lite, since replaced by 3.5-flash</text>
 <line x1="62" y1="316.0" x2="570" y2="316.0" stroke="#8884" stroke-width="1"/>
 <text x="53.0" y="320.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="11" fill="#767676" text-anchor="end" font-weight="400">0.7</text>
 <line x1="62" y1="235.4" x2="570" y2="235.4" stroke="#8884" stroke-width="1"/>

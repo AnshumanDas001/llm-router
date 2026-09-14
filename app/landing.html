@@ -148,8 +148,8 @@
 
       <div class="metrics animate-in stagger-4">
         <div class="metric">
-          <div class="n good">73%</div>
-          <div class="k">cheaper than sending every query to the frontier model, over 81 routed queries</div>
+          <div class="n good">93%</div>
+          <div class="k">cheaper than sending every query to the frontier model, over 116 routed queries</div>
         </div>
         <div class="metric">
           <div class="n">0.64</div>
@@ -189,7 +189,7 @@
         <div class="step"><div class="i">01</div><h4>Classify</h4><p>Embedding match against a labelled set decides easy, medium or hard. ~7ms, no model call.</p></div>
         <div class="step"><div class="i">02</div><h4>Route</h4><p>Easy and medium start cheap. Hard skips straight to mid &mdash; a doomed cheap call costs more than not trying.</p></div>
         <div class="step"><div class="i">03</div><h4>Verify</h4><p>The cheapest tier's answer is judged by the tier above. Later tiers get a free structural check.</p></div>
-        <div class="step"><div class="i">04</div><h4>Escalate</h4><p>Only when the check fails. 13 of 81 queries escalated; the rest were answered where they started.</p></div>
+        <div class="step"><div class="i">04</div><h4>Escalate</h4><p>Only when the check fails. 13 of 116 queries escalated; the rest were answered where they started.</p></div>
       </div>
       <figure>
         <img src="/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier. Cheap is free but slow at 10.2s, mid costs $0.00018 at 1.2s, frontier costs $0.00085 at 2.7s." loading="lazy">
@@ -200,10 +200,13 @@
       <div class="block-head"><span class="block-num">03</span><h2>What it actually saved</h2></div>
       <p class="block-sub">
         Every number on this page comes out of the project's own eval database and regenerates with
-        the data &mdash; there are no illustrative figures here.
+        the data &mdash; there are no illustrative figures here. Including the uncomfortable one: a
+        single good mid-tier model also beats frontier by 97%, and on this stack the cascade only
+        matches it. What the cascade adds over that is a judge that caught 12 wrong answers in this
+        run, and an answer when the mid provider was rate-limited. The README says why.
       </p>
       <figure>
-        <img src="/static/charts/cascade-savings.svg" alt="Cascade cost of $0.02941 versus $0.10944 for frontier-only, across 81 routed queries: 73% cheaper." loading="lazy">
+        <img src="/static/charts/cascade-savings.svg" alt="Cascade cost of $0.03564 versus $0.54365 frontier-only and $0.01834 mid-only, across 116 routed queries." loading="lazy">
       </figure>
     </section>
 

@@ -12,7 +12,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.baseline_cost import estimate_frontier_cost
+from app.baseline_cost import estimate_cost_for_model, estimate_frontier_cost
+from app.cascade import DEFAULT_TIER_MODELS
 from app.db import get_conn
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "app" / "static" / "charts"
@@ -96,9 +97,13 @@ def load_cascade_totals():
         ).fetchall()
     actual = sum(r[0] for r in rows)
     baseline = sum(estimate_frontier_cost(r[1], r[2]) for r in rows)
+    # "Mid for everything" is the comparison that actually matters: a single
+    # good mid-tier model beats frontier on cost too, so "cheaper than
+    # frontier" alone doesn't justify a cascade.
+    mid_only = sum(estimate_cost_for_model(DEFAULT_TIER_MODELS["mid"], r[1], r[2]) for r in rows)
     by_tier = {t: sum(1 for r in rows if r[3] == t) for t in TIERS}
     return {
-        "n": len(rows), "actual": actual, "baseline": baseline,
+        "n": len(rows), "actual": actual, "baseline": baseline, "mid_only": mid_only,
         "by_tier": by_tier, "escalated": sum(1 for r in rows if r[4]),
     }
 
@@ -174,7 +179,7 @@ def chart_cost_quality(summary, path):
         return mt + plot_h - (v - y0) / (y1 - y0) * plot_h
 
     parts = [_text(0, 22, "Cost against quality, per tier", 15, INK_STRONG, weight="600")]
-    parts.append(_text(0, 38, "Average per query across 115 queries - up and to the left is better", 11.5, INK))
+    parts.append(_text(0, 38, "Average per query, 115 queries. Frontier point is gemini-3.5-flash-lite, since replaced by 3.5-flash", 11.5, INK))
 
     for gv in [0.7, 0.8, 0.9, 1.0]:
         y = sy(gv)
@@ -208,35 +213,40 @@ def chart_cost_quality(summary, path):
 
 
 def chart_cascade_savings(totals, path):
-    W, H = 720, 210
+    W, H = 720, 250
     ml, mr, mt = 150, 120, 56
-    bar_h, gap = 34, 20
+    bar_h, gap = 30, 16
     plot_w = W - ml - mr
     max_v = totals["baseline"] * 1.05
 
-    saved_pct = (totals["baseline"] - totals["actual"]) / totals["baseline"] * 100
+    vs_frontier = (totals["baseline"] - totals["actual"]) / totals["baseline"] * 100
+    vs_mid = (totals["mid_only"] - totals["actual"]) / totals["mid_only"] * 100
     parts = [_text(0, 22, "What the cascade actually cost", 15, INK_STRONG, weight="600")]
-    parts.append(_text(0, 38, f"{totals['n']} routed queries, measured - versus sending every one to frontier",
+    parts.append(_text(0, 38, f"{totals['n']} routed queries, measured - same tokens priced three ways",
                        11.5, INK))
 
     rows = [
         ("frontier-only", totals["baseline"], COLORS["frontier"]),
+        ("mid-only", totals["mid_only"], COLORS["mid"]),
         ("cascade", totals["actual"], COLORS["cheap"]),
     ]
     for i, (label, value, color) in enumerate(rows):
         y = mt + i * (bar_h + gap)
-        w = (value / max_v) * plot_w
+        w = max(4, (value / max_v) * plot_w)   # keep the small bars visible
         parts.append(f'<rect x="{ml}" y="{y}" width="{w:.1f}" height="{bar_h}" rx="3" fill="{color}"/>')
         parts.append(_text(ml - 12, y + bar_h / 2 + 4, label, 12.5, INK_STRONG, anchor="end", weight="600"))
         parts.append(_text(ml + w + 10, y + bar_h / 2 + 4, f"${value:.5f}", 12, INK_STRONG, mono=True))
 
-    y_note = mt + len(rows) * (bar_h + gap) + 18
-    parts.append(_text(ml, y_note, f"{saved_pct:.0f}% cheaper", 14, COLORS["cheap"], weight="700"))
+    y_note = mt + len(rows) * (bar_h + gap) + 14
+    mid_word = "cheaper" if vs_mid >= 0 else "dearer"
+    parts.append(_text(ml, y_note, f"{vs_frontier:.0f}% under frontier-only", 13, COLORS["cheap"], weight="700"))
+    parts.append(_text(ml + 220, y_note, f"{abs(vs_mid):.0f}% {mid_word} than mid-only", 13,
+                       INK_STRONG, weight="600"))
     routed = "  ".join(f"{t}: {n}" for t, n in totals["by_tier"].items())
     parts.append(_text(ml, y_note + 20, f"routed - {routed}   |   escalated: {totals['escalated']}",
                        11, INK, mono=True))
 
-    path.write_text(_svg(W, H, "\n".join(parts), "Cascade cost versus frontier-only"))
+    path.write_text(_svg(W, H, "\n".join(parts), "Cascade cost versus frontier-only and mid-only"))
 
 
 def main():
