@@ -53,6 +53,10 @@ def _plan_sequence(initial_tier: str, available_tiers: list[str], skip_cheapest:
     return available_tiers[start:]
 
 
+def _why(exc: Exception) -> str:
+    return "rate limited" if isinstance(exc, litellm.RateLimitError) else "unreachable"
+
+
 class AllTiersUnavailable(Exception):
     """Raised only if every tier in the cascade sequence is unreachable."""
 
@@ -111,13 +115,14 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
         start = time.perf_counter()
         try:
             resp = _complete(tier, messages, tier_models, tier_api_keys)
-        except litellm.RateLimitError:
-            # This tier is temporarily down (daily/per-minute quota). Skip
-            # straight to the next tier rather than failing the whole
-            # request -- unless there is no next tier, in which case fall
-            # back to whatever we already have (or fail if nothing yet).
+        except (litellm.RateLimitError, litellm.APIConnectionError) as exc:
+            # This tier is temporarily down -- a quota, or a local model
+            # that isn't running (the cheap tier is Ollama; on a box without
+            # it, every easy question would otherwise fail outright). Skip
+            # to the next tier rather than failing the whole request; if
+            # there is no next tier, fall back to whatever we already have.
             escalated = True
-            escalation_reasons.append(f"{tier} unavailable (rate limited), skipped")
+            escalation_reasons.append(f"{tier} unavailable ({_why(exc)}), skipped")
             continue
         latency_ms = (time.perf_counter() - start) * 1000
 
@@ -247,10 +252,10 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
                 if piece:
                     text_parts.append(piece)
                     yield {"type": "token", "tier": tier, "text": piece}
-        except litellm.RateLimitError:
+        except (litellm.RateLimitError, litellm.APIConnectionError) as exc:
             escalated = True
-            escalation_reasons.append(f"{tier} unavailable (rate limited), skipped")
-            yield {"type": "escalated", "from": tier, "reason": "rate limited"}
+            escalation_reasons.append(f"{tier} unavailable ({_why(exc)}), skipped")
+            yield {"type": "escalated", "from": tier, "reason": _why(exc)}
             continue
 
         latency_ms = (time.perf_counter() - start) * 1000

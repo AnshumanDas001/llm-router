@@ -88,7 +88,7 @@ GROQ_API_KEY=...
 GEMINI_API_KEY=...
 ROUTER_SECRET_KEY=...        # python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 SITE_ADDRESS=129-146-1-2.sslip.io    # your public IP, dots -> dashes
-CHEAP_MODEL=groq/groq/compound-mini  # or leave blank to use the ollama profile
+CHEAP_MODEL=                          # leave blank: see "The cheap tier" below
 ```
 
 `ROUTER_SECRET_KEY` encrypts any provider keys users choose to save. Generate
@@ -114,27 +114,30 @@ first request to the hostname; give it a minute.
 Open `https://129-146-1-2.sslip.io` (your address). You should get the
 landing page with a valid padlock.
 
-## 5. Recalibrate the cheap tier
+## 5. The cheap tier
 
-If you set `CHEAP_MODEL`, the built-in routing map (tuned for the local 3B
-model) no longer matches what's actually running. Sign in, go to
-**Models**, and calibrate the model you chose so the map re-derives. If you
-skipped this, hard questions will start at mid when they may not need to.
+With `CHEAP_MODEL` blank and no Ollama running, the cascade detects the cheap
+tier is unreachable and starts every request at mid. **This is fine.** On the
+built-in stack, measured over 116 queries, the cascade and mid-only cost the
+same — the mid model is cheap enough that the cheap tier can't undercut it
+(see the README's strategy comparison). Skipping it is also faster.
 
-## Using local Ollama instead (optional)
-
-A1 has the memory. Whether it's fast enough is an empirical question — on a
-laptop the 3B model averaged 10 s; on A1 CPU expect longer. Try it:
+If you want the full three-tier cascade visible in the demo anyway, A1 has
+the memory to run Ollama:
 
 ```bash
 docker compose --profile ollama up -d --build
 docker compose exec ollama ollama pull llama3.2:3b
 ```
 
-Leave `CHEAP_MODEL` blank in `.env` so the app uses the Ollama default. Send
-a few prompts through `/try` and read the latency in the route line. If it's
-over ~15 s, switch back to a hosted model — the demo will feel broken
-otherwise.
+Then send a few prompts through `/try` and read the latency in the route
+line. On a laptop the 3B model averaged 10 s; on A1 CPU expect longer. If
+it's over ~15 s the demo will feel broken — drop the profile and let
+requests start at mid.
+
+Don't set `CHEAP_MODEL` to a model litellm can't price (Groq's
+`compound-mini`, for instance): it reports $0 per call and every cost
+figure in the app becomes fiction.
 
 ## Updating
 
