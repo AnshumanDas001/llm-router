@@ -1,0 +1,35 @@
+# Caddy fronts the app: automatic HTTPS via Let's Encrypt, HTTP->HTTPS
+# redirect, and streaming passthrough. Stock directives only -- this runs
+# unmodified on the official caddy:2-alpine image.
+#
+# SITE_ADDRESS comes from the compose environment. A bare IP can't get a
+# certificate, so with no domain use sslip.io, which maps
+#   129-146-1-2.sslip.io  ->  129.146.1.2
+# and Let's Encrypt will issue for that name. Swap in a real domain later by
+# changing the one env var.
+#
+# Not included: rate limiting on /auth/* and /api/try. That needs either the
+# caddy-ratelimit plugin (a custom image via xcaddy) or Cloudflare's free
+# tier in front of this box. See deploy/ORACLE.md, "After it's up".
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# Streaming responses (/api/try, /api/chats/*/messages/stream) must not
+	# be buffered, or the client sees nothing until the answer is complete.
+	reverse_proxy app:8000 {
+		flush_interval -1
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

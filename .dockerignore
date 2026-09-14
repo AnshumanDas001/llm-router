@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.env
+.claude/
+.DS_Store
+logs/
+reports/
+*.md
+llm-router-4-week-roadmap.md
+deploy/
+Dockerfile
+docker-compose.yml
+Caddyfile

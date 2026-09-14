@@ -9,13 +9,25 @@ from litellm import Router
 
 load_dotenv()
 
+# The cheap tier is the one most likely to change between environments: a
+# local Ollama model on a laptop, but on a cloud box a hosted small model is
+# usually faster and the calibration re-derives the routing map either way.
+# CHEAP_MODEL takes any litellm string; provider keys come from the usual
+# env vars (GROQ_API_KEY etc.), which litellm reads on its own.
+CHEAP_MODEL = os.getenv("CHEAP_MODEL", "ollama/llama3.2:3b")
+
+
+def _cheap_params() -> dict:
+    params = {"model": CHEAP_MODEL}
+    if CHEAP_MODEL.startswith("ollama/"):
+        params["api_base"] = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
+    return params
+
+
 TIER_MODEL_LIST = [
     {
         "model_name": "cheap",
-        "litellm_params": {
-            "model": "ollama/llama3.2:3b",
-            "api_base": os.getenv("OLLAMA_API_BASE", "http://localhost:11434"),
-        },
+        "litellm_params": _cheap_params(),
     },
     {
         "model_name": "mid",

@@ -4,12 +4,15 @@ Kept separate from app/db.py (the eval/logging infra) since this is
 a genuinely different subsystem -- product state, not research data.
 """
 import json
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "logs" / "router.db"
+# Overridable so a deployment can point this at a mounted volume; the
+# default keeps local development exactly as it was.
+DB_PATH = Path(os.getenv("ROUTER_DB_PATH", Path(__file__).resolve().parent.parent / "logs" / "router.db"))
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (

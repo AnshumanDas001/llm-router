@@ -1,0 +1,75 @@
+# ThriftLLM on a single box.
+#
+#   docker compose up -d --build                # app + HTTPS, hosted cheap tier
+#   docker compose --profile ollama up -d --build   # ...plus a local Ollama cheap tier
+#
+# Everything the app persists lives in the `router-data` volume; the image
+# is disposable. Configuration is read from ./.env (see .env.example).
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ROUTER_DB_PATH: /app/logs/router.db
+      COOKIE_SECURE: "1"                      # Caddy terminates TLS in front of us
+      # Only used when the ollama profile is active; harmless otherwise.
+      OLLAMA_API_BASE: http://ollama:11434
+    volumes:
+      - router-data:/app/logs
+      - hf-cache:/app/.cache/huggingface      # keeps the ~90 MB embedding model across restarts
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s                       # classifier warmup runs at boot
+    deploy:
+      resources:
+        limits:
+          memory: 2g                          # ~1 GB resident + headroom for concurrent cascades
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"                         # HTTP/3
+    environment:
+      # Hostname Caddy serves and requests a certificate for. With no domain,
+      # use sslip.io: PUBLIC_IP with dots as dashes, e.g. 129-146-1-2.sslip.io
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env, e.g. 129-146-1-2.sslip.io}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data                      # certificates -- must persist or you'll hit LE rate limits
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+  # Optional local cheap tier. Ampere A1 has the RAM for it; whether it's
+  # fast enough on CPU is an empirical question -- compare against a hosted
+  # model via CHEAP_MODEL before deciding.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    expose:
+      - "11434"
+    deploy:
+      resources:
+        limits:
+          memory: 6g
+
+volumes:
+  router-data:
+  hf-cache:
+  caddy-data:
+  caddy-config:
+  ollama-models:

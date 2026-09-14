@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -195,10 +196,16 @@ def guide_page():
 
 # --- auth ------------------------------------------------------------------
 
+# Cookies carry the Secure flag only when told to. The app is developed over
+# plain http://localhost, where a Secure cookie would never be sent back and
+# login would silently fail; a deployment behind TLS sets COOKIE_SECURE=1.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "").lower() in ("1", "true", "yes")
+
+
 def _set_session_cookie(response: Response, token: str):
     response.set_cookie(
         key=SESSION_COOKIE_NAME, value=token, httponly=True, samesite="lax",
-        max_age=SESSION_LIFETIME_DAYS * 24 * 3600,
+        secure=COOKIE_SECURE, max_age=SESSION_LIFETIME_DAYS * 24 * 3600,
     )
 
 
@@ -326,7 +333,7 @@ def api_try(req: ClassifyRequest, response: Response, tl_demo: str | None = Cook
     stream = StreamingResponse(event_stream(), media_type="text/event-stream",
                                headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
     stream.set_cookie(DEMO_COOKIE_NAME, demo_id, max_age=60 * 60 * 24 * 30,
-                      httponly=True, samesite="lax")
+                      httponly=True, samesite="lax", secure=COOKIE_SECURE)
     return stream
 
 
