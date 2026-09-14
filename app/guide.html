@@ -340,6 +340,15 @@ resp = requests.post(f"{HOST}/api/v1/route", headers=HEADERS, json={
 })</code></pre></div>
       </div>
       <p><code>tier_api_keys</code> is only needed for tiers whose provider key you chose <em>not</em> to save; saved keys are used automatically.</p>
+
+      <h3>Routing mode</h3>
+      <p>Every request &mdash; and every chat &mdash; has a <code>routing_mode</code>:</p>
+      <ul>
+        <li><code>cascade</code> (default) &mdash; start at the cheapest tier the calibration says can handle the difficulty, judge its answer, escalate on failure.</li>
+        <li><code>direct</code> &mdash; skip the cheapest tier and its judge entirely; start one tier up.</li>
+      </ul>
+      <p>When to use <code>direct</code>: whenever your mid model is already very cheap. The cheap tier only saves money if its answer plus the judge call costs less than mid's own answer would &mdash; and on a stack like Groq's gpt-oss-20b, mid answers an easy question for about what the judge costs to read it. Measured on the built-in tiers, cascade and direct cost the same and direct is ~6&times; faster. Cascade still earns its place when mid is a $2&ndash;10/M model, or when you want every cheap answer verified.</p>
+      <p>In the chat UI the pill in the header (Cascade / Direct) switches this per chat.</p>
     </section>
 
     <section id="ref-route">

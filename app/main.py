@@ -80,11 +80,13 @@ class CreateChatRequest(BaseModel):
     title: str | None = None
     mode: str = "builtin"  # "builtin" (our models) or "byom" (this user's configured models)
     models: dict[str, str] = {}  # tier -> model_name, frozen onto the chat at creation
+    routing_mode: str = "cascade"  # "cascade": cheapest capable tier first; "direct": skip the cheap tier
 
 
 class UpdateChatRequest(BaseModel):
     title: str | None = None
     pinned: bool | None = None
+    routing_mode: str | None = None
 
 
 class SendMessageRequest(BaseModel):
@@ -122,6 +124,10 @@ class RouteRequest(BaseModel):
     messages: list[Message]
     models: dict[str, str] = {}         # tier -> model_name, from your connected models
     tier_api_keys: dict[str, str] = {}  # used transiently for this call only, never stored
+    routing_mode: str = "cascade"       # or "direct" to skip the cheapest tier and its judge
+
+
+ROUTING_MODES = ("cascade", "direct")
 
 
 @app.on_event("startup")
@@ -260,6 +266,7 @@ def api_list_chats(user=Depends(get_current_user)):
             "preview": c["preview"],
             "pinned": bool(c["pinned"]),
             "mode": c["mode"],
+            "routing_mode": c["routing_mode"],
             "created_at": c["created_at"],
             "total_cost": c["total_cost"],
             "total_baseline_cost": c["total_baseline_cost"],
@@ -352,6 +359,8 @@ def api_classify(req: ClassifyRequest, user=Depends(get_current_user)):
 def api_create_chat(req: CreateChatRequest, user=Depends(get_current_user)):
     if req.mode not in ("builtin", "byom"):
         raise HTTPException(status_code=400, detail="mode must be 'builtin' or 'byom'")
+    if req.routing_mode not in ROUTING_MODES:
+        raise HTTPException(status_code=400, detail="routing_mode must be 'cascade' or 'direct'")
 
     if req.mode == "byom":
         if not req.models:
@@ -377,6 +386,7 @@ def api_create_chat(req: CreateChatRequest, user=Depends(get_current_user)):
 
     chat_id = chat_db.create_chat(
         user["id"], req.title, datetime.now(timezone.utc).isoformat(), mode=req.mode,
+        routing_mode=req.routing_mode,
     )
     if req.mode == "byom":
         provider_ids = {}
@@ -399,6 +409,10 @@ def api_update_chat(chat_id: int, req: UpdateChatRequest, user=Depends(get_curre
         chat_db.rename_chat(chat_id, user["id"], title)
     if req.pinned is not None:
         chat_db.set_chat_pinned(chat_id, user["id"], req.pinned)
+    if req.routing_mode is not None:
+        if req.routing_mode not in ROUTING_MODES:
+            raise HTTPException(status_code=400, detail="routing_mode must be 'cascade' or 'direct'")
+        chat_db.set_chat_routing_mode(chat_id, user["id"], req.routing_mode)
     return {"ok": True}
 
 
@@ -435,6 +449,7 @@ def api_get_chat(chat_id: int, user=Depends(get_current_user)):
         "title": chat["title"] or "New chat",
         "pinned": bool(chat["pinned"]),
         "mode": chat["mode"],
+        "routing_mode": chat["routing_mode"],
         "byom_tiers": chat_db.get_chat_models(chat_id) if chat["mode"] == "byom" else {},
         "byom_needs_key": needs_key,
         "messages": [
@@ -484,7 +499,7 @@ def _prepare_send(chat_id: int, req: SendMessageRequest, user):
             if (key := _resolve_provider_key(user["id"], model_name,
                                              req.tier_api_keys.get(tier))) is not None
         }
-    return messages, is_byom, tier_models, tier_api_keys
+    return messages, is_byom, tier_models, tier_api_keys, chat["routing_mode"] == "direct"
 
 
 def _finish_send(chat_id: int, user_id: int, content: str, result: dict,
@@ -526,14 +541,14 @@ def api_send_message_stream(chat_id: int, req: SendMessageRequest, user=Depends(
     """Streaming form of the send path. Setup runs before the response starts
     so validation failures are still real HTTP errors rather than an error
     event buried in a 200 stream."""
-    messages, is_byom, tier_models, tier_api_keys = _prepare_send(chat_id, req, user)
+    messages, is_byom, tier_models, tier_api_keys, direct = _prepare_send(chat_id, req, user)
     difficulty_to_tier = _tier_map_for(user["id"], tier_models) if is_byom else None
 
     def event_stream():
         try:
             for event in run_cascade_stream(
                 messages, tier_models=tier_models, tier_api_keys=tier_api_keys,
-                difficulty_to_tier=difficulty_to_tier,
+                difficulty_to_tier=difficulty_to_tier, skip_cheapest=direct,
             ):
                 if event["type"] == "done":
                     event.update(_finish_send(chat_id, user["id"], req.content, event,
@@ -591,6 +606,7 @@ def api_send_message(chat_id: int, req: SendMessageRequest, user=Depends(get_cur
             # built-in stack keeps the default map, which is what the eval set
             # measured for it.
             difficulty_to_tier=_tier_map_for(user["id"], tier_models) if is_byom else None,
+            skip_cheapest=chat["routing_mode"] == "direct",
         )
     except AllTiersUnavailable:
         raise HTTPException(
@@ -998,11 +1014,14 @@ def api_route(req: RouteRequest, user=Depends(get_user_from_api_key)):
                                          req.tier_api_keys.get(tier))) is not None
     }
 
+    if req.routing_mode not in ROUTING_MODES:
+        raise HTTPException(status_code=400, detail="routing_mode must be 'cascade' or 'direct'")
     try:
         result = run_cascade(
             [m.model_dump() for m in req.messages],
             tier_models=tier_models, tier_api_keys=tier_api_keys,
             difficulty_to_tier=_tier_map_for(user["id"], tier_models),
+            skip_cheapest=req.routing_mode == "direct",
         )
     except AllTiersUnavailable:
         raise HTTPException(

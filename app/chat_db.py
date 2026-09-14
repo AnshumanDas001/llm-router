@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS chats (
     title TEXT,
     pinned INTEGER NOT NULL DEFAULT 0,
     mode TEXT NOT NULL DEFAULT 'builtin',
+    routing_mode TEXT NOT NULL DEFAULT 'cascade',
     created_at TEXT NOT NULL
 );
 
@@ -200,6 +201,12 @@ def init_chat_db():
         except sqlite3.OperationalError as e:
             if "duplicate column" not in str(e).lower():
                 raise
+        try:
+            conn.execute("ALTER TABLE chats ADD COLUMN routing_mode TEXT NOT NULL DEFAULT 'cascade'")
+            conn.commit()
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                raise
         for column, decl in (("difficulty", "TEXT"), ("escalation_reasons", "TEXT")):
             try:
                 conn.execute(f"ALTER TABLE chat_messages ADD COLUMN {column} {decl}")
@@ -275,11 +282,12 @@ def delete_session(token: str):
 
 # --- chats -----------------------------------------------------------------
 
-def create_chat(user_id: int, title: str, timestamp: str, mode: str = "builtin") -> int:
+def create_chat(user_id: int, title: str, timestamp: str, mode: str = "builtin",
+                routing_mode: str = "cascade") -> int:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO chats (user_id, title, mode, created_at) VALUES (?, ?, ?, ?)",
-            (user_id, title, mode, timestamp),
+            "INSERT INTO chats (user_id, title, mode, routing_mode, created_at) VALUES (?, ?, ?, ?, ?)",
+            (user_id, title, mode, routing_mode, timestamp),
         )
         conn.commit()
         return cur.lastrowid
@@ -288,7 +296,7 @@ def create_chat(user_id: int, title: str, timestamp: str, mode: str = "builtin")
 def list_chats(user_id: int):
     with get_conn() as conn:
         return conn.execute(
-            "SELECT c.id, c.title, c.pinned, c.mode, c.created_at, "
+            "SELECT c.id, c.title, c.pinned, c.mode, c.routing_mode, c.created_at, "
             "COALESCE(SUM(m.cost), 0) AS total_cost, "
             "COALESCE(SUM(m.baseline_cost), 0) AS total_baseline_cost, "
             "(SELECT content FROM chat_messages fm WHERE fm.chat_id = c.id AND fm.role = 'user' "
@@ -330,6 +338,15 @@ def rename_chat(chat_id: int, user_id: int, title: str):
     with get_conn() as conn:
         conn.execute(
             "UPDATE chats SET title = ? WHERE id = ? AND user_id = ?", (title, chat_id, user_id),
+        )
+        conn.commit()
+
+
+def set_chat_routing_mode(chat_id: int, user_id: int, routing_mode: str):
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE chats SET routing_mode = ? WHERE id = ? AND user_id = ?",
+            (routing_mode, chat_id, user_id),
         )
         conn.commit()
 

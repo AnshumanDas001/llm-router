@@ -35,6 +35,24 @@ def _approx_tokens(text: str) -> int:
     return max(1, len(text or "") // 4)
 
 
+def _plan_sequence(initial_tier: str, available_tiers: list[str], skip_cheapest: bool) -> list[str]:
+    """The tiers a request will try, in order.
+
+    skip_cheapest is "direct" routing: start one tier up regardless of what
+    the classifier said. On a stack whose mid model is already very cheap,
+    the cheapest tier can't undercut it -- its judge call costs about what
+    mid's own short answer would -- so a user can opt out of the cheap tier
+    and its verification entirely. Because the paid judge only ever attaches
+    to available_tiers[0], starting above it disables the judge for free.
+    """
+    if initial_tier not in available_tiers:
+        initial_tier = available_tiers[0]
+    start = available_tiers.index(initial_tier)
+    if skip_cheapest and len(available_tiers) > 1:
+        start = max(start, 1)
+    return available_tiers[start:]
+
+
 class AllTiersUnavailable(Exception):
     """Raised only if every tier in the cascade sequence is unreachable."""
 
@@ -51,7 +69,8 @@ def _complete(tier: str, messages: list[dict], tier_models: dict | None,
 
 def run_cascade(messages: list[dict], tier_models: dict | None = None,
                  tier_api_keys: dict | None = None,
-                 difficulty_to_tier: dict | None = None) -> dict:
+                 difficulty_to_tier: dict | None = None,
+                 skip_cheapest: bool = False) -> dict:
     query = messages[-1]["content"]
     initial_tier, difficulty = classify_initial_tier(query, difficulty_to_tier)
 
@@ -60,10 +79,8 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
     ]
     if not available_tiers:
         raise AllTiersUnavailable("no tiers configured")
-    if initial_tier not in available_tiers:
-        # e.g. classifier guessed "mid" but the user only configured cheap/frontier
-        initial_tier = available_tiers[0]
-    tier_sequence = available_tiers[available_tiers.index(initial_tier):]
+    tier_sequence = _plan_sequence(initial_tier, available_tiers, skip_cheapest)
+    initial_tier = tier_sequence[0]
 
     # Only the single cheapest *configured* tier gets a real, paid LLM-judge
     # check (by the next tier up in the full configured list) -- not
@@ -174,7 +191,8 @@ def _model_for(tier, tier_models):
 
 def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
                         tier_api_keys: dict | None = None,
-                        difficulty_to_tier: dict | None = None):
+                        difficulty_to_tier: dict | None = None,
+                        skip_cheapest: bool = False):
     """Generator form of run_cascade, yielding events as they happen.
 
     Streaming and verify-then-escalate are in tension: a tier's answer can't
@@ -196,9 +214,8 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
     ]
     if not available_tiers:
         raise AllTiersUnavailable("no tiers configured")
-    if initial_tier not in available_tiers:
-        initial_tier = available_tiers[0]
-    tier_sequence = available_tiers[available_tiers.index(initial_tier):]
+    tier_sequence = _plan_sequence(initial_tier, available_tiers, skip_cheapest)
+    initial_tier = tier_sequence[0]
 
     judge_model_for = {}
     cheapest_tier = available_tiers[0]
@@ -208,7 +225,8 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
             _model_for(judge_tier, tier_models), (tier_api_keys or {}).get(judge_tier), judge_tier,
         )
 
-    yield {"type": "routing", "difficulty": difficulty, "initial_tier": initial_tier}
+    yield {"type": "routing", "difficulty": difficulty, "initial_tier": initial_tier,
+           "direct": skip_cheapest}
 
     total_cost = 0.0
     total_latency_ms = 0.0

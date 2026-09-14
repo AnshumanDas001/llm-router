@@ -191,6 +191,14 @@ alternative", and here the honest result is:
   That's the price of an answer instead of an error, and it's also a real
   cost tail: one availability fallback doubled the run's spend.
 
+Because of this, routing mode is a per-chat (and per-API-request) choice:
+`cascade` as described, or `direct`, which skips the cheapest tier and its
+judge and starts one tier up. On the built-in stack, direct costs the same as
+cascade and answers ~6× faster (0.6s vs 3.6s on the same easy question),
+because it never waits on the slow local model or the verdict. Cascade is the
+right default when mid is expensive or every cheap answer must be checked;
+direct is the right default here.
+
 So what the cascade buys over mid-only is not money, on this stack. It's the
 judge catching 12 wrong cheap answers before they shipped, and an answer when
 the mid provider is down. It *would* buy money on a stack where mid is a

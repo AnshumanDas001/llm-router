@@ -110,7 +110,12 @@
   .mode-pill {
     display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border);
     background: var(--surface-1); border-radius: 16px; padding: 4px 11px; color: var(--text-secondary);
+    font-family: inherit; font-size: 11.5px; font-weight: 500; cursor: pointer;
   }
+  .mode-pill:hover { border-color: var(--border-strong); color: var(--text-primary); }
+  .mode-pill .mp-caret { font-size: 9px; opacity: 0.6; }
+  .mode-pill.direct .mp-dot { background: var(--series-mid); }
+  .mode-menu { right: 0; top: calc(100% + 6px); min-width: 250px; }
   .mode-pill .mp-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
   .header-icon-btn {
     display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px;
@@ -366,7 +371,15 @@
         <span class="hs-item" id="hs-saved" hidden></span>
         <span class="hs-sep">&middot;</span>
         <span class="hs-item" id="hs-tiers"></span>
-        <span class="mode-pill"><span class="mp-dot"></span>Cheapest capable</span>
+        <div class="menu-anchor">
+          <button class="mode-pill" id="mode-pill" title="Routing mode for this chat">
+            <span class="mp-dot"></span><span id="mode-pill-label">Cascade</span><span class="mp-caret">&#9662;</span>
+          </button>
+          <div class="dropdown-menu mode-menu" id="mode-menu" hidden>
+            <button type="button" data-routing="cascade">Cascade<span class="desc">Cheapest capable tier first, verified, escalates on failure</span></button>
+            <button type="button" data-routing="direct">Direct<span class="desc">Skip the cheap tier and its judge. Faster; same cost when mid is already cheap</span></button>
+          </div>
+        </div>
         <a class="header-icon-btn" href="/settings" title="Model &amp; routing settings">
           <svg viewBox="0 0 16 16" fill="none"><path d="M2 4.5h5M10 4.5h4M2 11.5h4M9 11.5h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="8.5" cy="4.5" r="1.6" stroke="currentColor" stroke-width="1.3"/><circle cx="7.5" cy="11.5" r="1.6" stroke="currentColor" stroke-width="1.3"/></svg>
         </a>
@@ -414,6 +427,7 @@
   let isSignup = false;
   let currentUsername = null;
   let currentChatMode = "builtin";
+  let currentRoutingMode = "cascade";
   let currentByomTiers = {};
   let builtinTierModels = {};
   // BYOM provider keys, held only in this tab's memory for this page
@@ -654,6 +668,36 @@
     target.innerHTML = "Active tiers: " + (parts.join('<span class="tier-sep"> / </span>') || "none configured");
   }
 
+  // --- routing mode (per chat) ---
+  const modeMenu = document.getElementById("mode-menu");
+  const modePill = document.getElementById("mode-pill");
+
+  function renderRoutingMode() {
+    document.getElementById("mode-pill-label").textContent =
+      currentRoutingMode === "direct" ? "Direct" : "Cascade";
+    modePill.classList.toggle("direct", currentRoutingMode === "direct");
+    modeMenu.querySelectorAll("[data-routing]").forEach(b =>
+      b.classList.toggle("active-item", b.dataset.routing === currentRoutingMode));
+  }
+
+  modePill.onclick = (e) => { e.stopPropagation(); modeMenu.hidden = !modeMenu.hidden; };
+  document.addEventListener("click", () => { modeMenu.hidden = true; });
+  modeMenu.querySelectorAll("[data-routing]").forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      modeMenu.hidden = true;
+      const mode = btn.dataset.routing;
+      if (mode === currentRoutingMode) return;
+      currentRoutingMode = mode;
+      renderRoutingMode();
+      // Persist on an existing chat; a chat created later from the hero
+      // picks the mode up at creation.
+      if (currentChatId) {
+        await api(`/api/chats/${currentChatId}`, { method: "PATCH", body: JSON.stringify({ routing_mode: mode }) });
+      }
+    };
+  });
+
   // --- chats ---
   const newChatDropdown = document.getElementById("new-chat-dropdown");
   document.getElementById("new-chat-btn").onclick = (e) => {
@@ -673,7 +717,9 @@
         return;
       }
       try {
-        const { id } = await api("/api/chats", { method: "POST", body: JSON.stringify({ mode: "builtin" }) });
+        const { id } = await api("/api/chats", {
+          method: "POST", body: JSON.stringify({ mode: "builtin", routing_mode: currentRoutingMode }),
+        });
         await refreshChatList();
         await openChat(id);
       } catch (err) {
@@ -760,7 +806,7 @@
       startBtn.disabled = true;
       try {
         const { id } = await api("/api/chats", {
-          method: "POST", body: JSON.stringify({ mode: "byom", models: chosen() }),
+          method: "POST", body: JSON.stringify({ mode: "byom", models: chosen(), routing_mode: currentRoutingMode }),
         });
         await refreshChatList();
         await openChat(id);
@@ -937,6 +983,8 @@
     history.replaceState(null, "", `/app?chat=${chatId}`);
     const chat = await api(`/api/chats/${chatId}`);
     currentChatMode = chat.mode;
+    currentRoutingMode = chat.routing_mode || "cascade";
+    renderRoutingMode();
     currentByomTiers = chat.byom_tiers || {};
     currentByomNeedsKey = chat.byom_needs_key || [];
     document.getElementById("chat-title").innerHTML =
@@ -1151,7 +1199,9 @@
     input.disabled = true;
 
     if (!currentChatId) {
-      const { id } = await api("/api/chats", { method: "POST", body: JSON.stringify({}) });
+      const { id } = await api("/api/chats", {
+        method: "POST", body: JSON.stringify({ routing_mode: currentRoutingMode }),
+      });
       currentChatId = id;
       history.replaceState(null, "", `/app?chat=${id}`);
       await refreshChatList();
@@ -1185,7 +1235,9 @@
       let finalEvent = null;
 
       await readSse(resp, (ev) => {
-        if (ev.type === "token") {
+        if (ev.type === "routing" && ev.direct) {
+          bubble.innerHTML = '<div class="thinking-dots"><span></span><span></span><span></span></div>';
+        } else if (ev.type === "token") {
           answer += ev.text;
           bubble.innerHTML = renderMarkdown(answer) + STREAM_CARET;
           messagesEl.scrollTop = messagesEl.scrollHeight;
