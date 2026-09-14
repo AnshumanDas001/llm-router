@@ -43,10 +43,14 @@ TIER_MODEL_LIST = [
     {
         "model_name": "frontier",
         "litellm_params": {
-            # Gemini Flash-Lite via Google AI Studio free tier: ~1000 req/day, 15 RPM.
-            # (gemini-3.6-flash is newer/preview and capped at only 20 req/day on free tier.)
-            # Check https://ai.google.dev/gemini-api/docs/models for current model ids.
-            "model": "gemini/gemini-3.5-flash-lite",
+            # Gemini 3.5 Flash via Google AI Studio. This replaced Flash-Lite,
+            # which the eval showed was *dominated* by the mid tier -- lower
+            # quality (0.991 vs 0.997), 4.7x the cost, 2x the latency -- so
+            # escalating to it bought a worse answer for more money. A
+            # frontier tier only earns its place by being stronger than mid;
+            # ~4x mid's price is the cost of that, and escalation is rare.
+            # Check https://ai.google.dev/gemini-api/docs/models for current ids.
+            "model": os.getenv("FRONTIER_MODEL", "gemini/gemini-3.5-flash"),
             "api_key": os.getenv("GEMINI_API_KEY"),
         },
     },

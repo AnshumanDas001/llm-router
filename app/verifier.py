@@ -73,6 +73,15 @@ def _verify_llm_judge(query: str, response_text: str, judge_model: str,
         # cut off (finish_reason "length", empty content) before ever
         # producing YES/NO.
         max_tokens=300,
+        # Those hidden reasoning tokens are billed as output and were the
+        # whole cost of the cheap tier: a measured $0.00016 per judge call
+        # against $0.00005 nominal, enough that "just use mid" beat the
+        # cascade outright. A YES/NO verdict on a short answer doesn't need
+        # deliberation; low effort cut a test call from 108 output tokens
+        # to 22 with the same verdict. drop_params lets non-reasoning judge
+        # models ignore the flag instead of rejecting the request.
+        reasoning_effort="low",
+        drop_params=True,
     )
     latency_ms = (time.perf_counter() - start) * 1000
 
