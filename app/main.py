@@ -761,6 +761,7 @@ KNOWN_PROVIDERS = [
     {"provider": "mistral", "label": "Mistral", "needs_key": True},
     {"provider": "deepseek", "label": "DeepSeek", "needs_key": True},
     {"provider": "together_ai", "label": "Together AI", "needs_key": True},
+    {"provider": "openrouter", "label": "OpenRouter (many providers, one key)", "needs_key": True},
     {"provider": "ollama", "label": "Ollama (local)", "needs_key": False},
 ]
 

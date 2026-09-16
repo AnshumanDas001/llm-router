@@ -355,6 +355,17 @@ reports/             Pareto chart, generated README charts
   to O(n²)" because both are about quicksort, though one is recall and the
   other is analysis. The structural overrides patch the worst of that; a
   learned difficulty model trained on the escalation log would do better.
+- **A FrugalGPT-style learned scorer was tried and does not work here.**
+  FrugalGPT replaces the LLM judge with a small regression model over
+  (query, answer) — near-free per call, which would have let the cheap tier
+  finally undercut mid. Trained on the eval set's 345 labelled pairs
+  (`scripts/train_scorer.py`), it reaches held-out ROC-AUC **0.66** and at
+  any threshold rejects right and wrong answers at about the same rate. The
+  ablation shows why: embeddings encode *topic*, not correctness — a right
+  and a wrong explanation of TCP vs UDP have cosine similarity 0.86. The
+  paper's scorer works on label-shaped tasks with thousands of examples;
+  open-domain correctness on 345 pairs isn't that. The code stays as a
+  documented negative result; the LLM judge remains the verifier.
 - **Calibration samples are small.** ~8 questions per difficulty band, so the
   0.80 gate is a coarse filter, not a precise measurement.
 - **Auth is project-grade, not production-grade.** bcrypt passwords and cookie
