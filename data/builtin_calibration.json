@@ -1,0 +1,48 @@
+{
+  "models": {
+    "cheap": "ollama/llama3.2:3b",
+    "mid": "openrouter/google/gemini-3.5-flash",
+    "frontier": "openrouter/deepseek/deepseek-r1"
+  },
+  "tiers": {
+    "cheap": {
+      "quality": {
+        "easy": 0.9473684210526315,
+        "medium": 0.8,
+        "hard": 0.7297297297297297
+      },
+      "cost": {
+        "easy": 0.0,
+        "medium": 0.0,
+        "hard": 0.0
+      },
+      "n_queries": 76
+    },
+    "mid": {
+      "quality": {
+        "easy": null,
+        "medium": null,
+        "hard": null
+      },
+      "cost": {
+        "easy": 0.002025,
+        "medium": 0.00435,
+        "hard": 0.009
+      },
+      "unmeasured": true
+    },
+    "frontier": {
+      "quality": {
+        "easy": null,
+        "medium": null,
+        "hard": null
+      },
+      "cost": {
+        "easy": 0.00069,
+        "medium": 0.00135,
+        "hard": 0.00267
+      },
+      "unmeasured": true
+    }
+  }
+}

@@ -24,7 +24,7 @@ DEFAULT_MAX_QUERIES = 25
 DIFFICULTIES = ("easy", "medium", "hard")
 
 
-def _load_automatic_queries(max_queries: int) -> list[dict]:
+def _load_automatic_queries(max_queries: int | None) -> list[dict]:
     """Stratified by difficulty, then interleaved.
 
     Stratified, because a single blended average can't answer the question
@@ -42,7 +42,9 @@ def _load_automatic_queries(max_queries: int) -> list[dict]:
     queries = json.loads(EVAL_QUERIES_PATH.read_text())
     automatic = [q for q in queries if q["eval_method"] != "llm_judge"]
 
-    per_difficulty = max(1, max_queries // len(DIFFICULTIES))
+    # None means every automatic query -- for a tier that costs nothing to
+    # measure, the whole set beats a sample.
+    per_difficulty = len(automatic) if max_queries is None else max(1, max_queries // len(DIFFICULTIES))
     by_difficulty = []
     for difficulty in DIFFICULTIES:
         pool = [q for q in automatic if q["difficulty"] == difficulty]
@@ -73,7 +75,8 @@ def _clean_error(exc: Exception) -> str:
 
 
 def calibrate_model(model_name: str, api_key: str | None,
-                     max_queries: int = DEFAULT_MAX_QUERIES) -> dict:
+                     max_queries: int | None = DEFAULT_MAX_QUERIES,
+                     call_params: dict | None = None) -> dict:
     """Returns {avg_quality, avg_cost, avg_latency_ms, n_queries, n_errors,
     n_rate_limited, quality_by_difficulty}. Never persists model_name or
     api_key itself -- caller decides what (if anything) to store."""
@@ -98,8 +101,12 @@ def calibrate_model(model_name: str, api_key: str | None,
             try:
                 start = time.perf_counter()
                 resp = litellm.completion(
-                    model=model_name, api_key=api_key,
+                    model=model_name,
                     messages=[{"role": "user", "content": q["query"]}],
+                    # Measure a built-in tier with the parameters it runs
+                    # with (reasoning effort, max_tokens, a local api_base);
+                    # BYOM gets provider defaults and the caller's key.
+                    **{"api_key": api_key, **(call_params or {})},
                 )
                 latency_ms = (time.perf_counter() - start) * 1000
                 text = resp.choices[0].message.content

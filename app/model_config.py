@@ -57,19 +57,50 @@ VERIFIER = os.getenv("VERIFIER", "auto")
 MID_MODEL = os.getenv("MID_MODEL", "groq/openai/gpt-oss-20b")
 FRONTIER_MODEL = os.getenv("FRONTIER_MODEL", "gemini/gemini-3.5-flash")
 
+# Reasoning effort for the mid tier's own answers. A thinking model as mid
+# is a trap without this: gemini-3.5-flash spent 720 reasoning tokens on a
+# two-sentence answer -- 94% of a $0.0069 bill -- and "minimal" gave the
+# same answer for $0.0005. Values are provider-specific ("minimal" is
+# Gemini; Groq's gpt-oss takes low/medium/high), so it's per-stack config.
+# Unset = provider default. Thinking is what the frontier tier is for.
+MID_REASONING_EFFORT = os.getenv("MID_REASONING_EFFORT") or None
+
+
+def _mid_params() -> dict:
+    params = {
+        "model": MID_MODEL,
+        # Without this, long answers were silently truncating mid-sentence
+        # (observed on 4 of the longest eval queries).
+        "max_tokens": 4096,
+    }
+    if MID_REASONING_EFFORT:
+        params["reasoning_effort"] = MID_REASONING_EFFORT
+        params["drop_params"] = True
+    return params
+
+
+# The model that judges the cheapest tier's answers on the built-in stack.
+# Unset = the tier above it, which is the natural choice until the mid tier
+# is expensive: a judge verdict reads ~450 tokens and writes one word, so
+# a small model does it well (gpt-oss-20b caught 94% of wrong cheap answers)
+# and the cascade's whole margin on easy/medium questions is the gap between
+# what a verdict costs and what a mid answer costs. With the judge tied to
+# mid that gap scales with mid's price and the cascade never wins; with a
+# $0.00004 judge in front of a $0.001 answer it does. BYOM stacks still use
+# their own next tier up.
+JUDGE_MODEL = os.getenv("JUDGE_MODEL") or None
+
 TIER_MODEL_LIST = [
     {"model_name": "cheap", "litellm_params": _cheap_params()},
-    {
-        "model_name": "mid",
-        "litellm_params": {
-            "model": MID_MODEL,
-            # Without this, long answers were silently truncating mid-sentence
-            # (observed on 4 of the longest eval queries).
-            "max_tokens": 4096,
-        },
-    },
+    {"model_name": "mid", "litellm_params": _mid_params()},
     {"model_name": "frontier", "litellm_params": {"model": FRONTIER_MODEL}},
 ]
+
+# Per-tier extra call parameters, for code paths that call litellm directly
+# rather than through the Router (calibration, the eval harness) and must
+# measure the tier as it actually runs.
+TIER_CALL_PARAMS = {t["model_name"]: {k: v for k, v in t["litellm_params"].items() if k != "model"}
+                    for t in TIER_MODEL_LIST}
 
 router = Router(model_list=TIER_MODEL_LIST)
 

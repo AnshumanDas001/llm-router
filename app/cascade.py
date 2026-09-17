@@ -23,7 +23,7 @@ import litellm
 from app import scorer
 from app.baseline_cost import estimate_cost_for_model
 from app.classifier import classify_initial_tier
-from app.model_config import TIER_MODEL_LIST, VERIFIER, router
+from app.model_config import JUDGE_MODEL, TIER_MODEL_LIST, VERIFIER, router
 from app.verifier import verify_response, verify_with_judge
 
 TIER_ORDER = ["cheap", "mid", "frontier"]
@@ -55,8 +55,19 @@ def _plan_sequence(initial_tier: str, available_tiers: list[str], skip_cheapest:
     return available_tiers[start:]
 
 
+# Errors that mean "this tier can't answer right now", not "this request is
+# bad": skip the tier and try the next one. Auth is here because a deploy
+# can legitimately leave a tier's key unset (no frontier key yet) and the
+# cascade should degrade to the tiers it has rather than 502.
+SKIPPABLE = (litellm.RateLimitError, litellm.APIConnectionError, litellm.AuthenticationError)
+
+
 def _why(exc: Exception) -> str:
-    return "rate limited" if isinstance(exc, litellm.RateLimitError) else "unreachable"
+    if isinstance(exc, litellm.RateLimitError):
+        return "rate limited"
+    if isinstance(exc, litellm.AuthenticationError):
+        return "no valid credentials"
+    return "unreachable"
 
 
 def learned_verifier_on(tier_models: dict | None) -> bool:
@@ -174,12 +185,7 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
     judge_model_for = {}
     cheapest_tier = available_tiers[0]
     if len(available_tiers) > 1 and cheapest_tier in tier_sequence:
-        judge_tier = available_tiers[1]
-        judge_model_for[cheapest_tier] = (
-            tier_models[judge_tier] if tier_models is not None else DEFAULT_TIER_MODELS[judge_tier],
-            (tier_api_keys or {}).get(judge_tier),
-            judge_tier,
-        )
+        judge_model_for[cheapest_tier] = judge_for(available_tiers, tier_models, tier_api_keys)
 
     total_cost = 0.0
     total_latency_ms = 0.0
@@ -200,7 +206,7 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
                 resp = router.completion(model=tier, messages=messages, **scorer.LOGPROB_PARAMS)
             else:
                 resp = _complete(tier, messages, tier_models, tier_api_keys)
-        except (litellm.RateLimitError, litellm.APIConnectionError) as exc:
+        except SKIPPABLE as exc:
             # This tier is temporarily down -- a quota, or a local model
             # that isn't running (the cheap tier is Ollama; on a box without
             # it, every easy question would otherwise fail outright). Skip
@@ -286,6 +292,18 @@ def _model_for(tier, tier_models):
     return tier_models[tier] if tier_models is not None else DEFAULT_TIER_MODELS[tier]
 
 
+def judge_for(available_tiers, tier_models, tier_api_keys):
+    """(model, api_key, label) that judges the cheapest tier, or None if
+    there's nothing above it to escalate to. Built-in stack: JUDGE_MODEL if
+    set, else the tier above; BYOM: always the user's tier above."""
+    if len(available_tiers) < 2:
+        return None
+    judge_tier = available_tiers[1]
+    if tier_models is None and JUDGE_MODEL:
+        return JUDGE_MODEL, None, "judge"
+    return _model_for(judge_tier, tier_models), (tier_api_keys or {}).get(judge_tier), judge_tier
+
+
 def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
                         tier_api_keys: dict | None = None,
                         difficulty_to_tier: dict | None = None,
@@ -317,10 +335,7 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
     judge_model_for = {}
     cheapest_tier = available_tiers[0]
     if len(available_tiers) > 1 and cheapest_tier in tier_sequence:
-        judge_tier = available_tiers[1]
-        judge_model_for[cheapest_tier] = (
-            _model_for(judge_tier, tier_models), (tier_api_keys or {}).get(judge_tier), judge_tier,
-        )
+        judge_model_for[cheapest_tier] = judge_for(available_tiers, tier_models, tier_api_keys)
 
     yield {"type": "routing", "difficulty": difficulty, "initial_tier": initial_tier,
            "direct": skip_cheapest}
@@ -356,7 +371,7 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
                         logprobs += chosen
                         entropy += ent
                     finish_reason = getattr(choice, "finish_reason", None) or finish_reason
-        except (litellm.RateLimitError, litellm.APIConnectionError) as exc:
+        except SKIPPABLE as exc:
             escalated = True
             escalation_reasons.append(f"{tier} unavailable ({_why(exc)}), skipped")
             yield {"type": "escalated", "from": tier, "reason": _why(exc)}

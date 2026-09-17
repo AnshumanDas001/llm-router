@@ -19,10 +19,16 @@ cheap/mid/frontier:
 - the LAST tier in the sequence never gets checked: there's nothing left
   to escalate to, so verifying it can't change the outcome.
 """
+import os
 import re
 import time
 
 import litellm
+
+# See MID_REASONING_EFFORT in model_config: "low" is right for gpt-oss (cut a
+# verdict from 108 output tokens to 22), a no-op on Gemini, where only
+# "minimal" actually stops the thinking.
+JUDGE_REASONING_EFFORT = os.getenv("JUDGE_REASONING_EFFORT", "low")
 
 REFUSAL_PATTERN = re.compile(
     r"\b(i cannot|i can'?t|i'm unable|i am unable|as an ai)\b", re.IGNORECASE
@@ -80,7 +86,7 @@ def _verify_llm_judge(query: str, response_text: str, judge_model: str,
         # deliberation; low effort cut a test call from 108 output tokens
         # to 22 with the same verdict. drop_params lets non-reasoning judge
         # models ignore the flag instead of rejecting the request.
-        reasoning_effort="low",
+        reasoning_effort=JUDGE_REASONING_EFFORT,
         drop_params=True,
     )
     latency_ms = (time.perf_counter() - start) * 1000

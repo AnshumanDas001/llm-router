@@ -27,6 +27,7 @@ from app.baseline_cost import estimate_cost_for_model, estimate_frontier_cost
 from app.calibration import DEFAULT_MAX_QUERIES, calibrate_model
 from app.cascade import (
     DEFAULT_TIER_MODELS,
+    judge_for,
     learned_verifier_on,
     AllTiersUnavailable,
     run_cascade,
@@ -985,7 +986,7 @@ def _judge_cost_estimate(tiers: list[str], tier_models: dict | None) -> float:
     one tier (nothing to escalate to, so nothing verifies)."""
     if len(tiers) < 2:
         return 0.0
-    judge_model = tier_models[tiers[1]] if tier_models else DEFAULT_TIER_MODELS[tiers[1]]
+    judge_model = judge_for(tiers, tier_models, None)[0]
     judge = estimate_cost_for_model(judge_model, *JUDGE_PROBE_TOKENS)
     if learned_verifier_on(tier_models):
         # The gate only sends its uncertain share of answers to the judge.
