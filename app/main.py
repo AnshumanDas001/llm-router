@@ -27,10 +27,12 @@ from app.baseline_cost import estimate_cost_for_model, estimate_frontier_cost
 from app.calibration import DEFAULT_MAX_QUERIES, calibrate_model
 from app.cascade import (
     DEFAULT_TIER_MODELS,
+    learned_verifier_on,
     AllTiersUnavailable,
     run_cascade,
     run_cascade_stream,
 )
+from app import scorer
 from app.classifier import classify_initial_tier
 from app.db import init_db, log_cascade
 from app.model_config import BUILTIN_CALIBRATION
@@ -332,6 +334,7 @@ def api_try(req: ClassifyRequest, response: Response, tl_demo: str | None = Cook
                         total_cost=event["total_cost"], total_latency_ms=event["total_latency_ms"],
                         tokens_in=event["tokens_in"], tokens_out=event["tokens_out"],
                         timestamp=datetime.now(timezone.utc).isoformat(),
+                        response_text=event["text"],
                     )
                 yield _sse(event)
         except AllTiersUnavailable:
@@ -528,6 +531,7 @@ def _finish_send(chat_id: int, user_id: int, content: str, result: dict,
         escalation_reasons=result["escalation_reasons"], total_cost=result["total_cost"],
         total_latency_ms=result["total_latency_ms"], tokens_in=result["tokens_in"],
         tokens_out=result["tokens_out"], timestamp=datetime.now(timezone.utc).isoformat(),
+        response_text=result["text"],
     )
     totals = chat_db.get_chat_totals(chat_id)
     return {
@@ -642,6 +646,7 @@ def api_send_message(chat_id: int, req: SendMessageRequest, user=Depends(get_cur
         escalation_reasons=result["escalation_reasons"], total_cost=result["total_cost"],
         total_latency_ms=result["total_latency_ms"], tokens_in=result["tokens_in"],
         tokens_out=result["tokens_out"], timestamp=datetime.now(timezone.utc).isoformat(),
+        response_text=result["text"],
     )
 
     totals = chat_db.get_chat_totals(chat_id)
@@ -688,6 +693,7 @@ def chat_completions(req: ChatRequest):
         tokens_in=result["tokens_in"],
         tokens_out=result["tokens_out"],
         timestamp=datetime.now(timezone.utc).isoformat(),
+        response_text=result["text"],
     )
 
     return {
@@ -966,13 +972,26 @@ def api_get_calibration(user=Depends(get_current_user)):
 JUDGE_PROBE_TOKENS = (450, 30)   # question + answer in; a low-effort YES/NO out
 
 
+SCORER_PROBE_TOKENS = (450, 150)  # a second cheap sample plus a 1-token self-check
+
+
 def _judge_cost_estimate(tiers: list[str], tier_models: dict | None) -> float:
-    """What one verdict costs: the second-cheapest configured tier priced
-    at a typical judge call. Zero if there's only one tier (nothing judges)."""
+    """What one verdict costs. With the LLM judge: the second-cheapest
+    configured tier priced at a typical judge call. With the learned
+    verifier: the extra *cheap*-tier calls it makes instead -- $0 on a
+    local model, and this is exactly what lets the routing policy send
+    easy/medium questions to the cheap tier on a stack where the judge
+    call alone used to cost more than mid's answer. Zero if there's only
+    one tier (nothing to escalate to, so nothing verifies)."""
     if len(tiers) < 2:
         return 0.0
     judge_model = tier_models[tiers[1]] if tier_models else DEFAULT_TIER_MODELS[tiers[1]]
-    return estimate_cost_for_model(judge_model, *JUDGE_PROBE_TOKENS)
+    judge = estimate_cost_for_model(judge_model, *JUDGE_PROBE_TOKENS)
+    if learned_verifier_on(tier_models):
+        # The gate only sends its uncertain share of answers to the judge.
+        return (estimate_cost_for_model(DEFAULT_TIER_MODELS[tiers[0]], *SCORER_PROBE_TOKENS)
+                + scorer.judge_fraction() * judge)
+    return judge
 
 
 def _tier_map_for(user_id: int, tier_models: dict | None) -> dict:

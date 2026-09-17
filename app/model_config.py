@@ -20,10 +20,26 @@ CHEAP_MODEL = os.getenv("CHEAP_MODEL", "ollama/llama3.2:3b")
 
 
 def _cheap_params() -> dict:
-    params = {"model": CHEAP_MODEL}
     if CHEAP_MODEL.startswith("ollama/"):
-        params["api_base"] = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
-    return params
+        # Talk to Ollama through its OpenAI-compatible endpoint rather than
+        # litellm's native ollama provider: the native one refuses to forward
+        # `logprobs`, and the learned verifier reads the cheap model's token
+        # confidence off exactly that. Cost stays $0 either way (litellm has
+        # no price for the model and the app treats unknown as free).
+        base = os.getenv("OLLAMA_API_BASE", "http://localhost:11434").rstrip("/")
+        return {"model": "openai/" + CHEAP_MODEL.split("/", 1)[1],
+                "api_base": base + "/v1", "api_key": "ollama"}
+    return {"model": CHEAP_MODEL}
+
+
+# How the cheapest tier's answer is checked before it ships:
+#   learned  the scorer in app/scorer.py (token confidence + a second cheap
+#            sample + cheap self-check). No judge call. Requires the trained
+#            model file; falls back to the judge if it's missing or the
+#            provider returns no logprobs.
+#   judge    the LLM judge on the next tier up, always.
+#   auto     learned when trained, judge otherwise (default).
+VERIFIER = os.getenv("VERIFIER", "auto")
 
 
 # Every tier is env-overridable with any litellm model string, so a deploy

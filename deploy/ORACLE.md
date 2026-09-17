@@ -139,6 +139,14 @@ Don't set `CHEAP_MODEL` to a model litellm can't price (Groq's
 `compound-mini`, for instance): it reports $0 per call and every cost
 figure in the app becomes fiction.
 
+If you do change `CHEAP_MODEL`, the learned gate in front of the judge
+(`data/answer_scorer.joblib`, trained on `llama3.2:3b`'s confidence profile)
+no longer applies. Either set `VERIFIER=judge` or retrain it on the box:
+`scripts/build_scorer_data.py` (samples every eval query from the new cheap
+model; ~1 h on a local model, minutes hosted) then `scripts/train_scorer.py`.
+The gate needs the cheap provider to return logprobs — Ollama and OpenRouter
+do, Groq doesn't — and falls back to the judge per-call if they're missing.
+
 ## Updating
 
 ```bash

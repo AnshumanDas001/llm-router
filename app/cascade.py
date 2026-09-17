@@ -15,13 +15,15 @@ verification strategy is decided by *position* in that sequence (see
 app/verifier.py), not by the literal tier name -- so this works the same
 way regardless of which tiers a user did or didn't configure.
 """
+import threading
 import time
 
 import litellm
 
+from app import scorer
 from app.baseline_cost import estimate_cost_for_model
 from app.classifier import classify_initial_tier
-from app.model_config import TIER_MODEL_LIST, router
+from app.model_config import TIER_MODEL_LIST, VERIFIER, router
 from app.verifier import verify_response, verify_with_judge
 
 TIER_ORDER = ["cheap", "mid", "frontier"]
@@ -55,6 +57,82 @@ def _plan_sequence(initial_tier: str, available_tiers: list[str], skip_cheapest:
 
 def _why(exc: Exception) -> str:
     return "rate limited" if isinstance(exc, litellm.RateLimitError) else "unreachable"
+
+
+def learned_verifier_on(tier_models: dict | None) -> bool:
+    """The learned scorer replaces the LLM judge only on the built-in stack.
+    It is trained on the built-in cheap model's confidence profile; a BYOM
+    model's logprobs are a different distribution and would need their own
+    training run, so BYOM keeps the judge."""
+    return VERIFIER != "judge" and tier_models is None and scorer.available()
+
+
+class _Sibling(threading.Thread):
+    """A second sample of the cheap tier, drawn concurrently with the one
+    the user sees, for the scorer's consistency features. On a local model
+    it costs nothing but the parallel compute; on a hosted cheap tier it
+    costs one more cheap answer, still well under a judge call."""
+
+    def __init__(self, tier, messages):
+        super().__init__(daemon=True)
+        self.tier, self.messages = tier, messages
+        self.text, self.cost = None, 0.0
+        self.start()
+
+    def run(self):
+        try:
+            resp = router.completion(model=self.tier, messages=self.messages)
+            self.text = resp.choices[0].message.content or ""
+            self.cost = resp._hidden_params.get("response_cost", 0.0) or 0.0
+        except Exception:
+            self.text = None   # scorer falls back to neutral consistency
+
+
+def _verify_learned(tier, messages, query, text, logprobs, entropy, finish_reason,
+                    sibling, difficulty, judge) -> dict:
+    """Score the cheap answer with the learned verifier; if the provider
+    returned no logprobs (dropped param), fall back to the LLM judge."""
+    if not logprobs:
+        judge_model, judge_api_key, judge_tier_label = judge
+        result = verify_with_judge(query, text, judge_model, judge_api_key, judge_tier_label)
+        result["reason"] = "no logprobs from cheap tier; " + result["reason"]
+        return result
+    start = time.perf_counter()
+    cost = 0.0
+    p_yes = 0.5
+    if scorer.USE_SELF_VERIFY:
+        spent = []
+
+        def complete(msgs, **params):
+            r = router.completion(model=tier, messages=msgs, **params)
+            spent.append(r._hidden_params.get("response_cost", 0.0) or 0.0)
+            return r
+
+        try:
+            p_yes = scorer.self_verify_p_yes(complete, query, text)
+        except Exception:
+            pass   # neutral value; the other signals still score
+        cost += sum(spent)
+    if sibling is not None:
+        sibling.join(timeout=120)
+        cost += sibling.cost
+    siblings = [sibling.text] if sibling is not None and sibling.text else []
+    result = scorer.verify_learned(
+        query, text, logprobs=logprobs, entropy=entropy, siblings=siblings,
+        self_verify_p_yes=p_yes, difficulty=difficulty, finish_reason=finish_reason,
+    )
+    if result["verdict"] == "unsure":
+        # The gate couldn't decide; this is the slice the judge still earns
+        # its cost on. Its verdict stands, prefixed so the log shows why
+        # a judge call happened at all.
+        judge_model, judge_api_key, judge_tier_label = judge
+        judged = verify_with_judge(query, text, judge_model, judge_api_key, judge_tier_label)
+        judged["reason"] = f"{result['reason']}; judge: {judged['reason']}"
+        cost += judged["cost"]
+        result = judged
+    result["cost"] = cost
+    result["latency_ms"] = (time.perf_counter() - start) * 1000
+    return result
 
 
 class AllTiersUnavailable(Exception):
@@ -111,10 +189,17 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
     final_tier = None
     final_usage = None
 
+    learned = learned_verifier_on(tier_models)
+
     for i, tier in enumerate(tier_sequence):
         start = time.perf_counter()
+        scored = learned and tier in judge_model_for
+        sibling = _Sibling(tier, messages) if scored and scorer.USE_SIBLING else None
         try:
-            resp = _complete(tier, messages, tier_models, tier_api_keys)
+            if scored:
+                resp = router.completion(model=tier, messages=messages, **scorer.LOGPROB_PARAMS)
+            else:
+                resp = _complete(tier, messages, tier_models, tier_api_keys)
         except (litellm.RateLimitError, litellm.APIConnectionError) as exc:
             # This tier is temporarily down -- a quota, or a local model
             # that isn't running (the cheap tier is Ollama; on a box without
@@ -138,7 +223,13 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
             break  # nothing left to escalate to; trust it unconditionally
 
         try:
-            if tier in judge_model_for:
+            if scored:
+                lp_content = getattr(resp.choices[0].logprobs, "content", None) if resp.choices[0].logprobs else None
+                logprobs, entropy = scorer.token_signals(lp_content)
+                verify_result = _verify_learned(
+                    tier, messages, query, text, logprobs, entropy,
+                    resp.choices[0].finish_reason, sibling, difficulty, judge_model_for[tier])
+            elif tier in judge_model_for:
                 judge_model, judge_api_key, judge_tier_label = judge_model_for[tier]
                 verify_result = verify_with_judge(query, text, judge_model, judge_api_key, judge_tier_label)
             else:
@@ -180,10 +271,11 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
     }
 
 
-def _stream_complete(tier, messages, tier_models, tier_api_keys):
+def _stream_complete(tier, messages, tier_models, tier_api_keys, scored=False):
     """Same dispatch as _complete, but asks the provider to stream."""
     if tier_models is None:
-        return router.completion(model=tier, messages=messages, stream=True)
+        params = scorer.LOGPROB_PARAMS if scored else {}
+        return router.completion(model=tier, messages=messages, stream=True, **params)
     return litellm.completion(
         model=tier_models[tier], messages=messages,
         api_key=(tier_api_keys or {}).get(tier), stream=True,
@@ -241,17 +333,29 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
     final_tier = None
     tokens_in = tokens_out = 0
 
+    learned = learned_verifier_on(tier_models)
+
     for i, tier in enumerate(tier_sequence):
         start = time.perf_counter()
         text_parts = []
+        scored = learned and tier in judge_model_for
+        sibling = _Sibling(tier, messages) if scored and scorer.USE_SIBLING else None
+        logprobs, entropy, finish_reason = [], [], None
         try:
             yield {"type": "tier_start", "tier": tier}
-            for chunk in _stream_complete(tier, messages, tier_models, tier_api_keys):
-                delta = chunk.choices[0].delta
-                piece = getattr(delta, "content", None)
+            for chunk in _stream_complete(tier, messages, tier_models, tier_api_keys, scored):
+                choice = chunk.choices[0]
+                piece = getattr(choice.delta, "content", None)
                 if piece:
                     text_parts.append(piece)
                     yield {"type": "token", "tier": tier, "text": piece}
+                if scored:
+                    lp = getattr(choice, "logprobs", None)
+                    if lp and getattr(lp, "content", None):
+                        chosen, ent = scorer.token_signals(lp.content)
+                        logprobs += chosen
+                        entropy += ent
+                    finish_reason = getattr(choice, "finish_reason", None) or finish_reason
         except (litellm.RateLimitError, litellm.APIConnectionError) as exc:
             escalated = True
             escalation_reasons.append(f"{tier} unavailable ({_why(exc)}), skipped")
@@ -276,7 +380,11 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
             break
 
         try:
-            if tier in judge_model_for:
+            if scored:
+                verify_result = _verify_learned(
+                    tier, messages, query, text, logprobs, entropy, finish_reason,
+                    sibling, difficulty, judge_model_for[tier])
+            elif tier in judge_model_for:
                 judge_model, judge_api_key, judge_tier_label = judge_model_for[tier]
                 verify_result = verify_with_judge(query, text, judge_model, judge_api_key, judge_tier_label)
             else:

@@ -4,12 +4,13 @@ Most LLM traffic doesn't need your most expensive model. This routes each
 request to the cheapest model that can actually handle it, checks the answer,
 and escalates only when the check fails.
 
-**On a 116-query run it cost 93% less than sending everything to the
-frontier model.** It also, honestly, cost about the same as sending everything
-to the mid-tier model — and the reason why is the most useful thing in this
-README (see [Strategy comparison](#strategy-comparison)).
+**On a 116-query run it cost 97% less than sending everything to the
+frontier model, with every graded answer correct.** It also, honestly, cost
+the same as sending everything to the mid-tier model — and the reason why is
+the most useful thing in this README (see
+[Strategy comparison](#strategy-comparison)).
 
-<img src="app/static/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only and mid-only over 116 queries: $0.03564 against $0.54365 frontier-only and $0.01834 mid-only" width="720">
+<img src="app/static/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only and mid-only over 116 queries: $0.02035 against $0.60659 frontier-only and $0.02045 mid-only" width="720">
 
 ---
 
@@ -119,9 +120,27 @@ verification, and *to* one that can. Fed the built-in tiers' own measurements
 it derives `easy→cheap, medium→cheap, hard→mid`; give it a cheap tier that
 clears 0.80 on hard and it derives `hard→cheap`.
 
-**Step 3 — verify, then escalate.** The cheapest tier's answer is judged by the
-tier above it; later tiers get a free structural check. Escalation happens only
-on failure.
+**Step 3 — verify, then escalate.** The cheapest tier's answer goes through a
+learned gate before anything is paid for. The gate is a logistic regression
+over signals the cheap model gives away for free — its own token logprobs
+(a model that's wrong is usually less sure of it), a second sample of the
+same question (wrong answers are unstable; right ones agree, especially on
+the final number), and its own one-token "is this correct?" self-check with
+P(YES) read off the logprobs. The scorer's $P(\text{correct})$ then decides:
+
+| scorer says | what happens | cost |
+|---|---|---|
+| $P \ge 0.9$ | ship it | $0 |
+| $P < 0.3$ | escalate | $0 |
+| otherwise | ask the LLM judge on the tier above | one judge call |
+
+This is FrugalGPT's idea (a learned scorer instead of an LLM judge) with one
+correction from measurement: the scorer alone catches about half of the
+wrong answers, the judge catches 94%, so the scorer is not allowed to
+replace the judge — only to decide when the judge is needed. Measured on the
+eval, it decides 37% of the time, and the answers it ships on its own were
+100% correct. Later tiers get a free structural check; the last tier is never
+checked.
 
 ```mermaid
 flowchart LR
@@ -141,12 +160,14 @@ Three things make this cheap rather than expensive:
 
 - **Hard questions skip the cheap tier entirely.** Spending a doomed cheap call
   before escalating is worse than not trying.
-- **Only the cheapest tier gets a real judge call, at low reasoning effort.**
-  Verification cost scales with response length, and later tiers rarely fail;
-  judging every tier once cost 82% of total spend. Then the judge itself
-  turned out to be the cheap tier's entire cost — gpt-oss emits hidden
-  reasoning tokens billed as output, $0.00016 per verdict against $0.00005
-  nominal. `reasoning_effort="low"` cut that 4× with identical verdicts.
+- **Only the cheapest tier gets a real judge call, at low reasoning effort,
+  and only when the gate can't decide.** Verification cost scales with
+  response length, and later tiers rarely fail; judging every tier once cost
+  82% of total spend. Then the judge itself turned out to be the cheap
+  tier's entire cost — gpt-oss emits hidden reasoning tokens billed as
+  output, $0.00016 per verdict against $0.00005 nominal.
+  `reasoning_effort="low"` cut that 4× with identical verdicts, and the
+  learned gate then removed 37% of the remaining calls.
 - **The last tier is never checked.** There's nothing left to escalate to.
 
 ### How well does the routing itself do?
@@ -164,14 +185,15 @@ And where the traffic landed over 116 routed queries:
 ```mermaid
 pie showData
     title Final tier used
-    "cheap" : 48
-    "mid" : 67
-    "frontier" : 1
+    "cheap" : 43
+    "mid" : 73
 ```
 
-13 of those 116 escalated: 12 because the judge caught a real error in the cheap
-answer, 1 because mid was rate-limited and frontier caught it. Everything else
-was answered where it started.
+17 of those 116 escalated: 12 because the judge caught a real error in the
+cheap answer, 5 because the gate rejected one outright without a judge call.
+Everything else was answered where it started, and the 76 answers with an
+objective check were all correct — including all 30 that shipped from the
+cheap tier (`scripts/score_cascade_log.py`).
 
 ### Strategy comparison
 
@@ -180,33 +202,36 @@ comparison is apples-to-apples:
 
 | strategy | total cost | per query | vs frontier |
 |---|---|---|---|
-| frontier for everything (`gemini-3.5-flash`) | $0.54365 | $0.00469 | — |
-| mid for everything (`gpt-oss-20b`) | $0.01834 | $0.00016 | 97% cheaper |
-| **ThriftLLM cascade** | **$0.03564** | **$0.00031** | **93% cheaper** |
+| frontier for everything (`gemini-3.5-flash`) | $0.60659 | $0.00523 | — |
+| mid for everything (`gpt-oss-20b`) | $0.02045 | $0.00018 | 97% cheaper |
+| **ThriftLLM cascade** | **$0.02035** | **$0.00018** | **97% cheaper** |
 
 Read that carefully: **a single good mid-tier model also beats frontier by
-97%, and beats the cascade.** The question a router has to answer is not
-"cheaper than the most expensive option" — it's "cheaper than the obvious
-alternative", and here the honest result is:
+97%, and the cascade ties it** — $0.02035 vs $0.02045. The question a router
+has to answer is not "cheaper than the most expensive option" — it's
+"cheaper than the obvious alternative", and here the honest result is a tie,
+for two reasons that the numbers pin down exactly:
 
-- **Under normal operation (115 of 116 queries) the cascade ties mid-only:**
-  $0.01803 vs $0.01776. The expected-cost model predicts a ~15% edge for the
-  cascade; the measurement says a tie. The gap is the judge's false
-  positives — it escalated 24% of medium questions where calibration says
-  15% actually fail — and the fact that the escalated questions are the
-  expensive ones. Either way the effect is within noise, because the cheap
-  tier only ever touches the 20% of spend that isn't hard questions.
 - **The hard questions are 80% of mid-only's spend, and the cascade sends
   them to mid too.** That is the real ceiling. Beating mid-only meaningfully
   needs a cheap tier that clears 0.80 on hard, and every candidate reachable
   from this stack was measured and fell short: `llama3:8b` scored 0.50, and
   every hosted model at list price costs more than gpt-oss-20b, which is one
   of the cheapest capable models available. There is nothing beneath it.
-- **The other $0.0176 was one query.** Groq rate-limited mid on a hard
-  question; the cascade fell through to frontier, which wrote a 1,953-token
-  answer. Mid-only would have paid $0.00059 — if mid had been up. It wasn't.
-  That's the price of an answer instead of an error, and it's also a real
-  cost tail: one availability fallback doubled the run's spend.
+- **On the other 20%, escalations cost what the judge saves.** 60 queries
+  started at the cheap tier; 17 escalated (28%), and an escalated question
+  pays a full mid answer — the *long* ones, $0.00016 each against $0.00007
+  for a typical mid answer at that difficulty. Judge on 63% of answers plus
+  mid on 28% of them comes to about what mid-only pays for the same
+  questions. The learned gate cut the judge calls by 37% and moved the
+  total by 0.5%, which is how we know the judge was never the whole cost.
+  Removing it entirely would still be a tie; the escalations are the price
+  of a cheap tier that's wrong 15% of the time on medium questions.
+
+One run earlier in this project spent $0.0176 on a single query when Groq
+rate-limited mid and the cascade fell through to frontier for a 1,953-token
+answer. That availability fallback is still in place — an answer instead of
+an error — and it is a real cost tail: one fallback can double a run.
 
 Because of this, routing mode is a per-chat (and per-API-request) choice:
 `cascade` as described, or `direct`, which skips the cheapest tier and its
@@ -216,9 +241,9 @@ because it never waits on the slow local model or the verdict. Cascade is the
 right default when mid is expensive or every cheap answer must be checked;
 direct is the right default here.
 
-So what the cascade buys over mid-only is not money, on this stack. It's the
-judge catching 12 wrong cheap answers before they shipped, and an answer when
-the mid provider is down. It *would* buy money on a stack where mid is a
+So what the cascade buys over mid-only is not money, on this stack. It's
+17 wrong cheap answers caught before they shipped — at 100% graded accuracy
+on what did ship — and an answer when the mid provider is down. It *would* buy money on a stack where mid is a
 typical $2–10/M model rather than one of the cheapest capable models
 available; the saving is bounded by the cheap/mid price gap, and here that gap
 is tiny.
@@ -328,6 +353,9 @@ app/
   classifier.py      embedding difficulty classifier (no LLM call)
   cascade.py         classify -> generate -> verify -> escalate
   verifier.py        judge call for the cheapest tier, structural check after
+  scorer.py          learned gate in front of the judge (logprobs, consistency,
+                     self-check); trained by scripts/train_scorer.py on data
+                     from scripts/build_scorer_data.py
   routing_policy.py  turns calibration scores into a routing map
   calibration.py     measures a model across easy/medium/hard
   key_vault.py       opt-in encryption for stored provider keys
@@ -355,17 +383,25 @@ reports/             Pareto chart, generated README charts
   to O(n²)" because both are about quicksort, though one is recall and the
   other is analysis. The structural overrides patch the worst of that; a
   learned difficulty model trained on the escalation log would do better.
-- **A FrugalGPT-style learned scorer was tried and does not work here.**
-  FrugalGPT replaces the LLM judge with a small regression model over
-  (query, answer) — near-free per call, which would have let the cheap tier
-  finally undercut mid. Trained on the eval set's 345 labelled pairs
-  (`scripts/train_scorer.py`), it reaches held-out ROC-AUC **0.66** and at
-  any threshold rejects right and wrong answers at about the same rate. The
-  ablation shows why: embeddings encode *topic*, not correctness — a right
-  and a wrong explanation of TCP vs UDP have cosine similarity 0.86. The
-  paper's scorer works on label-shaped tasks with thousands of examples;
-  open-domain correctness on 345 pairs isn't that. The code stays as a
-  documented negative result; the LLM judge remains the verifier.
+- **The learned scorer cannot replace the judge, only gate it.** FrugalGPT
+  replaces the LLM judge with a learned scorer outright. Two attempts here:
+  a scorer over sentence embeddings of (query, answer) reached held-out
+  ROC-AUC **0.66** — embeddings encode topic, not correctness; a right and a
+  wrong explanation of TCP vs UDP have cosine similarity 0.86. Replacing
+  the text features with the cheap model's own logprobs, a second sample,
+  and a self-check reached **0.80** (0.85 on objectively-graded rows), from
+  288 answers to 116 questions. That is enough to be sure about a third of
+  answers and not enough to be the verifier: on the same answers the LLM
+  judge catches 94% of wrong ones, the scorer about half. It's shipped as
+  the gate described in Step 3, trained for the built-in cheap model only —
+  a different model's confidence is a different distribution, so BYOM
+  stacks keep the judge until `scripts/build_scorer_data.py` has been run
+  against theirs.
+- **The cheap tier is slow locally.** A 3B model on a laptop takes 5–15 s
+  per answer, and the gate adds a parallel second sample (~25% slower) and
+  a one-token self-check. A cheap answer averaged 13 s in the run above
+  against 4.5 s at mid. On a hosted cheap model this is a non-issue; on
+  local Ollama, `direct` mode is the faster choice.
 - **Calibration samples are small.** ~8 questions per difficulty band, so the
   0.80 gate is a coarse filter, not a precise measurement.
 - **Auth is project-grade, not production-grade.** bcrypt passwords and cookie

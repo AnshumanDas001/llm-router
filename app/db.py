@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS cascade_log (
     total_latency_ms REAL,
     tokens_in INTEGER,
     tokens_out INTEGER,
-    timestamp TEXT NOT NULL
+    timestamp TEXT NOT NULL,
+    response_text TEXT
 );
 """
 
@@ -74,6 +75,13 @@ def get_conn():
 def init_db():
     with get_conn() as conn:
         conn.executescript(SCHEMA)
+        # Added after the table existed in deployed databases: the shipped
+        # answer, so scripts/score_cascade_log.py can grade what the router
+        # actually sent back, not just what it cost.
+        try:
+            conn.execute("ALTER TABLE cascade_log ADD COLUMN response_text TEXT")
+        except Exception:
+            pass   # already there
         conn.commit()
 
 
@@ -127,14 +135,15 @@ def log_eval_score(query_id: str, tier: str, eval_method: str, score: float,
 
 def log_cascade(query: str, difficulty: str, initial_tier: str, final_tier: str,
                  escalated: bool, escalation_reasons: list[str], total_cost: float,
-                 total_latency_ms: float, tokens_in: int, tokens_out: int, timestamp: str):
+                 total_latency_ms: float, tokens_in: int, tokens_out: int, timestamp: str,
+                 response_text: str | None = None):
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO cascade_log (query, difficulty, initial_tier, final_tier, escalated, "
-            "escalation_reasons, total_cost, total_latency_ms, tokens_in, tokens_out, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "escalation_reasons, total_cost, total_latency_ms, tokens_in, tokens_out, timestamp, "
+            "response_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (query, difficulty, initial_tier, final_tier, int(escalated),
              " | ".join(escalation_reasons), total_cost, total_latency_ms,
-             tokens_in, tokens_out, timestamp),
+             tokens_in, tokens_out, timestamp, response_text),
         )
         conn.commit()
