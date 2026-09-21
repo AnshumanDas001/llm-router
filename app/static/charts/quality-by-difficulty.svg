@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 390" width="720" height="390" role="img" aria-label="Answer quality by question difficulty">
 <text x="0.0" y="22.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="15" fill="#9b9b9b" text-anchor="start" font-weight="600">Answer quality by question difficulty</text>
-<text x="0.0" y="38.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="11.5" fill="#767676" text-anchor="start" font-weight="400">115-query eval set - the cheap tier holds up until questions get hard</text>
+<text x="0.0" y="38.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="11.5" fill="#767676" text-anchor="start" font-weight="400">from calibration on the eval set - what the routing policy sees</text>
 <line x1="54" y1="336.0" x2="570" y2="336.0" stroke="#8884" stroke-width="1"/>
 <text x="45.0" y="340.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="11" fill="#767676" text-anchor="end" font-weight="400">0.0</text>
 <line x1="54" y1="282.4" x2="570" y2="282.4" stroke="#8884" stroke-width="1"/>
@@ -16,26 +16,26 @@
 <line x1="54" y1="121.6" x2="570" y2="121.6" stroke="#e0a020" stroke-width="1.5" stroke-dasharray="5 4"/>
 <text x="578.0" y="125.6" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="11" fill="#e0a020" text-anchor="start" font-weight="600">0.80 routing</text>
 <text x="578.0" y="138.6" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="11" fill="#e0a020" text-anchor="start" font-weight="600">threshold</text>
-<rect x="81.4" y="77.0" width="36.1" height="259.0" rx="2" fill="#3987e5"/>
-<text x="99.4" y="71.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">0.97</text>
+<rect x="81.4" y="96.2" width="36.1" height="239.8" rx="2" fill="#3987e5"/>
+<text x="99.4" y="90.2" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">0.89</text>
 <rect x="120.5" y="68.0" width="36.1" height="268.0" rx="2" fill="#d95926"/>
 <text x="138.5" y="62.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">1.00</text>
 <rect x="159.5" y="68.0" width="36.1" height="268.0" rx="2" fill="#199e70"/>
 <text x="177.6" y="62.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">1.00</text>
 <text x="140.0" y="358.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="12.5" fill="#9b9b9b" text-anchor="middle" font-weight="600">easy</text>
-<rect x="253.4" y="107.8" width="36.1" height="228.2" rx="2" fill="#3987e5"/>
-<text x="271.4" y="101.8" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">0.85</text>
-<rect x="292.5" y="70.5" width="36.1" height="265.5" rx="2" fill="#d95926"/>
-<text x="310.5" y="64.5" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">0.99</text>
+<rect x="253.4" y="81.4" width="36.1" height="254.6" rx="2" fill="#3987e5"/>
+<text x="271.4" y="75.4" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">0.95</text>
+<rect x="292.5" y="68.0" width="36.1" height="268.0" rx="2" fill="#d95926"/>
+<text x="310.5" y="62.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">1.00</text>
 <rect x="331.5" y="68.0" width="36.1" height="268.0" rx="2" fill="#199e70"/>
 <text x="349.6" y="62.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">1.00</text>
 <text x="312.0" y="358.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="12.5" fill="#9b9b9b" text-anchor="middle" font-weight="600">medium</text>
-<rect x="425.4" y="165.0" width="36.1" height="171.0" rx="2" fill="#3987e5"/>
-<text x="443.4" y="159.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">0.64</text>
+<rect x="425.4" y="118.7" width="36.1" height="217.3" rx="2" fill="#3987e5"/>
+<text x="443.4" y="112.7" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">0.81</text>
 <rect x="464.5" y="68.0" width="36.1" height="268.0" rx="2" fill="#d95926"/>
 <text x="482.5" y="62.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">1.00</text>
-<rect x="503.5" y="72.5" width="36.1" height="263.5" rx="2" fill="#199e70"/>
-<text x="521.6" y="66.5" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">0.98</text>
+<rect x="503.5" y="68.0" width="36.1" height="268.0" rx="2" fill="#199e70"/>
+<text x="521.6" y="62.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="10.5" fill="#9b9b9b" text-anchor="middle" font-weight="400">1.00</text>
 <text x="484.0" y="358.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="12.5" fill="#9b9b9b" text-anchor="middle" font-weight="600">hard</text>
 <line x1="54" y1="336" x2="570" y2="336" stroke="#767676" stroke-width="1"/>
 <rect x="590" y="160.6" width="11" height="11" rx="2" fill="#3987e5"/>

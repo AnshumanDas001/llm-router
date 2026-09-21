@@ -1,16 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 250" width="720" height="250" role="img" aria-label="Cascade cost versus frontier-only and mid-only">
 <text x="0.0" y="22.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="15" fill="#9b9b9b" text-anchor="start" font-weight="600">What the cascade actually cost</text>
-<text x="0.0" y="38.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="11.5" fill="#767676" text-anchor="start" font-weight="400">116 routed queries, measured - same tokens priced three ways</text>
+<text x="0.0" y="38.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="11.5" fill="#767676" text-anchor="start" font-weight="400">116 routed queries, measured - alternatives priced from each model's own calibrated per-question cost</text>
 <rect x="150" y="56" width="428.6" height="30" rx="3" fill="#199e70"/>
 <text x="138.0" y="75.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="12.5" fill="#9b9b9b" text-anchor="end" font-weight="600">frontier-only</text>
-<text x="588.6" y="75.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="12" fill="#9b9b9b" text-anchor="start" font-weight="400">$0.60659</text>
-<rect x="150" y="102" width="14.4" height="30" rx="3" fill="#d95926"/>
+<text x="588.6" y="75.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="12" fill="#9b9b9b" text-anchor="start" font-weight="400">$0.73475</text>
+<rect x="150" y="102" width="131.5" height="30" rx="3" fill="#d95926"/>
 <text x="138.0" y="121.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="12.5" fill="#9b9b9b" text-anchor="end" font-weight="600">mid-only</text>
-<text x="174.4" y="121.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="12" fill="#9b9b9b" text-anchor="start" font-weight="400">$0.02045</text>
-<rect x="150" y="148" width="14.4" height="30" rx="3" fill="#3987e5"/>
+<text x="291.5" y="121.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="12" fill="#9b9b9b" text-anchor="start" font-weight="400">$0.22548</text>
+<rect x="150" y="148" width="77.1" height="30" rx="3" fill="#3987e5"/>
 <text x="138.0" y="167.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="12.5" fill="#9b9b9b" text-anchor="end" font-weight="600">cascade</text>
-<text x="174.4" y="167.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="12" fill="#9b9b9b" text-anchor="start" font-weight="400">$0.02035</text>
-<text x="150.0" y="208.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#3987e5" text-anchor="start" font-weight="700">97% under frontier-only</text>
-<text x="370.0" y="208.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#9b9b9b" text-anchor="start" font-weight="600">0% cheaper than mid-only</text>
-<text x="150.0" y="228.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="11" fill="#767676" text-anchor="start" font-weight="400">routed - cheap: 43  mid: 73  frontier: 0   |   escalated: 17</text>
+<text x="237.1" y="167.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="12" fill="#9b9b9b" text-anchor="start" font-weight="400">$0.13214</text>
+<text x="150.0" y="208.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#3987e5" text-anchor="start" font-weight="700">82% under frontier-only</text>
+<text x="370.0" y="208.0" font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif" font-size="13" fill="#9b9b9b" text-anchor="start" font-weight="600">41% cheaper than mid-only</text>
+<text x="150.0" y="228.0" font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace" font-size="11" fill="#767676" text-anchor="start" font-weight="400">routed - cheap: 90  mid: 26  frontier: 0   |   escalated: 26</text>
 </svg>

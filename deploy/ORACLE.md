@@ -84,12 +84,15 @@ nano .env
 Fill in:
 
 ```dotenv
-GROQ_API_KEY=...
-GEMINI_API_KEY=...
+OPENROUTER_API_KEY=...       # cheap, mid and frontier tiers; needs a few $ of credit
+GROQ_API_KEY=...             # the judge; free tier is enough
 ROUTER_SECRET_KEY=...        # python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 SITE_ADDRESS=129-146-1-2.sslip.io    # your public IP, dots -> dashes
-CHEAP_MODEL=                          # leave blank: see "The cheap tier" below
+COOKIE_SECURE=1
 ```
+
+Leave `ALLOW_ANON_V1` unset on a public box: it opens the OpenAI-compatible
+endpoint to anyone, and every request there spends your OpenRouter credit.
 
 `ROUTER_SECRET_KEY` encrypts any provider keys users choose to save. Generate
 it once and never change it casually — rotating it makes saved keys
@@ -114,38 +117,37 @@ first request to the hostname; give it a minute.
 Open `https://129-146-1-2.sslip.io` (your address). You should get the
 landing page with a valid padlock.
 
-## 5. The cheap tier
+## 5. What it costs to run
 
-With `CHEAP_MODEL` blank and no Ollama running, the cascade detects the cheap
-tier is unreachable and starts every request at mid. **This is fine.** On the
-built-in stack, measured over 116 queries, the cascade and mid-only cost the
-same — the mid model is cheap enough that the cheap tier can't undercut it
-(see the README's strategy comparison). Skipping it is also faster.
+The built-in stack is entirely hosted, so the VM does no model work — it
+classifies, verifies and streams. Measured on the eval set:
 
-If you want the full three-tier cascade visible in the demo anyway, A1 has
-the memory to run Ollama:
+| | per question |
+|---|---|
+| answered by the cheap tier (78% of questions) | ~$0.00006 including the judge verdict |
+| escalated to mid (22%) | ~$0.005 |
+| blended | ~$0.0011 |
 
-```bash
-docker compose --profile ollama up -d --build
-docker compose exec ollama ollama pull llama3.2:3b
-```
+The app caps signed-in accounts at `DAILY_PROMPT_LIMIT` prompts per day
+(default 10) and the signed-out demo at `DEMO_PROMPT_LIMIT` per device
+(default 3), so a stranger can cost you at most a few cents. `docker compose
+logs app` shows every cascade with its cost; the Sessions page totals them.
 
-Then send a few prompts through `/try` and read the latency in the route
-line. On a laptop the 3B model averaged 10 s; on A1 CPU expect longer. If
-it's over ~15 s the demo will feel broken — drop the profile and let
-requests start at mid.
+Ollama is no longer needed. If you want the cheap tier local anyway (A1 has
+the memory for a 3B model), `docker compose --profile ollama up -d --build`,
+`docker compose exec ollama ollama pull llama3.2:3b`, set
+`CHEAP_MODEL=ollama/llama3.2:3b`, then run `scripts/calibrate_builtin.py`
+inside the container so routing uses that model's real numbers. Expect
+10 s+ per cheap answer on A1's CPU; `direct` mode skips it.
 
-Don't set `CHEAP_MODEL` to a model litellm can't price (Groq's
-`compound-mini`, for instance): it reports $0 per call and every cost
-figure in the app becomes fiction.
+If you change `CHEAP_MODEL` and want the learned gate in front of the judge
+(`VERIFIER=auto`), retrain it for that model: `scripts/build_scorer_data.py`
+then `scripts/train_scorer.py`. On the default stack the judge is cheap
+enough that the gate isn't worth its own calls, so it's off.
 
-If you do change `CHEAP_MODEL`, the learned gate in front of the judge
-(`data/answer_scorer.joblib`, trained on `llama3.2:3b`'s confidence profile)
-no longer applies. Either set `VERIFIER=judge` or retrain it on the box:
-`scripts/build_scorer_data.py` (samples every eval query from the new cheap
-model; ~1 h on a local model, minutes hosted) then `scripts/train_scorer.py`.
-The gate needs the cheap provider to return logprobs — Ollama and OpenRouter
-do, Groq doesn't — and falls back to the judge per-call if they're missing.
+Don't set a tier to a model litellm can't price (Groq's `compound-mini`,
+for instance): it reports $0 per call and every cost figure in the app
+becomes fiction.
 
 ## Updating
 
@@ -169,9 +171,10 @@ docker compose cp app:/app/logs/router.db ./router-backup-$(date +%F).db
 - **Rate limiting.** Nothing limits login attempts or the `/try` cap beyond a
   cookie. Cheapest fix: put Cloudflare's free tier in front (requires a
   domain) or build Caddy with the `caddy-ratelimit` plugin via `xcaddy`.
-- **Memory.** `docker stats` should show the app around 1 GB. If it climbs
-  toward the 2 GB limit under load, that's concurrent cascades holding
-  response buffers — expected, and the limit will contain it.
+- **Memory.** `docker stats` should show the app around 1 GB (the embedding
+  classifier). If it climbs toward the 2 GB limit under load, that's
+  concurrent cascades holding response buffers — expected, and the limit
+  will contain it.
 
 ## Troubleshooting
 

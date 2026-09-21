@@ -11,12 +11,14 @@ from litellm import Router
 
 load_dotenv()
 
-# The cheap tier is the one most likely to change between environments: a
-# local Ollama model on a laptop, but on a cloud box a hosted small model is
-# usually faster and the calibration re-derives the routing map either way.
-# CHEAP_MODEL takes any litellm string; provider keys come from the usual
-# env vars (GROQ_API_KEY etc.), which litellm reads on its own.
-CHEAP_MODEL = os.getenv("CHEAP_MODEL", "ollama/llama3.2:3b")
+# Every tier is env-overridable with any litellm model string; provider keys
+# come from the usual env vars (OPENROUTER_API_KEY, GROQ_API_KEY, ...), which
+# litellm reads on its own. The defaults are the measured built-in stack --
+# see README "Strategy comparison" for why these four and not the first
+# four that were tried. A local Ollama model works as the cheap tier too
+# (CHEAP_MODEL=ollama/llama3.2:3b); the routing map is re-derived from
+# calibration either way.
+CHEAP_MODEL = os.getenv("CHEAP_MODEL", "openrouter/meta-llama/llama-3.1-8b-instruct")
 
 
 def _cheap_params() -> dict:
@@ -45,7 +47,7 @@ def _cheap_params() -> dict:
 #            provider returns no logprobs.
 #   judge    the LLM judge on the next tier up, always.
 #   auto     learned when trained, judge otherwise (default).
-VERIFIER = os.getenv("VERIFIER", "auto")
+VERIFIER = os.getenv("VERIFIER", "judge")
 
 
 # Every tier is env-overridable with any litellm model string, so a deploy
@@ -53,15 +55,14 @@ VERIFIER = os.getenv("VERIFIER", "auto")
 # by litellm from the standard env vars (GROQ_API_KEY, GEMINI_API_KEY,
 # OPENROUTER_API_KEY, ...), so nothing here needs to pass one explicitly.
 #
-# Defaults are the measured built-in stack. Notes on the choices:
-#   mid      gpt-oss-20b on Groq. The same model via OpenRouter
-#            (openrouter/openai/gpt-oss-20b) prices ~2.3x lower per answer
-#            and makes the judge call 2.5x cheaper.
-#   frontier gemini-3.5-flash replaced flash-lite, which the eval showed was
-#            *dominated* by mid (lower quality, 4.7x cost, 2x latency), so
-#            escalating to it bought a worse answer for more money.
-MID_MODEL = os.getenv("MID_MODEL", "groq/openai/gpt-oss-20b")
-FRONTIER_MODEL = os.getenv("FRONTIER_MODEL", "gemini/gemini-3.5-flash")
+# Notes on the choices:
+#   mid      gemini-3.5-flash through OpenRouter (Google's own free tier is
+#            capped at 20 requests/day). Runs with thinking off, below.
+#   frontier deepseek-r1: only reached when mid fails its structural check
+#            or is rate-limited. Reasons for thousands of tokens; ~3x mid's
+#            price and a minute or more per answer.
+MID_MODEL = os.getenv("MID_MODEL", "openrouter/google/gemini-3.5-flash")
+FRONTIER_MODEL = os.getenv("FRONTIER_MODEL", "openrouter/deepseek/deepseek-r1")
 
 # Reasoning effort for the mid tier's own answers. A thinking model as mid
 # is a trap without this: gemini-3.5-flash spent 720 reasoning tokens on a
@@ -69,7 +70,7 @@ FRONTIER_MODEL = os.getenv("FRONTIER_MODEL", "gemini/gemini-3.5-flash")
 # same answer for $0.0005. Values are provider-specific ("minimal" is
 # Gemini; Groq's gpt-oss takes low/medium/high), so it's per-stack config.
 # Unset = provider default. Thinking is what the frontier tier is for.
-MID_REASONING_EFFORT = os.getenv("MID_REASONING_EFFORT") or None
+MID_REASONING_EFFORT = os.getenv("MID_REASONING_EFFORT", "minimal") or None
 
 
 def _mid_params() -> dict:
@@ -94,12 +95,15 @@ def _mid_params() -> dict:
 # mid that gap scales with mid's price and the cascade never wins; with a
 # $0.00004 judge in front of a $0.001 answer it does. BYOM stacks still use
 # their own next tier up.
-JUDGE_MODEL = os.getenv("JUDGE_MODEL") or None
+JUDGE_MODEL = os.getenv("JUDGE_MODEL", "groq/openai/gpt-oss-20b") or None
 
 TIER_MODEL_LIST = [
     {"model_name": "cheap", "litellm_params": _cheap_params()},
     {"model_name": "mid", "litellm_params": _mid_params()},
-    {"model_name": "frontier", "litellm_params": {"model": FRONTIER_MODEL}},
+    # A reasoning frontier needs headroom: DeepSeek R1 spent 3,400 thinking
+    # tokens on a 330-token answer and, at the provider default, sometimes
+    # ran out before saying anything.
+    {"model_name": "frontier", "litellm_params": {"model": FRONTIER_MODEL, "max_tokens": 16000}},
 ]
 
 # Per-tier extra call parameters, for code paths that call litellm directly
@@ -112,28 +116,22 @@ router = Router(model_list=TIER_MODEL_LIST)
 
 
 
-# What the routing policy needs to know about the built-in tiers, measured
-# on the 115-query eval set (scripts/eval_summary.py, plus per-band cost from
-# eval_responses). BYOM tiers get the same numbers from calibration; these
-# are the built-in stack's equivalent, stated once here because the eval
-# database isn't shipped with the app.
-#
-# The frontier row is computed, not measured: gemini-3.5-flash priced at the
-# token counts the previous frontier model produced per band. Its quality is
-# not gated (the top tier is always a legal start), so only its cost matters
-# for routing, and only as the escalation target.
+# What the routing policy needs to know about the built-in tiers, from
+# scripts/calibrate_builtin.py on the eval set (cheap: all 76 auto-gradable
+# queries; mid: 24; frontier: 9). data/builtin_calibration.json is the live
+# copy and wins when its model names match; this is the fallback.
 _BUILTIN_CALIBRATION_DEFAULT = {
     "cheap": {
-        "quality": {"easy": 0.966, "medium": 0.852, "hard": 0.638},
-        "cost":    {"easy": 0.0,   "medium": 0.0,   "hard": 0.0},     # local Ollama
+        "quality": {"easy": 0.895, "medium": 0.950, "hard": 0.811},
+        "cost":    {"easy": 0.000003, "medium": 0.000013, "hard": 0.000025},
     },
     "mid": {
-        "quality": {"easy": 1.000, "medium": 0.991, "hard": 1.000},
-        "cost":    {"easy": 0.000053, "medium": 0.000107, "hard": 0.000270},
+        "quality": {"easy": 1.000, "medium": 1.000, "hard": 1.000},
+        "cost":    {"easy": 0.000445, "medium": 0.002394, "hard": 0.002123},
     },
     "frontier": {
-        "quality": {"easy": 1.000, "medium": 1.000, "hard": 0.983},   # flash-lite's; not gated
-        "cost":    {"easy": 0.000363, "medium": 0.002579, "hard": 0.004325},
+        "quality": {"easy": 1.000, "medium": 1.000, "hard": 1.000},
+        "cost":    {"easy": 0.002516, "medium": 0.008607, "hard": 0.005965},
     },
 }
 

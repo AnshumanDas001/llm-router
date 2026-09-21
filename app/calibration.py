@@ -109,7 +109,10 @@ def calibrate_model(model_name: str, api_key: str | None,
                     **{"api_key": api_key, **(call_params or {})},
                 )
                 latency_ms = (time.perf_counter() - start) * 1000
-                text = resp.choices[0].message.content
+                # No content is an answer that didn't arrive (a reasoning
+                # model that spent its whole budget thinking): score it as
+                # wrong, and charge it, rather than crashing on None.
+                text = resp.choices[0].message.content or ""
                 cost = resp._hidden_params.get("response_cost", 0.0) or 0.0
 
                 score = score_one(q, text)

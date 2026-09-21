@@ -7,16 +7,17 @@
   "tiers": {
     "frontier": {
       "quality": {
-        "easy": null,
-        "medium": null,
-        "hard": null
+        "easy": 1.0,
+        "medium": 1.0,
+        "hard": 1.0
       },
       "cost": {
-        "easy": 0.00069,
-        "medium": 0.00135,
-        "hard": 0.00267
+        "easy": 0.0025163333333333335,
+        "medium": 0.0086068,
+        "hard": 0.00596535
       },
-      "unmeasured": true
+      "n_queries": 9,
+      "latency_ms": 102941
     },
     "mid": {
       "quality": {
@@ -43,7 +44,8 @@
         "medium": 1.26565e-05,
         "hard": 2.4884675675675676e-05
       },
-      "latency_ms": 6102
+      "latency_ms": 6102,
+      "n_queries": 76
     }
   }
 }

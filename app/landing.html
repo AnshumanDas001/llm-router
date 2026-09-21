@@ -153,12 +153,12 @@
 
       <div class="metrics animate-in stagger-4">
         <div class="metric">
-          <div class="n good">93%</div>
-          <div class="k">cheaper than sending every query to the frontier model, over 116 routed queries</div>
+          <div class="n good">41%</div>
+          <div class="k">cheaper than sending every query to the mid-tier model &mdash; and 82% under the frontier &mdash; over 116 routed queries, every graded answer correct</div>
         </div>
         <div class="metric">
-          <div class="n">0.64</div>
-          <div class="k">what the cheap model scores on hard questions &mdash; vs 1.00 on easy ones</div>
+          <div class="n">26</div>
+          <div class="k">wrong cheap-model answers caught by a $0.00004 judge before they shipped. The other 90 never touched a paid model</div>
         </div>
         <div class="metric">
           <div class="n">~7ms</div>
@@ -172,13 +172,13 @@
     <section class="block reveal" id="problem">
       <div class="block-head"><span class="block-num">01</span><h2>The cheap model is fine, until it isn't</h2></div>
       <p class="block-sub">
-        Scored across a 115-question eval set, a small local model keeps up with far bigger ones on
-        easy questions and then falls off a cliff. That gap is the entire opportunity: one model
-        forces you to pay frontier prices for "what is 2+2", or ship a 0.64 on the questions
-        that actually matter.
+        Calibrated on the eval set, an 8B model is right about nine times in ten &mdash; and you can't
+        tell which answer is the tenth from the outside. That gap is the entire opportunity: one
+        model forces you to pay 100&times; more for "what is 2+2", or ship the wrong answer one time
+        in ten on the questions that actually matter.
       </p>
       <figure>
-        <img src="/static/charts/quality-by-difficulty.svg" alt="Answer quality by difficulty. The cheap tier scores 0.97 on easy, 0.85 on medium and 0.64 on hard, while mid and frontier stay near 1.0." loading="lazy">
+        <img src="/static/charts/quality-by-difficulty.svg" alt="Answer quality by difficulty. The cheap tier scores 0.89 on easy, 0.95 on medium and 0.81 on hard, while mid and frontier score 1.0 on every band." loading="lazy">
         <figcaption>Measured, not illustrative. The dashed line is the 0.80 threshold a model has to clear on a difficulty band before ThriftLLM will start questions there.</figcaption>
       </figure>
     </section>
@@ -187,31 +187,33 @@
       <div class="block-head"><span class="block-num">02</span><h2>How a prompt moves through it</h2></div>
       <p class="block-sub">
         The routing decision costs nothing: difficulty is classified with sentence embeddings before
-        any model is called. Only the cheapest tier's answer gets a real judge call &mdash; later
-        tiers fail rarely enough that judging them cost more than it saved.
+        any model is called. Only the cheapest tier's answer gets a real judge call &mdash; from a
+        small model, not the expensive one &mdash; and later tiers fail rarely enough that judging
+        them cost more than it saved.
       </p>
       <div class="flow">
         <div class="step"><div class="i">01</div><h4>Classify</h4><p>Embedding match against a labelled set decides easy, medium or hard. ~7ms, no model call.</p></div>
-        <div class="step"><div class="i">02</div><h4>Route</h4><p>Easy and medium start cheap. Hard skips straight to mid &mdash; a doomed cheap call costs more than not trying.</p></div>
-        <div class="step"><div class="i">03</div><h4>Verify</h4><p>The cheapest tier's answer is judged by the tier above. Later tiers get a free structural check.</p></div>
-        <div class="step"><div class="i">04</div><h4>Escalate</h4><p>Only when the check fails. 13 of 116 queries escalated; the rest were answered where they started.</p></div>
+        <div class="step"><div class="i">02</div><h4>Route</h4><p>Each difficulty starts at the cheapest tier whose calibrated score clears 0.80 on it. The map is derived, not hardcoded.</p></div>
+        <div class="step"><div class="i">03</div><h4>Verify</h4><p>The cheapest tier's answer gets a $0.00004 verdict from a small judge model. Later tiers get a free structural check.</p></div>
+        <div class="step"><div class="i">04</div><h4>Escalate</h4><p>Only when the check fails. 26 of 116 queries escalated; the other 90 were answered where they started.</p></div>
       </div>
       <figure>
-        <img src="/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier. Cheap is free but slow at 10.2s, mid costs $0.00018 at 1.2s, frontier costs $0.00085 at 2.7s." loading="lazy">
+        <img src="/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier. Cheap costs $0.00002 at 6.1s, mid costs $0.00192 at 2.7s, the reasoning frontier costs $0.00619 and takes 103s." loading="lazy">
       </figure>
     </section>
 
     <section class="block reveal" id="numbers">
       <div class="block-head"><span class="block-num">03</span><h2>What it actually saved</h2></div>
       <p class="block-sub">
-        Every number on this page comes out of the project's own eval database and regenerates with
-        the data &mdash; there are no illustrative figures here. Including the uncomfortable one: a
-        single good mid-tier model also beats frontier by 97%, and on this stack the cascade only
-        matches it. What the cascade adds over that is a judge that caught 12 wrong answers in this
-        run, and an answer when the mid provider was rate-limited. The README says why.
+        Every number on this page comes out of the project's own eval runs and regenerates with the
+        data &mdash; there are no illustrative figures here. Including the uncomfortable history: the
+        first stack tried <em>tied</em> its own mid-tier model exactly, because the judge was the mid
+        model and verification cost what it saved. Two changes &mdash; a cheap tier that clears the
+        bar on more questions, and a judge 50&times; cheaper than a mid answer &mdash; turned that
+        tie into 41% off with every graded answer correct. The README has the arithmetic.
       </p>
       <figure>
-        <img src="/static/charts/cascade-savings.svg" alt="Cascade cost of $0.03564 versus $0.54365 frontier-only and $0.01834 mid-only, across 116 routed queries." loading="lazy">
+        <img src="/static/charts/cascade-savings.svg" alt="Cascade cost of $0.13214 versus $0.73475 frontier-only and $0.22548 mid-only, across 116 routed queries." loading="lazy">
       </figure>
     </section>
 

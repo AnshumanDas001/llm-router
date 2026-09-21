@@ -4,47 +4,53 @@ Most LLM traffic doesn't need your most expensive model. This routes each
 request to the cheapest model that can actually handle it, checks the answer,
 and escalates only when the check fails.
 
-**On a 116-query run it cost 97% less than sending everything to the
-frontier model, with every graded answer correct.** It also, honestly, cost
-the same as sending everything to the mid-tier model — and the reason why is
-the most useful thing in this README (see
+**On a 116-query run it cost 82% less than sending everything to the
+frontier model and 41–63% less than sending everything to the mid-tier
+model, with every graded answer correct.** The mid-only number is the one
+that matters — a single good mid model also beats frontier — and getting it
+above zero took two measured attempts. The first stack tied mid-only
+exactly, and the reason why is the most useful thing in this README (see
 [Strategy comparison](#strategy-comparison)).
 
-<img src="app/static/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only and mid-only over 116 queries: $0.02035 against $0.60659 frontier-only and $0.02045 mid-only" width="720">
+<img src="app/static/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only and mid-only over 116 queries: $0.13214 against $0.73475 frontier-only and $0.22548 mid-only" width="720">
 
 ---
 
 ## Why a cascade, and not just "use the cheap model"
 
-Because the cheap model is fine right up until it isn't. Scored across a
-115-question eval set, the small local model matches the big ones on easy
-questions and falls off a cliff on hard ones:
+Because the cheap model is fine right up until it isn't. Calibrated on the
+eval set, the 8B model is right about nine times in ten and wrong the tenth,
+and you can't tell which from the outside:
 
-<img src="app/static/charts/quality-by-difficulty.svg" alt="Answer quality by difficulty: cheap scores 0.97 easy, 0.85 medium, 0.64 hard; mid and frontier stay near 1.0" width="720">
+<img src="app/static/charts/quality-by-difficulty.svg" alt="Answer quality by difficulty: cheap scores 0.89 easy, 0.95 medium, 0.81 hard; mid and frontier score 1.0 on every band" width="720">
 
-That 0.64 is the whole argument. A single-model setup makes you choose between
-paying frontier prices for "what is 2+2", or shipping a 0.64 on the questions
-that matter. The cascade lets each question find its own level.
+That tenth answer is the whole argument. A single-model setup makes you
+choose between paying 100× more for "what is 2+2", or shipping the wrong
+answer one time in ten. The cascade lets each question find its own level,
+and a verifier catches the tenth.
 
-The cost gap it's exploiting is large — and note the cheapest tier is also the
-*slowest* here, because it runs locally on CPU:
+The cost gap it's exploiting is two orders of magnitude, and the reasoning
+frontier is also the *slowest* by far, because it thinks for thousands of
+tokens before answering:
 
-<img src="app/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier: cheap $0.00000 at 0.762, mid $0.00018 at 0.997, frontier $0.00085 at 0.991" width="720">
+<img src="app/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier: cheap $0.00002 at 0.868, mid $0.00192 at 1.000, frontier $0.00619 at 1.000" width="720">
 
-| tier | model | quality | cost / query | latency |
-|---|---|---|---|---|
-| cheap | `llama3.2:3b` (Ollama, local) | 0.762 | $0.00000 | 10.2s |
-| mid | `openai/gpt-oss-20b` (Groq) | 0.997 | $0.00018 | 1.2s |
-| frontier | `gemini-3.5-flash-lite` (Google AI Studio) | 0.991 | $0.00085 | 2.7s |
+| tier | model | quality | cost / answer | latency | measured on |
+|---|---|---|---|---|---|
+| cheap | `llama-3.1-8b-instruct` (OpenRouter) | 0.868 | $0.00002 | 6.1s | all 76 auto-gradable queries |
+| judge | `gpt-oss-20b` (Groq) | catches 94% of wrong cheap answers | $0.00004 / verdict | ~1s | 117 graded answers |
+| mid | `gemini-3.5-flash`, thinking off (OpenRouter) | 1.000 | $0.00192 | 2.7s | 24 queries |
+| frontier | `deepseek-r1` (OpenRouter) | 1.000 | $0.00619 | 103s | 9 queries |
 
-Measured over 115 queries; automatic scoring for objective answers, LLM-judge
-for the rest. Regenerate with `./venv/bin/python scripts/eval_summary.py`.
+Quality and cost are per-band calibration numbers weighted by the eval set's
+difficulty mix; cost is what the provider charged, hidden reasoning tokens
+included. Regenerate with `scripts/calibrate_builtin.py`.
 
-The frontier tier has since moved to `gemini-3.5-flash` (~4× the price), which
-is not yet scored on this set. It replaced flash-lite because flash-lite was
-*dominated* by mid — lower quality, 4.7× the cost, 2× the latency — so
-escalating to it bought a worse answer for more money. A frontier tier only
-earns its slot by being stronger than mid.
+Two of these rows are choices worth explaining. Gemini runs with
+`reasoning_effort=minimal`: at its default it spent 720 thinking tokens on a
+two-sentence answer — 94% of a $0.0069 bill — and gave the same answer for
+$0.0005 without. The judge is a *different, cheaper* model than mid, which
+is the single decision that makes the cascade pay; see below.
 
 ## The routing decision
 
@@ -77,7 +83,7 @@ deciding where a prompt goes — the whole decision costs ~7ms.
                          ┌─────────────┴─────────────┐
                          ▼                           ▼
                  [ cheap tier ]                [ mid / frontier ]
-                 llama3.2:3b                   gpt-oss-20b, gemini
+                 llama-3.1-8b                  gemini-3.5-flash, deepseek-r1
                          │                           ▲
                          ▼                           │
                  ┌───────────────┐   fails check     │
@@ -116,9 +122,10 @@ The judge term is what stops a cascade from losing to its own mid tier: on a
 stack whose mid model is very cheap, the cheap tier's verdict can cost as much
 as mid's own answer, and a cheaper-first rule routes into a loss. Pricing the
 path makes the policy route *around* a cheap tier that can't pay for its
-verification, and *to* one that can. Fed the built-in tiers' own measurements
-it derives `easy→cheap, medium→cheap, hard→mid`; give it a cheap tier that
-clears 0.80 on hard and it derives `hard→cheap`.
+verification, and *to* one that can. Fed the local 3B stack's measurements
+it derived `easy→cheap, medium→cheap, hard→mid`; fed the current stack's,
+where the 8B clears 0.80 on hard and the judge $J$ is a $0.00004 call, it
+derives `hard→cheap` too — the map is an output, not a setting.
 
 **Step 3 — verify, then escalate.** The cheapest tier's answer goes through a
 learned gate before anything is paid for. The gate is a logistic regression
@@ -137,16 +144,24 @@ P(YES) read off the logprobs. The scorer's $P(\text{correct})$ then decides:
 This is FrugalGPT's idea (a learned scorer instead of an LLM judge) with one
 correction from measurement: the scorer alone catches about half of the
 wrong answers, the judge catches 94%, so the scorer is not allowed to
-replace the judge — only to decide when the judge is needed. Measured on the
-eval, it decides 37% of the time, and the answers it ships on its own were
-100% correct. Later tiers get a free structural check; the last tier is never
-checked.
+replace the judge — only to decide when the judge is needed. On the local
+3B stack it decided 37% of the time at 100% accuracy on what it shipped.
+
+Whether the gate is worth running is itself a cost question, and on the
+current stack the answer is no: the gate spends a second cheap sample plus a
+self-check (~$0.00003) to skip 38% of judge calls worth $0.000015, and its
+held-out AUC on the 8B's answers was 0.735 — below the 0.75 bar set before
+training. So the built-in stack runs **judge-only** (`VERIFIER=judge`): every
+cheap answer gets a $0.00004 verdict, which is nothing next to the $0.002
+mid answer it protects. The gate stays available for stacks where the judge
+is the expensive part. Later tiers get a free structural check; the last
+tier is never checked.
 
 ```mermaid
 flowchart LR
     Q[Query] --> C{Classify<br/>difficulty}
-    C -->|easy / medium| CH[cheap tier]
-    C -->|hard| MID[mid tier]
+    C -->|clears the floor| CH[cheap tier]
+    C -->|too hard for cheap| MID[mid tier]
     CH --> V{Verify}
     V -->|passes| OUT[Answer]
     V -->|fails| MID
@@ -158,17 +173,23 @@ flowchart LR
 
 Three things make this cheap rather than expensive:
 
-- **Hard questions skip the cheap tier entirely.** Spending a doomed cheap call
-  before escalating is worse than not trying.
-- **Only the cheapest tier gets a real judge call, at low reasoning effort,
-  and only when the gate can't decide.** Verification cost scales with
-  response length, and later tiers rarely fail; judging every tier once cost
-  82% of total spend. Then the judge itself turned out to be the cheap
-  tier's entire cost — gpt-oss emits hidden reasoning tokens billed as
-  output, $0.00016 per verdict against $0.00005 nominal.
-  `reasoning_effort="low"` cut that 4× with identical verdicts, and the
-  learned gate then removed 37% of the remaining calls.
+- **The judge is not the mid model.** A verdict reads ~450 tokens and writes
+  one word; a small model does it as well as a big one (94% catch). Tying
+  the judge to the tier above makes verification cost scale with mid's
+  price, and then a cheap tier can never win — measured, on the first stack.
+  `JUDGE_MODEL` breaks that link.
+- **Only the cheapest tier gets a real judge call.** Verification cost scales
+  with response length and later tiers rarely fail; judging every tier once
+  cost 82% of total spend. Reasoning models judge at low effort — gpt-oss
+  spent $0.00016 per verdict on hidden thinking against $0.00005 nominal
+  until `reasoning_effort` was set.
 - **The last tier is never checked.** There's nothing left to escalate to.
+
+The cascade diagram above shows the *shape*; where each difficulty starts is
+not fixed. On this stack calibration put the 8B at 0.81 on hard questions,
+just over the floor, so the policy sends hard questions to it too, and the
+judge catches the fifth it gets wrong. On the local 3B stack (0.73 on hard)
+hard questions skipped straight to mid.
 
 ### How well does the routing itself do?
 
@@ -185,70 +206,74 @@ And where the traffic landed over 116 routed queries:
 ```mermaid
 pie showData
     title Final tier used
-    "cheap" : 43
-    "mid" : 73
+    "cheap" : 90
+    "mid" : 26
 ```
 
-17 of those 116 escalated: 12 because the judge caught a real error in the
-cheap answer, 5 because the gate rejected one outright without a judge call.
-Everything else was answered where it started, and the 76 answers with an
-objective check were all correct — including all 30 that shipped from the
-cheap tier (`scripts/score_cascade_log.py`).
+26 of those 116 escalated, every one because the judge caught a real error
+in the 8B's answer — a wrong modulo, a miscounted permutation, a missed
+fallacy; the verdicts read like a grader's margin notes. Everything else was
+answered where it started, and the 76 answers with an objective check were
+all correct, including all 58 that shipped from the cheap tier
+(`scripts/score_cascade_log.py`).
 
 ### Strategy comparison
 
-The same 116 queries, priced three ways over identical token counts, so the
-comparison is apples-to-apples:
+The same 116 queries, three ways. The alternatives are priced from each
+model's own calibrated cost per answer on each difficulty band, times this
+run's mix — not by re-pricing the cascade's tokens, which overstates a wordy
+cheap model's mid-tier cost and misses a reasoning model's hidden thinking
+entirely (priced that way, DeepSeek R1 came out *cheaper than Gemini*; it
+isn't, by 3×). `scripts/compare_strategies.py` prints both.
 
-| strategy | total cost | per query | vs frontier |
+| strategy | total cost | per query | graded accuracy |
 |---|---|---|---|
-| frontier for everything (`gemini-3.5-flash`) | $0.60659 | $0.00523 | — |
-| mid for everything (`gpt-oss-20b`) | $0.02045 | $0.00018 | 97% cheaper |
-| **ThriftLLM cascade** | **$0.02035** | **$0.00018** | **97% cheaper** |
+| frontier for everything (`deepseek-r1`) | $0.735 | $0.0063 | 1.00 (calibration) |
+| mid for everything (`gemini-3.5-flash`) | $0.225 – $0.360 | $0.0019 – 0.0031 | 1.00 (calibration) |
+| **ThriftLLM cascade** | **$0.132** | **$0.0011** | **76/76 correct** |
 
-Read that carefully: **a single good mid-tier model also beats frontier by
-97%, and the cascade ties it** — $0.02035 vs $0.02045. The question a router
-has to answer is not "cheaper than the most expensive option" — it's
-"cheaper than the obvious alternative", and here the honest result is a tie,
-for two reasons that the numbers pin down exactly:
+The mid-only range is calibration-based at the low end and token-repriced at
+the high end; the README quotes the conservative figure: **41% under
+mid-only, 82% under frontier**. Where the cascade's $0.132 went: $0.006 on
+90 answers from the 8B and its judge verdicts, $0.126 on the 26 that
+escalated to Gemini — the hardest questions, with the longest answers.
 
-- **The hard questions are 80% of mid-only's spend, and the cascade sends
-  them to mid too.** That is the real ceiling. Beating mid-only meaningfully
-  needs a cheap tier that clears 0.80 on hard, and every candidate reachable
-  from this stack was measured and fell short: `llama3:8b` scored 0.50, and
-  every hosted model at list price costs more than gpt-oss-20b, which is one
-  of the cheapest capable models available. There is nothing beneath it.
-- **On the other 20%, escalations cost what the judge saves.** 60 queries
-  started at the cheap tier; 17 escalated (28%), and an escalated question
-  pays a full mid answer — the *long* ones, $0.00016 each against $0.00007
-  for a typical mid answer at that difficulty. Judge on 63% of answers plus
-  mid on 28% of them comes to about what mid-only pays for the same
-  questions. The learned gate cut the judge calls by 37% and moved the
-  total by 0.5%, which is how we know the judge was never the whole cost.
-  Removing it entirely would still be a tie; the escalations are the price
-  of a cheap tier that's wrong 15% of the time on medium questions.
+#### Why the first stack tied, and this one doesn't
 
-One run earlier in this project spent $0.0176 on a single query when Groq
-rate-limited mid and the cascade fell through to frontier for a 1,953-token
-answer. That availability fallback is still in place — an answer instead of
-an error — and it is a real cost tail: one fallback can double a run.
+The first built-in stack was `llama3.2:3b` locally → `gpt-oss-20b` on Groq
+→ `gemini-3.5-flash`, with the mid model also acting as judge. Measured the
+same way it came out **$0.0204 against $0.0205 for mid-only** — a tie —
+and the breakdown showed exactly why:
 
-Because of this, routing mode is a per-chat (and per-API-request) choice:
-`cascade` as described, or `direct`, which skips the cheapest tier and its
-judge and starts one tier up. On the built-in stack, direct costs the same as
-cascade and answers ~6× faster (0.6s vs 3.6s on the same easy question),
-because it never waits on the slow local model or the verdict. Cascade is the
-right default when mid is expensive or every cheap answer must be checked;
-direct is the right default here.
+- 80% of the spend was hard questions, which the 3B model couldn't do
+  (0.64–0.73), so they went to mid either way.
+- On the other 20%, verification cost what it saved: 63% of cheap answers
+  paid a judge call, 28% escalated and paid a full mid answer, and
+  0.63 × judge + 0.28 × escalation came to mid's own price. With the judge
+  *being* the mid model, that's a ratio — it holds at any price level, so a
+  pricier mid wouldn't have fixed it.
 
-So what the cascade buys over mid-only is not money, on this stack. It's
-17 wrong cheap answers caught before they shipped — at 100% graded accuracy
-on what did ship — and an answer when the mid provider is down. It *would* buy money on a stack where mid is a
-typical $2–10/M model rather than one of the cheapest capable models
-available; the saving is bounded by the cheap/mid price gap, and here that gap
-is tiny.
+Two changes, both cheap, turned the tie into the numbers above:
 
-Regenerate with `./venv/bin/python scripts/compare_strategies.py`.
+1. **A cheap tier that clears the floor on more questions.** The hosted 8B
+   calibrates at 0.89 / 0.95 / 0.81, so hard questions start there too, and
+   the paid model only answers the fifth it gets wrong.
+2. **A judge much cheaper than a mid answer.** gpt-oss-20b verdicts cost
+   $0.00004 in front of $0.002 Gemini answers. The verification overhead
+   that used to equal mid's price is now 2% of it.
+
+What the cascade doesn't buy is speed: an 8B answer via OpenRouter averaged
+6.5 s in this run and an escalated question 17 s, against 2.7 s for Gemini
+alone. Routing mode is a per-chat (and per-API-request) choice — `cascade`
+as described, or `direct`, which skips the cheapest tier and its judge — for
+exactly that reason.
+
+The escalation cost tail is still real: one query where mid is rate-limited
+falls through to the frontier, and a DeepSeek R1 answer costs 3× a Gemini
+one and takes a minute or more.
+
+Regenerate with `./venv/bin/python scripts/compare_strategies.py` and grade
+with `./venv/bin/python scripts/score_cascade_log.py`.
 
 ## Bring your own models
 
@@ -290,10 +315,14 @@ latency) are persisted.
 ```bash
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
-cp .env.example .env          # add GROQ_API_KEY + GEMINI_API_KEY
-ollama pull llama3.2:3b       # the local cheap tier
+cp .env.example .env          # add OPENROUTER_API_KEY (a few $ of credit) + GROQ_API_KEY
 ./venv/bin/uvicorn app.main:app --port 8000
 ```
+
+No GPU or local model needed: the built-in stack is entirely hosted. To run
+the cheap tier locally instead, `ollama pull llama3.2:3b` and set
+`CHEAP_MODEL=ollama/llama3.2:3b` — then `scripts/calibrate_builtin.py` so
+the routing map is derived from *that* model's numbers.
 
 Then:
 
@@ -303,6 +332,7 @@ Then:
 | Models & calibration | http://localhost:8000/models |
 | Sessions & spend | http://localhost:8000/sessions |
 | API guide | http://localhost:8000/guide |
+| The chat app, no login, 3 prompts per device | http://localhost:8000/try |
 | Single-shot routing demo, no login | http://localhost:8000/demo |
 | Terminal demo | `./venv/bin/python scripts/demo_cli.py` |
 
@@ -367,15 +397,22 @@ reports/             Pareto chart, generated README charts
 
 ## Honest limitations
 
-- **"Cost saved" is against frontier, and frontier is not the fair baseline.**
-  Mid-only is, and the cascade ties it. The saving over frontier is real and
-  large; the saving over "just use the good cheap model" is roughly zero on
-  this stack. Both are stated above rather than picking the flattering one.
-- **The escalation cost tail is real.** A single rate-limit fallback to
-  frontier cost as much as the other 115 queries combined. Bounding it (a
-  short retry on the throttled tier before escalating; a max-tokens cap on
-  frontier) is a tradeoff against latency and answer completeness that this
-  version hasn't made.
+- **The mid-only baseline is a range, not a number.** Gemini's own calibrated
+  cost says $0.225 for these questions; the cascade's tokens at Gemini's
+  rates say $0.360. The first is measured on 24 questions, the second prices
+  another model's answer lengths. The 41% claim uses the lower one.
+- **The frontier tier is measured on 9 questions.** DeepSeek R1 takes one to
+  four minutes per answer and sometimes exhausts its budget while still
+  thinking (3 of 12 calibration calls returned nothing; they now count as
+  wrong). It's the escalation target of last resort, not a tier the policy
+  routes to, so its numbers only affect the "frontier for everything" column.
+- **Hard → cheap is a marginal call.** The 8B calibrated at 0.81 on hard
+  against a 0.80 floor, on 37 questions; the 120-sample scorer dataset had it
+  at 0.74. The judge caught every wrong hard answer in this run, but a
+  weaker judge or a harder distribution would turn that margin into shipped
+  errors. The floor is configurable (`QUALITY_THRESHOLD`).
+- **The cheap tier is slow.** 6.5 s per answer through OpenRouter, 17 s when
+  it escalates, against 2.7 s for Gemini alone. Cheaper is not faster here.
 - **The classifier is still the weak link.** 64.7% exact-label accuracy is
   better than the 56.0% it replaced, but it's a k-NN over 116 examples, and
   embedding similarity measures *topic* rather than difficulty — "what's the
@@ -383,30 +420,22 @@ reports/             Pareto chart, generated README charts
   to O(n²)" because both are about quicksort, though one is recall and the
   other is analysis. The structural overrides patch the worst of that; a
   learned difficulty model trained on the escalation log would do better.
-- **The learned scorer cannot replace the judge, only gate it.** FrugalGPT
-  replaces the LLM judge with a learned scorer outright. Two attempts here:
-  a scorer over sentence embeddings of (query, answer) reached held-out
-  ROC-AUC **0.66** — embeddings encode topic, not correctness; a right and a
-  wrong explanation of TCP vs UDP have cosine similarity 0.86. Replacing
-  the text features with the cheap model's own logprobs, a second sample,
-  and a self-check reached **0.80** (0.85 on objectively-graded rows), from
-  288 answers to 116 questions. That is enough to be sure about a third of
-  answers and not enough to be the verifier: on the same answers the LLM
-  judge catches 94% of wrong ones, the scorer about half. It's shipped as
-  the gate described in Step 3, trained for the built-in cheap model only —
-  a different model's confidence is a different distribution, so BYOM
-  stacks keep the judge until `scripts/build_scorer_data.py` has been run
-  against theirs.
-- **The cheap tier is slow locally.** A 3B model on a laptop takes 5–15 s
-  per answer, and the gate adds a parallel second sample (~25% slower) and
-  a one-token self-check. A cheap answer averaged 13 s in the run above
-  against 4.5 s at mid. On a hosted cheap model this is a non-issue; on
-  local Ollama, `direct` mode is the faster choice.
-- **Calibration samples are small.** ~8 questions per difficulty band, so the
-  0.80 gate is a coarse filter, not a precise measurement.
+- **The learned scorer cannot replace the judge, only gate it — and here it
+  isn't worth gating.** FrugalGPT replaces the LLM judge with a learned
+  scorer outright. Two attempts: sentence embeddings of (query, answer)
+  reached held-out ROC-AUC **0.66** — embeddings encode topic, not
+  correctness. The cheap model's own logprobs, a second sample and a
+  self-check reached **0.80** on the 3B (0.85 on objectively-graded rows) and
+  **0.735** on the 8B, which has fewer wrong answers to learn from. On the
+  same answers the LLM judge catches 94% of wrong ones. The gate ships for
+  stacks where the judge is the expensive call; on this one the judge costs
+  2% of the answer it protects, so `VERIFIER=judge`.
+- **Calibration samples are small for the paid tiers.** 8 questions per band
+  for mid; the cheap tier gets all 76 because it's nearly free to measure and
+  its numbers decide what never reaches a paid model.
 - **Auth is project-grade, not production-grade.** bcrypt passwords and cookie
-  sessions, but no rate limiting, no CSRF tokens, and cookies aren't `Secure`
-  because this runs over plain localhost.
+  sessions; prompts are capped per account (10/day) and per demo device (3),
+  but there's no CSRF token and no rate limit on login attempts.
 
 See [FAILURE_ANALYSIS.md](FAILURE_ANALYSIS.md) for cases where the verifier
 caught a bad answer, missed one, and escalated when it shouldn't have.
