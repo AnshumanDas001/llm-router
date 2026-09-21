@@ -21,9 +21,10 @@ auto-scoreable queries are scored by app/scoring.py; the 40 open-ended
 ones are labelled by the mid judge -- a one-time labelling cost at
 training time, not a runtime one, which is exactly FrugalGPT's setup.
 
-Talks to Ollama's OpenAI-compatible endpoint directly because litellm
-refuses to forward `logprobs` to its ollama provider. Appends to a JSONL
-so an interrupted run resumes where it stopped.
+Calls the cheap tier exactly as the cascade does (same litellm params, so
+Ollama goes through its OpenAI-compatible endpoint and OpenRouter is pinned
+to backends that return logprobs). Appends to a per-model JSONL so an
+interrupted run resumes where it stopped.
 
     ./venv/bin/python scripts/build_scorer_data.py
 """
@@ -34,19 +35,23 @@ import sys
 import time
 from pathlib import Path
 
-import httpx
+import litellm
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / ".env")
 
-from app.model_config import CHEAP_MODEL, MID_MODEL  # noqa: E402
+from app.model_config import CHEAP_MODEL, TIER_CALL_PARAMS, TIER_MODEL_LIST  # noqa: E402
+from app.scorer import LOGPROB_PARAMS, token_signals  # noqa: E402
 from app.scoring import score_one  # noqa: E402
 from app.verifier import _verify_llm_judge  # noqa: E402
 
-OUT_PATH = ROOT / "data" / "scorer_training.jsonl"
-OLLAMA_BASE = os.getenv("OLLAMA_API_BASE", "http://localhost:11434")
+OUT_PATH = ROOT / "data" / f"scorer_training_{CHEAP_MODEL.replace('/', '-').replace(':', '-')}.jsonl"
+CHEAP_LITELLM_MODEL = next(t for t in TIER_MODEL_LIST if t["model_name"] == "cheap")["litellm_params"]["model"]
+# Labels for the open-ended queries. A stronger model than the runtime judge,
+# because a label is forever and a verdict is per-call; still one-time cost.
+LABELLER = os.getenv("SCORER_LABELLER", "groq/openai/gpt-oss-120b")
 SAMPLES = {"easy": 3, "medium": 3, "hard": 2}   # hard answers are long and slow
 MAX_TOKENS = 1024
 
@@ -59,49 +64,56 @@ Proposed answer:
 Is the proposed answer correct and complete? Reply with one word: YES or NO."""
 
 
-def _ollama_chat(messages, max_tokens, top_logprobs=5, temperature=None):
-    body = {"model": CHEAP_MODEL.split("/", 1)[1], "messages": messages,
-            "max_tokens": max_tokens, "logprobs": True, "top_logprobs": top_logprobs}
-    if temperature is not None:
-        body["temperature"] = temperature
-    r = httpx.post(f"{OLLAMA_BASE}/v1/chat/completions", json=body, timeout=300)
-    r.raise_for_status()
-    return r.json()["choices"][0]
+def _cheap_chat(messages, **params):
+    """The cheap tier, called the way the cascade calls it, with retries for
+    the transient failures a hosted provider throws."""
+    for attempt in range(4):
+        try:
+            return litellm.completion(model=CHEAP_LITELLM_MODEL, messages=messages,
+                                      timeout=120, **TIER_CALL_PARAMS["cheap"], **params)
+        except (litellm.RateLimitError, litellm.APIConnectionError, litellm.Timeout) as e:
+            if attempt == 3:
+                raise
+            print(f"  retry: {type(e).__name__}", flush=True)
+            time.sleep(10 * (attempt + 1))
+
+
+def _logprob_content(choice):
+    lp = getattr(choice, "logprobs", None) or (getattr(choice, "model_extra", None) or {}).get("logprobs")
+    if lp is None:
+        return None
+    return lp.get("content") if isinstance(lp, dict) else getattr(lp, "content", None)
 
 
 def generate(query: str) -> dict:
     start = time.perf_counter()
-    choice = _ollama_chat([{"role": "user", "content": query}], MAX_TOKENS)
+    resp = _cheap_chat([{"role": "user", "content": query}], max_tokens=MAX_TOKENS, **LOGPROB_PARAMS)
     latency = time.perf_counter() - start
-    text = choice["message"]["content"] or ""
-    toks = (choice.get("logprobs") or {}).get("content") or []
-    # Per token: chosen logprob and the entropy of the top-k alternatives.
-    # Entropy over top-5 is a floor on the true entropy, good enough to
-    # tell "one obvious continuation" from "several plausible ones".
-    chosen, entropy = [], []
-    for t in toks:
-        chosen.append(t["logprob"])
-        ps = [math.exp(a["logprob"]) for a in t.get("top_logprobs") or []]
-        entropy.append(-sum(p * math.log(p) for p in ps if p > 0))
-    return {"text": text, "logprobs": chosen, "entropy": entropy,
-            "finish_reason": choice.get("finish_reason"), "latency_s": latency}
+    choice = resp.choices[0]
+    chosen, entropy = token_signals(_logprob_content(choice))
+    return {"text": choice.message.content or "", "logprobs": chosen, "entropy": entropy,
+            "finish_reason": choice.finish_reason, "latency_s": latency}
 
 
 def self_verify(query: str, answer: str) -> float:
     """P(YES) from the cheap model's first-token distribution."""
     prompt = SELF_VERIFY_PROMPT.format(query=query, answer=answer[:4000])
-    choice = _ollama_chat([{"role": "user", "content": prompt}], max_tokens=1,
-                          top_logprobs=10, temperature=0.0)
-    toks = (choice.get("logprobs") or {}).get("content") or []
+    resp = _cheap_chat([{"role": "user", "content": prompt}], max_tokens=1,
+                       logprobs=True, top_logprobs=10, temperature=0.0)
+    toks = _logprob_content(resp.choices[0]) or []
     if not toks:
         return 0.5
+    t0 = toks[0]
+    alts = (t0.get("top_logprobs") if isinstance(t0, dict) else getattr(t0, "top_logprobs", None)) or []
     p_yes = p_no = 0.0
-    for alt in toks[0].get("top_logprobs") or []:
-        word = alt["token"].strip().upper()
+    for alt in alts:
+        tok = alt["token"] if isinstance(alt, dict) else alt.token
+        lp = alt["logprob"] if isinstance(alt, dict) else alt.logprob
+        word = tok.strip().upper()
         if word.startswith("YES"):
-            p_yes += math.exp(alt["logprob"])
+            p_yes += math.exp(lp)
         elif word.startswith("NO"):
-            p_no += math.exp(alt["logprob"])
+            p_no += math.exp(lp)
     if p_yes + p_no == 0:
         return 0.5
     return p_yes / (p_yes + p_no)
@@ -110,8 +122,15 @@ def self_verify(query: str, answer: str) -> float:
 def label(q: dict, answer: str) -> tuple[float, str]:
     if q["eval_method"] != "llm_judge":
         return score_one(q, answer), "automatic"
-    verdict = _verify_llm_judge(q["query"], answer, MID_MODEL, None, "mid")
-    return (1.0 if verdict["passed"] else 0.0), "judge_mid"
+    for attempt in range(4):
+        try:
+            verdict = _verify_llm_judge(q["query"], answer, LABELLER, None, "labeller")
+            break
+        except litellm.RateLimitError:
+            time.sleep(20)
+    else:
+        raise RuntimeError("labeller rate limited repeatedly")
+    return (1.0 if verdict["passed"] else 0.0), "judge_strong"
 
 
 def main():

@@ -798,6 +798,23 @@ def get_api_session_detail(api_key_id: int, user_id: int):
 
 # --- signed-out demo quota --------------------------------------------------
 
+def count_prompts_today(user_id: int) -> int:
+    """Prompts this user has sent since 00:00 UTC, across the chat UI and
+    the API, for the per-account daily cap."""
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    with get_conn() as conn:
+        chat = conn.execute(
+            "SELECT COUNT(*) FROM chat_messages m JOIN chats c ON c.id = m.chat_id "
+            "WHERE c.user_id = ? AND m.role = 'user' AND m.timestamp >= ?",
+            (user_id, day),
+        ).fetchone()[0]
+        api = conn.execute(
+            "SELECT COUNT(*) FROM usage_log WHERE user_id = ? AND source != 'chat' AND timestamp >= ?",
+            (user_id, day),
+        ).fetchone()[0]
+        return chat + api
+
+
 def get_demo_count(demo_id: str) -> int:
     with get_conn() as conn:
         row = conn.execute(

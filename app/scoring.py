@@ -12,13 +12,23 @@ AUTOMATIC_METHODS = {
 }
 
 
+_EMPHASIS = re.compile(r"[*_`]+")
+
+
+def _plain(text: str) -> str:
+    """Lower-cased with markdown emphasis removed, so "**H**yper**T**ext
+    **T**ransfer **P**rotocol" matches "hypertext transfer protocol" -- a
+    model that bolds the initials was graded wrong for the formatting."""
+    return _EMPHASIS.sub("", text).lower()
+
+
 def score_exact_match(text: str, expected: list[str]) -> float:
-    low = text.lower()
+    low = _plain(text)
     return 1.0 if any(e.lower() in low for e in expected) else 0.0
 
 
 def score_exact_match_set(text: str, expected: list[str]) -> float:
-    low = text.lower()
+    low = _plain(text)
     found = sum(1 for e in expected if e.lower() in low)
     return found / len(expected)
 

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -7,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Response
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -60,7 +61,6 @@ CHAT_APP_HTML_PATH = Path(__file__).resolve().parent / "chat_app.html"
 SETTINGS_HTML_PATH = Path(__file__).resolve().parent / "settings.html"
 MODELS_HTML_PATH = Path(__file__).resolve().parent / "models.html"
 LANDING_HTML_PATH = Path(__file__).resolve().parent / "landing.html"
-TRY_HTML_PATH = Path(__file__).resolve().parent / "try.html"
 SESSIONS_HTML_PATH = Path(__file__).resolve().parent / "sessions.html"
 GUIDE_HTML_PATH = Path(__file__).resolve().parent / "guide.html"
 
@@ -100,6 +100,12 @@ class SendMessageRequest(BaseModel):
 
 class ClassifyRequest(BaseModel):
     content: str
+
+
+class DemoRequest(BaseModel):
+    content: str
+    history: list[Message] = []          # earlier turns of this demo conversation
+    routing_mode: str = "cascade"
 
 
 class CreateProviderRequest(BaseModel):
@@ -169,7 +175,11 @@ def landing(router_session: str | None = Cookie(default=None)):
 
 @app.get("/try", response_class=HTMLResponse)
 def try_page():
-    return TRY_HTML_PATH.read_text()
+    """The real chat app in demo mode: same page, one flag. Sends go to
+    /api/try, capped per device; nothing is persisted."""
+    html = CHAT_APP_HTML_PATH.read_text()
+    return html.replace("<script src=\"/static/nav.js\"></script>",
+                        "<script>window.THRIFT_DEMO = true;</script>\n<script src=\"/static/nav.js\"></script>", 1)
 
 
 @app.get("/demo", response_class=HTMLResponse)
@@ -284,45 +294,101 @@ def api_list_chats(user=Depends(get_current_user)):
 def api_chat_stats(user=Depends(get_current_user)):
     """Real aggregate numbers (not simulated) behind the sidebar's router
     status card -- computed from this user's own chat_messages history."""
-    return chat_db.get_chat_stats(user["id"])
+    stats = chat_db.get_chat_stats(user["id"])
+    stats["daily"] = {"used": chat_db.count_prompts_today(user["id"]), "limit": DAILY_PROMPT_LIMIT}
+    return stats
 
 
 DEMO_COOKIE_NAME = "tl_demo"
-DEMO_PROMPT_LIMIT = 3
+DEMO_PROMPT_LIMIT = int(os.getenv("DEMO_PROMPT_LIMIT", "3"))
+DEMO_HISTORY_TURNS = 6            # earlier turns replayed per demo prompt (bounds cost)
+DEMO_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
+
+# Signed-in accounts get this many prompts per UTC day across the chat UI and
+# the API. It bounds what one free account can spend on the built-in tiers.
+DAILY_PROMPT_LIMIT = int(os.getenv("DAILY_PROMPT_LIMIT", "10"))
 
 
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
 
-@app.get("/api/try/quota")
-def api_try_quota(tl_demo: str | None = Cookie(default=None)):
-    used = chat_db.get_demo_count(tl_demo) if tl_demo else 0
-    return {"used": min(used, DEMO_PROMPT_LIMIT), "limit": DEMO_PROMPT_LIMIT,
+def _enforce_daily_limit(user):
+    used = chat_db.count_prompts_today(user["id"])
+    if used >= DAILY_PROMPT_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily limit reached ({DAILY_PROMPT_LIMIT} prompts per account). It resets at 00:00 UTC.",
+        )
+    return used
+
+
+def _demo_id(cookie: str | None, header: str | None) -> str:
+    """The demo cap is per device. The id lives in an httponly cookie and,
+    mirrored by the page, in localStorage sent back as a header -- clearing
+    one leaves the other, so the cap survives what a casual reset would
+    otherwise bypass. Clearing all site data does reset it; that's the
+    limit of what a browser lets a site do without fingerprinting."""
+    for candidate in (cookie, header):
+        if candidate and len(candidate) == 32 and candidate.isalnum():
+            return candidate
+    return uuid.uuid4().hex
+
+
+def _demo_quota(demo_id: str) -> dict:
+    used = chat_db.get_demo_count(demo_id)
+    return {"device": demo_id, "used": min(used, DEMO_PROMPT_LIMIT), "limit": DEMO_PROMPT_LIMIT,
             "remaining": max(0, DEMO_PROMPT_LIMIT - used)}
 
 
+@app.get("/api/try/quota")
+def api_try_quota(response: Response, tl_demo: str | None = Cookie(default=None),
+                  x_demo_device: str | None = Header(default=None)):
+    demo_id = _demo_id(tl_demo, x_demo_device)
+    response.set_cookie(DEMO_COOKIE_NAME, demo_id, max_age=DEMO_COOKIE_MAX_AGE,
+                        httponly=True, samesite="lax", secure=COOKIE_SECURE)
+    return _demo_quota(demo_id)
+
+
+@app.post("/api/try/classify")
+def api_try_classify(req: ClassifyRequest):
+    """The demo's predicted-tier badges: the embedding classifier only, no
+    model call, so it's safe to expose without an account."""
+    tier, difficulty = classify_initial_tier(req.content, _tier_map_for(0, None))
+    return {"tier": tier, "difficulty": difficulty}
+
+
+@app.get("/api/try/tiers")
+def api_try_tiers():
+    return {"builtin": DEFAULT_TIER_MODELS}
+
+
 @app.post("/api/try")
-def api_try(req: ClassifyRequest, response: Response, tl_demo: str | None = Cookie(default=None)):
-    """Signed-out landing demo: a few prompts through the built-in tiers,
-    streamed. The cap is per browser and deliberately soft -- it exists to
-    bound cost per casual visitor, not to be unbypassable."""
+def api_try(req: DemoRequest, response: Response, tl_demo: str | None = Cookie(default=None),
+            x_demo_device: str | None = Header(default=None)):
+    """Signed-out demo: the real chat app against the built-in tiers, capped
+    per device. The cap bounds cost per casual visitor; it is not meant to
+    be unbypassable."""
     content = req.content.strip()
     if not content:
         raise HTTPException(status_code=400, detail="content must not be empty")
+    if req.routing_mode not in ROUTING_MODES:
+        raise HTTPException(status_code=400, detail=f"routing_mode must be one of {ROUTING_MODES}")
 
-    demo_id = tl_demo or uuid.uuid4().hex
+    demo_id = _demo_id(tl_demo, x_demo_device)
     if chat_db.get_demo_count(demo_id) >= DEMO_PROMPT_LIMIT:
         raise HTTPException(
             status_code=429,
-            detail=f"Demo limit reached ({DEMO_PROMPT_LIMIT} prompts). Create a free account to keep going.",
+            detail=f"Demo limit reached ({DEMO_PROMPT_LIMIT} prompts on this device). Create a free account for {DAILY_PROMPT_LIMIT} a day.",
         )
     used = chat_db.bump_demo_count(demo_id, datetime.now(timezone.utc).isoformat())
+    history = [m.model_dump() for m in req.history[-DEMO_HISTORY_TURNS:]]
+    messages = history + [{"role": "user", "content": content}]
 
     def event_stream():
         try:
-            for event in run_cascade_stream([{"role": "user", "content": content}],
-                                            difficulty_to_tier=_tier_map_for(0, None)):
+            for event in run_cascade_stream(messages, difficulty_to_tier=_tier_map_for(0, None),
+                                            skip_cheapest=(req.routing_mode == "direct")):
                 if event["type"] == "done":
                     baseline = estimate_frontier_cost(event["tokens_in"], event["tokens_out"])
                     event["baseline_cost"] = baseline
@@ -345,7 +411,7 @@ def api_try(req: ClassifyRequest, response: Response, tl_demo: str | None = Cook
 
     stream = StreamingResponse(event_stream(), media_type="text/event-stream",
                                headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
-    stream.set_cookie(DEMO_COOKIE_NAME, demo_id, max_age=60 * 60 * 24 * 30,
+    stream.set_cookie(DEMO_COOKIE_NAME, demo_id, max_age=DEMO_COOKIE_MAX_AGE,
                       httponly=True, samesite="lax", secure=COOKIE_SECURE)
     return stream
 
@@ -482,6 +548,7 @@ def _prepare_send(chat_id: int, req: SendMessageRequest, user):
         raise HTTPException(status_code=404, detail="chat not found")
     if not req.content.strip():
         raise HTTPException(status_code=400, detail="content must not be empty")
+    _enforce_daily_limit(user)
 
     now = datetime.now(timezone.utc).isoformat()
     history = chat_db.get_chat_messages(chat_id)
@@ -578,6 +645,7 @@ def api_send_message(chat_id: int, req: SendMessageRequest, user=Depends(get_cur
         raise HTTPException(status_code=404, detail="chat not found")
     if not req.content.strip():
         raise HTTPException(status_code=400, detail="content must not be empty")
+    _enforce_daily_limit(user)
 
     now = datetime.now(timezone.utc).isoformat()
     history = chat_db.get_chat_messages(chat_id)
@@ -666,8 +734,18 @@ def api_send_message(chat_id: int, req: SendMessageRequest, user=Depends(get_cur
     }
 
 
+# The OpenAI-compatible endpoint spends real money on the built-in tiers, so
+# a public deploy must not expose it without a key. The eval harness runs it
+# locally without one; ALLOW_ANON_V1=1 opts into that.
+ALLOW_ANON_V1 = os.getenv("ALLOW_ANON_V1", "").lower() in ("1", "true", "yes")
+
+
 @app.post("/v1/chat/completions")
-def chat_completions(req: ChatRequest):
+def chat_completions(req: ChatRequest, authorization: str | None = Header(default=None)):
+    if not ALLOW_ANON_V1:
+        if not authorization:
+            raise HTTPException(status_code=401, detail="This endpoint needs an API key (Authorization: Bearer ...)")
+        _enforce_daily_limit(get_user_from_api_key(authorization))
     if not req.messages:
         raise HTTPException(status_code=400, detail="messages must not be empty")
 
@@ -680,6 +758,10 @@ def chat_completions(req: ChatRequest):
             detail="All model tiers are temporarily rate limited. Please try again in a few minutes.",
         )
     except Exception:
+        # The user gets a clean 502; the operator gets the traceback, which
+        # a silent except used to swallow (two eval queries once 502'd with
+        # no trace of why).
+        logging.exception("cascade failed for /v1/chat/completions")
         raise HTTPException(status_code=502, detail="Something went wrong generating a response.")
 
     log_cascade(
@@ -1031,6 +1113,7 @@ def api_v1_calibrate(req: CalibrateModelRequest, user=Depends(get_user_from_api_
 
 @app.post("/api/v1/route")
 def api_route(req: RouteRequest, user=Depends(get_user_from_api_key)):
+    _enforce_daily_limit(user)
     tier_models = req.models
     if not tier_models:
         raise HTTPException(

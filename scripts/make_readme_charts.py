@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.baseline_cost import estimate_cost_for_model, estimate_frontier_cost
 from app.cascade import DEFAULT_TIER_MODELS
+from app.model_config import BUILTIN_CALIBRATION
 from app.db import get_conn
 
 OUT_DIR = Path(__file__).resolve().parent.parent / "app" / "static" / "charts"
@@ -48,62 +49,68 @@ def _svg(width, height, body, title):
 
 # --- data ------------------------------------------------------------------
 
-def load_quality_by_difficulty():
-    """Difficulty is a property of the query set, not the responses table, so
-    join through data/eval_queries.json by query_id (same as eval_summary.py)."""
-    import json
-    queries_path = Path(__file__).resolve().parent.parent / "data" / "eval_queries.json"
-    difficulty_of = {q["id"]: q["difficulty"] for q in json.loads(queries_path.read_text())}
+# The eval set's difficulty mix, for weighting per-band calibration numbers
+# into one figure per tier.
+BAND_MIX = {"easy": 20, "medium": 36, "hard": 60}
 
-    with get_conn() as conn:
-        out = {}
-        for tier in TIERS:
-            buckets = {d: [] for d in DIFFICULTIES}
-            rows = conn.execute(
-                "SELECT query_id, score FROM eval_scores "
-                "WHERE tier=? AND source IN ('automatic','judge_claude')",
-                (tier,),
-            ).fetchall()
-            for query_id, score in rows:
-                difficulty = difficulty_of.get(query_id)
-                if difficulty in buckets:
-                    buckets[difficulty].append(score)
-            out[tier] = {d: (sum(v) / len(v) if v else None) for d, v in buckets.items()}
-        return out
+
+def load_quality_by_difficulty():
+    """Per-band quality of each built-in tier, from its calibration on the
+    eval set (the cheap tier on all 76 auto-gradable queries, the paid tiers
+    on a stratified sample). This is what the routing policy actually uses."""
+    return {t: dict(BUILTIN_CALIBRATION[t]["quality"]) for t in TIERS}
 
 
 def load_tier_summary():
-    with get_conn() as conn:
-        out = {}
-        for tier in TIERS:
-            scores = conn.execute(
-                "SELECT score FROM eval_scores WHERE tier=? AND source IN ('automatic','judge_claude')",
-                (tier,),
-            ).fetchall()
-            cost, latency = conn.execute(
-                "SELECT AVG(cost), AVG(latency_ms) FROM eval_responses WHERE tier=?", (tier,),
-            ).fetchone()
-            out[tier] = {
-                "quality": sum(s[0] for s in scores) / len(scores),
-                "cost": cost, "latency": latency, "n": len(scores),
-            }
-        return out
+    """One (quality, cost, latency) per tier, band numbers weighted by the
+    eval set's difficulty mix. Cost includes any hidden reasoning tokens,
+    because calibration records what the provider actually charged."""
+    n = sum(BAND_MIX.values())
+    out = {}
+    for tier in TIERS:
+        cal = BUILTIN_CALIBRATION[tier]
+        q = [cal["quality"][d] for d in DIFFICULTIES]
+        if any(v is None for v in q):
+            continue
+        out[tier] = {
+            "quality": sum(cal["quality"][d] * k for d, k in BAND_MIX.items()) / n,
+            "cost": sum(cal["cost"][d] * k for d, k in BAND_MIX.items()) / n,
+            "latency": cal.get("latency_ms"), "n": cal.get("n_queries"),
+        }
+    return out
+
+
+def _from_calibration(tier, rows):
+    cal = BUILTIN_CALIBRATION.get(tier) or {}
+    if cal.get("unmeasured") or not cal.get("cost"):
+        return None
+    return sum(cal["cost"].get(r[5]) or 0.0 for r in rows)
 
 
 def load_cascade_totals():
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT total_cost, tokens_in, tokens_out, final_tier, escalated FROM cascade_log",
+            "SELECT total_cost, tokens_in, tokens_out, final_tier, escalated, difficulty FROM cascade_log",
         ).fetchall()
     actual = sum(r[0] for r in rows)
-    baseline = sum(estimate_frontier_cost(r[1], r[2]) for r in rows)
-    # "Mid for everything" is the comparison that actually matters: a single
-    # good mid-tier model beats frontier on cost too, so "cheaper than
-    # frontier" alone doesn't justify a cascade.
-    mid_only = sum(estimate_cost_for_model(DEFAULT_TIER_MODELS["mid"], r[1], r[2]) for r in rows)
+    # Baselines from calibration: what that model's own answers cost per band
+    # on the eval set, times this run's mix. Pricing the cascade's tokens at
+    # the other model's rates instead is wrong in both directions -- a wordy
+    # cheap model's tokens overstate mid, and a reasoning model's hidden
+    # thinking tokens (13x its visible ones, measured) aren't counted at all.
+    # Where a tier was never measured, fall back to the token-based estimate
+    # and say so. See scripts/compare_strategies.py for both numbers.
+    baseline = _from_calibration("frontier", rows)
+    frontier_measured = baseline is not None
+    if baseline is None:
+        baseline = sum(estimate_frontier_cost(r[1], r[2]) for r in rows)
+    mid_only = _from_calibration("mid", rows)
+    if mid_only is None:
+        mid_only = sum(estimate_cost_for_model(DEFAULT_TIER_MODELS["mid"], r[1], r[2]) for r in rows)
     by_tier = {t: sum(1 for r in rows if r[3] == t) for t in TIERS}
     return {
         "n": len(rows), "actual": actual, "baseline": baseline, "mid_only": mid_only,
+        "frontier_measured": frontier_measured,
         "by_tier": by_tier, "escalated": sum(1 for r in rows if r[4]),
     }
 
@@ -120,7 +127,7 @@ def chart_quality_by_difficulty(data, path):
         return mt + plot_h - (v - y0) / (y1 - y0) * plot_h
 
     parts = [_text(0, 22, "Answer quality by question difficulty", 15, INK_STRONG, weight="600")]
-    parts.append(_text(0, 38, "115-query eval set - the cheap tier holds up until questions get hard", 11.5, INK))
+    parts.append(_text(0, 38, "from calibration on the eval set - what the routing policy sees", 11.5, INK))
 
     for gv in [0, 0.2, 0.4, 0.6, 0.8, 1.0]:
         y = sy(gv)
@@ -222,8 +229,9 @@ def chart_cascade_savings(totals, path):
     vs_frontier = (totals["baseline"] - totals["actual"]) / totals["baseline"] * 100
     vs_mid = (totals["mid_only"] - totals["actual"]) / totals["mid_only"] * 100
     parts = [_text(0, 22, "What the cascade actually cost", 15, INK_STRONG, weight="600")]
-    parts.append(_text(0, 38, f"{totals['n']} routed queries, measured - same tokens priced three ways",
-                       11.5, INK))
+    how = "alternatives priced from each model's own calibrated per-question cost" if totals["frontier_measured"] \
+        else "mid from calibration; frontier priced over the cascade's tokens (unmeasured)"
+    parts.append(_text(0, 38, f"{totals['n']} routed queries, measured - {how}", 11.5, INK))
 
     rows = [
         ("frontier-only", totals["baseline"], COLORS["frontier"]),

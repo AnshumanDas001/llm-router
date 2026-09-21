@@ -9,6 +9,11 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
 <style>
+  /* In-page nav links glide to their section rather than jumping; the
+     offset keeps the section title clear of the sticky header. */
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  section[id] { scroll-margin-top: 84px; }
   body { overflow-x: hidden; }
   .page { position: relative; z-index: 1; }
   .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px; }

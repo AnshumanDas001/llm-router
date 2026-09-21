@@ -5,4 +5,4 @@ __pycache__/
 logs/*.db
 .DS_Store
 .claude/
-data/scorer_training.jsonl
+data/scorer_training_*.jsonl

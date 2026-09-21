@@ -29,6 +29,12 @@ def _cheap_params() -> dict:
         base = os.getenv("OLLAMA_API_BASE", "http://localhost:11434").rstrip("/")
         return {"model": "openai/" + CHEAP_MODEL.split("/", 1)[1],
                 "api_base": base + "/v1", "api_key": "ollama"}
+    if CHEAP_MODEL.startswith("openrouter/"):
+        # OpenRouter picks a backend per call, and not every backend honours
+        # `logprobs` (DeepInfra silently dropped them; Novita returns them).
+        # require_parameters restricts routing to backends that support every
+        # parameter we send, so the learned verifier gets its signals.
+        return {"model": CHEAP_MODEL, "extra_body": {"provider": {"require_parameters": True}}}
     return {"model": CHEAP_MODEL}
 
 

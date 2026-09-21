@@ -62,20 +62,29 @@
   }
 
   /* --- router status card, real numbers from /api/chat-stats -------------- */
-  #router-status { margin: 6px 14px 10px; padding: 11px 12px; }
-  #router-status .rs-title {
+  #router-status, .demo-card { margin: 6px 14px 10px; padding: 11px 12px; }
+  .demo-card { margin-top: 14px; }
+  .demo-card .rs-title, #router-status .rs-title {
     display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; margin-bottom: 9px;
   }
-  #router-status .rs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); flex-shrink: 0; }
-  #router-status .rs-pct { margin-left: auto; font-size: 10.5px; color: var(--good); font-family: "IBM Plex Mono", monospace; }
-  #router-status .rs-bar {
+  .demo-card .rs-dot, #router-status .rs-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); flex-shrink: 0; }
+  .demo-card .rs-pct, #router-status .rs-pct { margin-left: auto; font-size: 10.5px; color: var(--good); font-family: "IBM Plex Mono", monospace; }
+  .demo-card .rs-bar, #router-status .rs-bar {
     height: 4px; border-radius: 3px; background: var(--surface-3); overflow: hidden; margin-bottom: 9px;
   }
-  #router-status .rs-bar-fill { height: 100%; background: var(--good); border-radius: 3px; width: 0; }
+  .demo-card .rs-bar-fill, #router-status .rs-bar-fill { height: 100%; background: var(--good); border-radius: 3px; width: 0; }
   #router-status .rs-row {
     display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 4px;
   }
   #router-status .rs-row .v { color: var(--text-secondary); font-family: "IBM Plex Mono", monospace; }
+  .demo-note { color: var(--text-muted); font-size: 11.5px; line-height: 1.5; margin: 0 0 10px; }
+  .demo-note.small { margin: 8px 0 0; font-size: 11px; }
+  .demo-cta {
+    display: inline-block; font-size: 12px; font-weight: 600; color: var(--accent-ink, var(--accent));
+    text-decoration: none; padding: 6px 10px; border-radius: 8px; background: var(--accent-soft, var(--surface-3));
+  }
+  .demo-cta:hover { filter: brightness(1.08); }
+  .demo-limit { max-width: 520px; margin: 18px auto 6px; padding: 18px 20px; }
   .chat-item-kebab {
     background: none; border: none; color: var(--text-muted); padding: 2px 5px; border-radius: 4px;
     cursor: pointer; font-size: 14px; opacity: 0; flex-shrink: 0; line-height: 1;
@@ -352,6 +361,7 @@
       <div class="rs-bar"><div class="rs-bar-fill" id="rs-bar-fill"></div></div>
       <div class="rs-row"><span>Avg latency</span><span class="v" id="rs-latency">&mdash;</span></div>
       <div class="rs-row"><span>Cost saved</span><span class="v" id="rs-saved">&mdash;</span></div>
+      <div class="rs-row"><span>Today</span><span class="v" id="rs-daily">&mdash;</span></div>
     </div>
     <div id="chat-list"></div>
     <div class="app-nav-spacer" style="flex:0;"></div>
@@ -423,6 +433,27 @@
     });
   }
 
+  // Demo mode: this same page served at /try for signed-out visitors. Same
+  // UI, but sends go to /api/try (capped per device), nothing is persisted,
+  // and the sidebar shows the remaining quota with a sign-up prompt.
+  const DEMO = !!window.THRIFT_DEMO;
+  const DEVICE_KEY = "tl_device";
+  let demoDevice = null;
+  try { demoDevice = localStorage.getItem(DEVICE_KEY); } catch { /* storage unavailable */ }
+  let demoQuota = { used: 0, limit: 3, remaining: 3 };
+  const demoHistory = [];        // this demo conversation, replayed with each prompt
+  let demoTotals = { cost: 0, baseline: 0 };
+
+  function demoHeaders() {
+    return demoDevice ? { "X-Demo-Device": demoDevice } : {};
+  }
+
+  function rememberDevice(id) {
+    if (!id || id === demoDevice) return;
+    demoDevice = id;
+    try { localStorage.setItem(DEVICE_KEY, id); } catch { /* fine; the cookie still carries it */ }
+  }
+
   let currentChatId = null;
   let isSignup = false;
   let currentUsername = null;
@@ -486,7 +517,7 @@
   async function api(path, opts = {}) {
     const resp = await fetch(path, {
       ...opts,
-      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      headers: { "Content-Type": "application/json", ...demoHeaders(), ...(opts.headers || {}) },
       credentials: "same-origin",
     });
     const data = await resp.json().catch(() => ({}));
@@ -522,6 +553,7 @@
   };
 
   async function checkSession() {
+    if (DEMO) { await enterDemo(); return; }
     try {
       const me = await api("/auth/me");
       currentUsername = me.username;
@@ -550,15 +582,81 @@
     else renderHeroState();
   }
 
+  async function enterDemo() {
+    authScreen.hidden = true;
+    appScreen.hidden = false;
+    document.getElementById("new-chat-menu").hidden = true;
+    document.getElementById("chat-list").hidden = true;
+    document.getElementById("app-nav-top-mount").innerHTML = `
+      <div class="brand"><span class="brand-name">Thrift<span class="dot">LLM</span></span><span class="brand-version">demo</span></div>
+      <div class="card demo-card" id="demo-card">
+        <div class="rs-title"><span class="rs-dot"></span>Free demo<span class="rs-pct" id="demo-left"></span></div>
+        <div class="rs-bar"><div class="rs-bar-fill" id="demo-bar"></div></div>
+        <p class="demo-note">Three prompts on this device, routed through the real cascade. No account needed.</p>
+        <a class="demo-cta" href="/app">Create a free account &rarr;</a>
+        <p class="demo-note small">10 prompts a day, saved chats, your own models.</p>
+      </div>`;
+    document.getElementById("app-nav-bottom-mount").innerHTML = `
+      <a class="app-nav-link" href="/"><span class="nav-icon">&larr;</span><span class="nav-label">Back to site</span></a>`;
+    try {
+      const tiers = await api("/api/try/tiers");
+      builtinTierModels = tiers.builtin;
+    } catch { /* hero just won't show model names */ }
+    try {
+      const q = await api("/api/try/quota");
+      rememberDevice(q.device);
+      demoQuota = q;
+    } catch { /* keep the optimistic default */ }
+    renderHeaderStats();
+    renderDemoQuota();
+    renderHeroState();
+  }
+
+  function renderDemoQuota() {
+    const left = document.getElementById("demo-left");
+    const bar = document.getElementById("demo-bar");
+    if (!left) return;
+    left.textContent = `${demoQuota.remaining} of ${demoQuota.limit} left`;
+    bar.style.width = `${(demoQuota.used / demoQuota.limit) * 100}%`;
+    if (demoQuota.remaining <= 0) renderDemoLimit();
+  }
+
+  function renderDemoLimit() {
+    input.disabled = true;
+    sendBtn.disabled = true;
+    input.placeholder = "Demo limit reached on this device";
+    const inner = document.querySelector(".messages-inner") || getMessagesInner();
+    if (inner.querySelector(".demo-limit")) return;
+    const note = document.createElement("div");
+    note.className = "card demo-limit";
+    note.innerHTML = `
+      <div class="byom-key-title">That's the three free prompts</div>
+      <p class="byom-key-sub">Create a free account for 10 prompts a day, saved sessions, and the option to
+        route across your own models.</p>
+      <a class="demo-cta" href="/app">Create a free account &rarr;</a>`;
+    inner.appendChild(note);
+    const messagesEl = document.getElementById("messages");
+    messagesEl.classList.remove("messages-hero");
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
   async function renderRouterStatus() {
+    if (DEMO) return;
     try {
       const stats = await api("/api/chat-stats");
       const card = document.getElementById("router-status");
-      if (stats.n_messages === 0) { card.hidden = true; return; }
-      document.getElementById("rs-latency").textContent = Math.round(stats.avg_latency_ms) + "ms";
-      document.getElementById("rs-saved").textContent = "$" + stats.cost_saved.toFixed(4);
-      document.getElementById("rs-pct").textContent = "-" + stats.pct_saved.toFixed(0) + "% cost";
-      document.getElementById("rs-bar-fill").style.width = Math.min(100, stats.pct_saved) + "%";
+      const has = stats.n_messages > 0;
+      document.getElementById("rs-latency").textContent = has ? Math.round(stats.avg_latency_ms) + "ms" : "\u2014";
+      document.getElementById("rs-saved").textContent = has ? "$" + stats.cost_saved.toFixed(4) : "\u2014";
+      document.getElementById("rs-pct").textContent = has ? "-" + stats.pct_saved.toFixed(0) + "% cost" : "";
+      document.getElementById("rs-bar-fill").style.width = (has ? Math.min(100, stats.pct_saved) : 0) + "%";
+      // The per-account daily allowance, so hitting the cap isn't a surprise.
+      if (stats.daily) {
+        const left = Math.max(0, stats.daily.limit - stats.daily.used);
+        const el = document.getElementById("rs-daily");
+        el.textContent = `${left} of ${stats.daily.limit} prompts left`;
+        el.style.color = left === 0 ? "var(--critical)" : "";
+      }
       card.hidden = false;
     } catch { /* non-critical sidebar decoration */ }
   }
@@ -594,7 +692,9 @@
     wrap.innerHTML = `
       <div class="routing-pill"><span class="rp-dot"></span>Cascade routing active</div>
       <h1>Hi ${escapeHtml(displayName())},<span class="hero-question">what would you like to solve today?</span></h1>
-      <p class="sub">Every message is classified up front, then routed to the cheapest tier that can handle it.</p>
+      <p class="sub">${DEMO
+        ? `Every message is classified up front, then routed to the cheapest tier that can handle it. You have ${demoQuota.remaining} of ${demoQuota.limit} demo prompts on this device.`
+        : "Every message is classified up front, then routed to the cheapest tier that can handle it."}</p>
       <p class="active-tiers" id="active-tiers-line"></p>
     `;
     renderActiveTiersLine(wrap.querySelector("#active-tiers-line"));
@@ -625,7 +725,7 @@
         gridEl.appendChild(card);
 
         const badgeEl = card.querySelector(".sc-meta .badge");
-        api("/api/classify", { method: "POST", body: JSON.stringify({ content: p }) })
+        api(DEMO ? "/api/try/classify" : "/api/classify", { method: "POST", body: JSON.stringify({ content: p }) })
           .then(({ tier }) => {
             badgeEl.textContent = tier;
             badgeEl.className = `badge ready ${tier}`;
@@ -645,6 +745,7 @@
     }
 
     el.appendChild(wrap);
+    if (DEMO && demoQuota.remaining <= 0) { renderDemoLimit(); return; }
     if (!needsByomKeys(currentChatId)) input.focus();
   }
 
@@ -692,7 +793,7 @@
       renderRoutingMode();
       // Persist on an existing chat; a chat created later from the hero
       // picks the mode up at creation.
-      if (currentChatId) {
+      if (currentChatId && !DEMO) {
         await api(`/api/chats/${currentChatId}`, { method: "PATCH", body: JSON.stringify({ routing_mode: mode }) });
       }
     };
@@ -1176,7 +1277,7 @@
     if (!text) { clearPredict(); return; }
     predictTimer = setTimeout(async () => {
       try {
-        const { tier, difficulty } = await api("/api/classify", {
+        const { tier, difficulty } = await api(DEMO ? "/api/try/classify" : "/api/classify", {
           method: "POST", body: JSON.stringify({ content: text }),
         });
         predictEl.textContent = tier;
@@ -1198,7 +1299,7 @@
     sendBtn.disabled = true;
     input.disabled = true;
 
-    if (!currentChatId) {
+    if (!currentChatId && !DEMO) {
       const { id } = await api("/api/chats", {
         method: "POST", body: JSON.stringify({ routing_mode: currentRoutingMode }),
       });
@@ -1219,10 +1320,12 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
 
     try {
-      const body = { content };
-      if (currentChatMode === "byom") body.tier_api_keys = byomKeys[currentChatId] || {};
-      const resp = await fetch(`/api/chats/${currentChatId}/messages/stream`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+      const body = DEMO
+        ? { content, history: demoHistory, routing_mode: currentRoutingMode }
+        : { content };
+      if (!DEMO && currentChatMode === "byom") body.tier_api_keys = byomKeys[currentChatId] || {};
+      const resp = await fetch(DEMO ? "/api/try" : `/api/chats/${currentChatId}/messages/stream`, {
+        method: "POST", headers: { "Content-Type": "application/json", ...demoHeaders() },
         body: JSON.stringify(body), credentials: "same-origin",
       });
       if (!resp.ok) {
@@ -1262,20 +1365,34 @@
         escalated: finalEvent.escalated, difficulty: finalEvent.difficulty,
         escalation_reasons: finalEvent.escalation_reasons,
       }));
-      renderHeaderStats({
-        latencyMs: finalEvent.total_latency_ms,
-        totalCost: finalEvent.chat_total_cost,
-        totalBaseline: finalEvent.chat_total_baseline_cost,
-      });
-      await refreshChatList();
-      renderRouterStatus();
+      if (DEMO) {
+        demoHistory.push({ role: "user", content }, { role: "assistant", content: finalEvent.text });
+        demoTotals.cost += finalEvent.total_cost || 0;
+        demoTotals.baseline += finalEvent.baseline_cost || 0;
+        renderHeaderStats({
+          latencyMs: finalEvent.total_latency_ms,
+          totalCost: demoTotals.cost, totalBaseline: demoTotals.baseline,
+        });
+        demoQuota = { ...demoQuota, remaining: finalEvent.remaining, used: demoQuota.limit - finalEvent.remaining };
+        renderDemoQuota();
+      } else {
+        renderHeaderStats({
+          latencyMs: finalEvent.total_latency_ms,
+          totalCost: finalEvent.chat_total_cost,
+          totalBaseline: finalEvent.chat_total_baseline_cost,
+        });
+        await refreshChatList();
+        renderRouterStatus();
+      }
     } catch (err) {
       loadingEl.querySelector(".bubble").textContent = "Error: " + err.message;
       loadingEl.querySelector(".bubble").style.color = "var(--critical)";
     } finally {
-      sendBtn.disabled = false;
-      input.disabled = false;
-      input.focus();
+      if (!(DEMO && demoQuota.remaining <= 0)) {
+        sendBtn.disabled = false;
+        input.disabled = false;
+        input.focus();
+      }
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
   }
@@ -1293,7 +1410,7 @@
   // toggle every "why this route" disclosure open/closed at once. ---
   document.addEventListener("keydown", e => {
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key.toLowerCase() === "k") {
+    if (mod && e.key.toLowerCase() === "k" && !DEMO) {
       e.preventDefault();
       newChatDropdown.hidden = !newChatDropdown.hidden;
     } else if (mod && e.key === "/") {

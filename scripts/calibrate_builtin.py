@@ -43,10 +43,13 @@ def main():
             print(f"keeping   {tier:9} {model} (not selected)")
             continue
         print(f"calibrating {tier:9} {model} ...", flush=True)
-        # A free local tier gets the whole eval set: 8 questions per band
-        # once measured the cheap model at 0.88 on hard where 60 questions
-        # say 0.50-0.64, and 0.88 would have routed hard questions to it.
-        n = None if model.startswith("ollama/") else DEFAULT_MAX_QUERIES
+        # The cheap tier gets the whole eval set. Its numbers matter most
+        # (they decide what never reaches a paid model) and it's the tier
+        # that's nearly free to measure: 8 questions per band once put a
+        # 3B model at 0.88 on hard where 76 say 0.73, and a hosted 8B at
+        # 1.00 where 120 samples say 0.74 -- either would have routed hard
+        # questions to it on noise.
+        n = None if tier == "cheap" else DEFAULT_MAX_QUERIES
         stats = calibrate_model(model, None, max_queries=n, call_params=TIER_CALL_PARAMS[tier])
         if stats["n_queries"] == 0:
             # A tier that can't be reached (no key yet) still needs a cost
@@ -61,7 +64,8 @@ def main():
             }
             continue
         q, c = stats["quality_by_difficulty"], stats["cost_by_difficulty"]
-        tiers[tier] = {"quality": q, "cost": c}
+        tiers[tier] = {"quality": q, "cost": c, "latency_ms": stats["avg_latency_ms"],
+                       "n_queries": stats["n_queries"]}
         print(f"  quality easy {q['easy']:.2f} / med {q['medium']:.2f} / hard {q['hard']:.2f}"
               f"   cost ${c['easy']:.6f} / ${c['medium']:.6f} / ${c['hard']:.6f}"
               f"   {stats['avg_latency_ms']:.0f}ms  errors={stats['n_errors']}")

@@ -21,9 +21,12 @@ from sklearn.preprocessing import StandardScaler
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.classifier import _get_model
+from app.model_config import CHEAP_MODEL
 from app.scorer import ACCEPT_THRESHOLD, FEATURE_NAMES, MODEL_PATH, REJECT_THRESHOLD, features
 
-DATA_PATH = Path(__file__).resolve().parent.parent / "data" / "scorer_training.jsonl"
+# One dataset per cheap model: the signals are that model's own confidence.
+DATA_PATH = (Path(__file__).resolve().parent.parent / "data"
+             / f"scorer_training_{CHEAP_MODEL.replace('/', '-').replace(':', '-')}.jsonl")
 
 # The LLM judge measured on the same cheap answers (scratch benchmark over
 # the 117 auto-scored easy/medium rows, mid judge): what the gate's "unsure"
@@ -133,9 +136,9 @@ def main():
 
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump({"clf": clf, "accept": ACCEPT_THRESHOLD, "reject": REJECT_THRESHOLD,
-                 "judge_fraction": judged_frac, "n_rows": len(rows)}, MODEL_PATH)
-    print(f"\nsaved {MODEL_PATH.relative_to(Path.cwd())}: accept>={ACCEPT_THRESHOLD}, reject<{REJECT_THRESHOLD}, "
-          f"judge on {judged_frac:.0%} of cheap answers")
+                 "judge_fraction": judged_frac, "n_rows": len(rows), "cheap_model": CHEAP_MODEL}, MODEL_PATH)
+    print(f"\nsaved {MODEL_PATH.relative_to(Path.cwd())} for {CHEAP_MODEL}: accept>={ACCEPT_THRESHOLD}, "
+          f"reject<{REJECT_THRESHOLD}, judge on {judged_frac:.0%} of cheap answers")
 
 
 if __name__ == "__main__":

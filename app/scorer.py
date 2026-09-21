@@ -47,6 +47,7 @@ import joblib
 import numpy as np
 
 from app.classifier import _get_model, _model_lock
+from app.model_config import CHEAP_MODEL
 
 MODEL_PATH = Path(__file__).resolve().parent.parent / "data" / "answer_scorer.joblib"
 
@@ -173,7 +174,17 @@ def self_verify_p_yes(complete, query: str, answer: str) -> float:
 
 
 def available() -> bool:
-    return MODEL_PATH.exists()
+    """A trained scorer exists *for the configured cheap model*. Confidence
+    profiles don't transfer between models, so a scorer trained on one is
+    treated as absent for another and the cascade uses the judge."""
+    if not MODEL_PATH.exists():
+        return False
+    try:
+        # Bundles from before the tag was recorded were trained on the
+        # original local cheap model.
+        return _load().get("cheap_model", "ollama/llama3.2:3b") == CHEAP_MODEL
+    except Exception:
+        return False
 
 
 def _load():
@@ -194,7 +205,7 @@ def judge_fraction() -> float:
     """Share of cheap-tier answers the gate hands to the judge, measured
     held-out at training time. The routing policy prices verification as
     this fraction of a judge call."""
-    return _load()["judge_fraction"] if available() else 1.0
+    return _load()["judge_fraction"] if MODEL_PATH.exists() else 1.0
 
 
 def p_correct(**kw) -> float:
