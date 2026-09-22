@@ -1,11 +1,12 @@
 import os
-import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
+from app import dbconn
+
 # Overridable so a deployment can point this at a mounted volume; the
 # default keeps local development exactly as it was.
-DB_PATH = Path(os.getenv("ROUTER_DB_PATH", Path(__file__).resolve().parent.parent / "logs" / "router.db"))
+DB_PATH = dbconn.DB_PATH   # kept for scripts that report where data lives
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS requests (
@@ -64,8 +65,7 @@ CREATE TABLE IF NOT EXISTS cascade_log (
 
 @contextmanager
 def get_conn():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = dbconn.connect()
     try:
         yield conn
     finally:

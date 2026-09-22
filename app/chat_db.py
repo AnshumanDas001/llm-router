@@ -5,14 +5,15 @@ a genuinely different subsystem -- product state, not research data.
 """
 import json
 import os
-import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app import dbconn
+
 # Overridable so a deployment can point this at a mounted volume; the
 # default keeps local development exactly as it was.
-DB_PATH = Path(os.getenv("ROUTER_DB_PATH", Path(__file__).resolve().parent.parent / "logs" / "router.db"))
+DB_PATH = dbconn.DB_PATH   # kept for scripts that report where data lives
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -166,11 +167,24 @@ CREATE TABLE IF NOT EXISTS usage_log (
 """
 
 
+def _add_column(conn, statement: str):
+    """Run an ALTER TABLE ... ADD COLUMN that may already have been applied.
+
+    SQLite has no ADD COLUMN IF NOT EXISTS, so the duplicate is caught by
+    message rather than type -- sqlite3 and libsql (Turso) raise different
+    exception classes for it.
+    """
+    try:
+        conn.execute(statement)
+        conn.commit()
+    except Exception as e:
+        if "duplicate column" not in str(e).lower():
+            raise
+
+
 @contextmanager
 def get_conn():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = dbconn.connect(row_factory=True)
     try:
         yield conn
     finally:
@@ -184,55 +198,20 @@ def init_chat_db():
         # Migration: usage_log predates api_key_id (added when API-mode calls
         # became groupable into per-key "sessions"). SQLite has no
         # ADD COLUMN IF NOT EXISTS, so guard the duplicate-column error.
-        try:
-            conn.execute("ALTER TABLE usage_log ADD COLUMN api_key_id INTEGER REFERENCES api_keys(id)")
-            conn.commit()
-        except sqlite3.OperationalError as e:
-            if "duplicate column" not in str(e).lower():
-                raise
-        try:
-            conn.execute("ALTER TABLE chats ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
-            conn.commit()
-        except sqlite3.OperationalError as e:
-            if "duplicate column" not in str(e).lower():
-                raise
-        try:
-            conn.execute("ALTER TABLE chats ADD COLUMN mode TEXT NOT NULL DEFAULT 'builtin'")
-            conn.commit()
-        except sqlite3.OperationalError as e:
-            if "duplicate column" not in str(e).lower():
-                raise
-        try:
-            conn.execute("ALTER TABLE chats ADD COLUMN routing_mode TEXT NOT NULL DEFAULT 'cascade'")
-            conn.commit()
-        except sqlite3.OperationalError as e:
-            if "duplicate column" not in str(e).lower():
-                raise
+        _add_column(conn, "ALTER TABLE usage_log ADD COLUMN api_key_id INTEGER REFERENCES api_keys(id)")
+        _add_column(conn, "ALTER TABLE chats ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
+        _add_column(conn, "ALTER TABLE chats ADD COLUMN mode TEXT NOT NULL DEFAULT 'builtin'")
+        _add_column(conn, "ALTER TABLE chats ADD COLUMN routing_mode TEXT NOT NULL DEFAULT 'cascade'")
         for column, decl in (("difficulty", "TEXT"), ("escalation_reasons", "TEXT")):
-            try:
-                conn.execute(f"ALTER TABLE chat_messages ADD COLUMN {column} {decl}")
-                conn.commit()
-            except sqlite3.OperationalError as e:
-                if "duplicate column" not in str(e).lower():
-                    raise
-        try:
-            conn.execute("ALTER TABLE calibration_results ADD COLUMN quality_by_difficulty TEXT")
-            conn.commit()
-        except sqlite3.OperationalError as e:
-            if "duplicate column" not in str(e).lower():
-                raise
+            _add_column(conn, f"ALTER TABLE chat_messages ADD COLUMN {column} {decl}")
+        _add_column(conn, "ALTER TABLE calibration_results ADD COLUMN quality_by_difficulty TEXT")
 
         # Calibration moved from per-(user, tier) to per-(user, model): the
         # same model can now sit in different tiers in different sessions, so
         # its measurements belong to the model. Carry existing rows over once
         # rather than making users re-pay to re-measure. INSERT OR IGNORE
         # makes this a no-op on every later startup.
-        try:
-            conn.execute("ALTER TABLE model_calibrations ADD COLUMN cost_by_difficulty TEXT")
-            conn.commit()
-        except sqlite3.OperationalError as e:
-            if "duplicate column" not in str(e).lower():
-                raise
+        _add_column(conn, "ALTER TABLE model_calibrations ADD COLUMN cost_by_difficulty TEXT")
         conn.execute(
             "INSERT OR IGNORE INTO model_calibrations "
             "(user_id, model_name, avg_quality, avg_cost, avg_latency_ms, n_queries, "
