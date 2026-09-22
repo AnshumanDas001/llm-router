@@ -25,6 +25,12 @@ RUN pip install --index-url https://download.pytorch.org/whl/cpu torch
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+# Bake the embedding model into the image. Without this it is downloaded
+# from Hugging Face the first time the classifier runs -- fine on a VM that
+# keeps a volume, but on a serverless host every cold start would re-fetch
+# 90 MB and fail outright if HF is unreachable.
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2', device='cpu')"
+
 COPY app ./app
 COPY data ./data
 COPY scripts ./scripts
@@ -32,10 +38,16 @@ COPY scripts ./scripts
 # The DB and the model cache live on a volume mounted here (see compose).
 RUN mkdir -p /app/logs /app/.cache/huggingface
 
+# Serverless hosts (Cloud Run, Fly, Railway) tell the container which port
+# to listen on; a plain VM behind Caddy doesn't, hence the default.
+ENV PORT=8000
 EXPOSE 8000
 
 # One worker, on purpose: the embedding classifier is ~600 MB resident and
 # SQLite wants a single writer. Concurrency comes from FastAPI's threadpool
-# inside the one process. --proxy-headers so client IPs survive Caddy.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# inside the one process. --proxy-headers so client IPs survive the proxy
+# in front (Caddy, or the platform's own load balancer).
+#
+# Shell form so $PORT is expanded at runtime rather than passed literally.
+CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} \
+    --workers 1 --proxy-headers --forwarded-allow-ips "*"

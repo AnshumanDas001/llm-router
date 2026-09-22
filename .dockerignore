@@ -11,6 +11,5 @@ reports/
 *.md
 llm-router-4-week-roadmap.md
 deploy/
-Dockerfile
 docker-compose.yml
 Caddyfile
