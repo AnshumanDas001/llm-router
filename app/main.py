@@ -166,7 +166,17 @@ def on_startup():
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """Also reports whether data written here will survive a restart, so a
+    misconfigured deploy is visible without reading container logs. Names the
+    backend kind only -- never the URL or token."""
+    durable = dbconn.using_turso() or not any(
+        os.getenv(v) for v in ("K_SERVICE", "FLY_APP_NAME", "RAILWAY_ENVIRONMENT", "RENDER"))
+    return {
+        "status": "ok",
+        "database": "turso" if dbconn.using_turso() else "sqlite",
+        "durable": durable,
+        "warnings": dbconn.check(),
+    }
 
 
 @app.get("/", response_class=HTMLResponse)

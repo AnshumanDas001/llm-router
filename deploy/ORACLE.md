@@ -149,6 +149,31 @@ Don't set a tier to a model litellm can't price (Groq's `compound-mini`,
 for instance): it reports $0 per call and every cost figure in the app
 becomes fiction.
 
+## Checking the deploy is durable
+
+`GET /health` reports where data is going, without exposing any secret:
+
+```json
+{"status": "ok", "database": "turso", "durable": true, "warnings": []}
+```
+
+If it says `"database": "sqlite"` on a container host, **accounts and chats
+will be lost the next time the instance is recycled** — which presents as
+"I signed up, logged in fine, and the next day my login stopped working".
+The `warnings` array says which part is missing. Set `TURSO_DATABASE_URL`
+and `TURSO_AUTH_TOKEN`, redeploy, and confirm `durable` is `true`.
+
+To move an existing local database up first:
+
+```bash
+./venv/bin/python scripts/migrate_to_turso.py --dry-run   # report only
+./venv/bin/python scripts/migrate_to_turso.py
+```
+
+Note `libsql` has no wheel for Linux **arm64** — on an Ampere A1 it would
+have to build from Rust source. x86 hosts (Cloud Run, GCP e2-micro, Oracle
+E2.1.Micro) install it from a wheel.
+
 ## Updating
 
 ```bash
