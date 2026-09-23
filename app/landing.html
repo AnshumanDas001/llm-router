@@ -165,8 +165,8 @@
           <div class="k">cheaper than sending every query to the mid-tier model &mdash; and 82% under the frontier &mdash; over 116 routed queries, every graded answer correct</div>
         </div>
         <div class="metric">
-          <div class="n">26</div>
-          <div class="k">wrong cheap-model answers caught by a $0.00004 judge before they shipped. The other 90 never touched a paid model</div>
+          <div class="n">2-stage</div>
+          <div class="k">fallback verification. An ML confidence gate clears high-certainty cheap answers at zero cost &mdash; 0 of 15 wrong, held out &mdash; and a $0.00004 LLM judge adjudicates the rest, catching 94% of the bad ones</div>
         </div>
         <div class="metric">
           <div class="n">~7ms</div>
