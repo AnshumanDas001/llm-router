@@ -176,6 +176,7 @@ def health():
         "database": "turso" if dbconn.using_turso() else "sqlite",
         "durable": durable,
         "warnings": dbconn.check(),
+        "env": dbconn.env_report(),
     }
 
 

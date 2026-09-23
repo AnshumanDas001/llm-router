@@ -202,6 +202,28 @@ def connect(row_factory=False):
     return conn
 
 
+# Names the app reads. /health reports which of these are *present* -- never
+# their values -- because the usual deploy mistake is a variable that never
+# reaches the container (mounted as a file instead of exported, set on the
+# build step instead of the service, or simply misspelled), and that is
+# indistinguishable from a bad value until you can see which names arrived.
+EXPECTED_ENV = [
+    "TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN", "OPENROUTER_API_KEY",
+    "GROQ_API_KEY", "ROUTER_SECRET_KEY", "COOKIE_SECURE",
+]
+
+
+def env_report() -> dict:
+    present = {name: bool(os.getenv(name)) for name in EXPECTED_ENV}
+    # Anything that looks like it was meant to be one of ours but isn't
+    # spelled the way the app reads it.
+    near_misses = sorted(
+        k for k in os.environ
+        if k not in EXPECTED_ENV and any(w in k.upper() for w in ("TURSO", "OPENROUTER", "GROQ", "ROUTER_SECRET"))
+    )
+    return {"set": present, "unrecognised_similar_names": near_misses}
+
+
 def describe() -> str:
     return f"turso ({TURSO_URL}, replica {REPLICA_PATH})" if using_turso() else f"sqlite ({DB_PATH})"
 
