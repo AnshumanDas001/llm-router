@@ -41,6 +41,24 @@ from dotenv import load_dotenv
 # its own configuration rather than depending on import order.
 load_dotenv()
 
+
+def _normalise_env_names():
+    """Re-expose any variable whose *name* has surrounding whitespace.
+
+    Deploy consoles let you type a trailing space into the name field, and
+    the result is a variable the app can never find -- the failure is silent
+    and looks exactly like "the value is wrong". A name can only legitimately
+    contain letters, digits and underscores, so whitespace around one is
+    always a mistake and is safe to correct.
+    """
+    for key in list(os.environ):
+        stripped = key.strip()
+        if stripped != key and stripped not in os.environ:
+            os.environ[stripped] = os.environ[key]
+
+
+_normalise_env_names()
+
 TURSO_URL = os.getenv("TURSO_DATABASE_URL") or None
 TURSO_TOKEN = os.getenv("TURSO_AUTH_TOKEN") or None
 # Where the embedded replica is cached. Ephemeral by design: it is rebuilt
