@@ -106,6 +106,14 @@
   footer a { color: var(--text-secondary); text-decoration: none; }
   footer a:hover { color: var(--text-primary); }
   footer .spacer { margin-left: auto; }
+
+  .callout-band {
+    margin-top: 26px; padding: 20px 22px; border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface-1);
+  }
+  .callout-band h4 { margin: 0 0 10px; font-size: 14.5px; font-weight: 650; }
+  .callout-band p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.65; color: var(--text-secondary); }
+  .callout-band p:last-child { margin-bottom: 0; }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
 </head>
@@ -194,8 +202,27 @@
       <div class="flow">
         <div class="step"><div class="i">01</div><h4>Classify</h4><p>Embedding match against a labelled set decides easy, medium or hard. ~7ms, no model call.</p></div>
         <div class="step"><div class="i">02</div><h4>Route</h4><p>Each difficulty starts at the cheapest tier whose calibrated score clears 0.80 on it. The map is derived, not hardcoded.</p></div>
-        <div class="step"><div class="i">03</div><h4>Verify</h4><p>The cheapest tier's answer gets a $0.00004 verdict from a small judge model. Later tiers get a free structural check.</p></div>
-        <div class="step"><div class="i">04</div><h4>Escalate</h4><p>Only when the check fails. 26 of 116 queries escalated; the other 90 were answered where they started.</p></div>
+        <div class="step"><div class="i">03</div><h4>Score</h4><p>A learned scorer reads the cheap model's own token confidence &mdash; free, it's metadata on the answer already generated &mdash; and outputs P(correct).</p></div>
+        <div class="step"><div class="i">04</div><h4>Verify</h4><p>Above the confidence threshold the answer ships as-is. Everything else pays $0.00004 for a verdict from a small judge model.</p></div>
+        <div class="step"><div class="i">05</div><h4>Escalate</h4><p>Only when the check fails. 26 of 116 queries escalated; the other 90 were answered where they started.</p></div>
+      </div>
+      <div class="callout-band">
+        <h4>Why a scorer <em>and</em> a judge</h4>
+        <p>
+          FrugalGPT's idea is to replace the LLM judge with a small learned model. We built that, then
+          measured it against the judge on the same answers: the judge catches <strong>94%</strong> of
+          wrong cheap answers, the scorer about <strong>half</strong>. So the scorer never replaces the
+          judge &mdash; it decides when the judge is <em>needed</em>. The accept threshold is set at the
+          highest band where <strong>zero</strong> wrong answers slipped through in held-out testing
+          (0 of 15 at P&nbsp;&ge;&nbsp;0.95); below it, the judge rules.
+        </p>
+        <p>
+          What that saves depends entirely on what a verdict costs relative to the answer it protects.
+          Here the judge is 2% of a mid-tier answer, so the gate trims a few percent of verifications.
+          Point the judge at the tier above instead &mdash; where a verdict costs about what the next
+          answer would &mdash; and the same code is the difference between a cascade that pays for
+          itself and one that ties its own mid tier. We measured both.
+        </p>
       </div>
       <figure>
         <img src="/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier. Cheap costs $0.00002 at 6.1s, mid costs $0.00192 at 2.7s, the reasoning frontier costs $0.00619 and takes 103s." loading="lazy">

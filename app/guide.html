@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Docs</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -128,6 +129,22 @@
   .code-block pre code { background: none; padding: 0; font-size: 13px; line-height: 1.55; }
   .code-pane { display: none; }
   .code-pane.active { display: block; }
+
+  .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-width: 860px) {
+    /* Stack the three panes: the right-hand "on this page" rail is pure
+       duplication of the left one on a narrow screen, so it goes. */
+    #layout { display: block; }
+    #toc-sidebar {
+      width: auto; height: auto; position: sticky; top: 46px; z-index: 5;
+      padding: 10px 14px; overflow-x: auto; white-space: nowrap;
+      background: var(--surface-1); border-bottom: 1px solid var(--border);
+    }
+    #toc-sidebar .group-label { display: none; }
+    #toc-sidebar .toc-link { display: inline-block; min-height: 38px; line-height: 26px; }
+    #right-toc { display: none; }
+    .table-wrap table { min-width: 520px; }
+  }
 </style>
 </head>
 <body>
@@ -240,31 +257,41 @@ console.log(data._router);</code></pre></div>
     <section id="tiers">
       <h2>Tiers</h2>
       <p>Three named tiers, each mapped to a real model. Our defaults, or bring your own via calibration:</p>
-      <table>
+      <div class="table-wrap"><table>
         <thead><tr><th>Tier</th><th>Role</th><th>Our default</th></tr></thead>
         <tbody>
-          <tr><td><span class="badge get">cheap</span></td><td>Handles most easy/medium traffic, free or near-free</td><td class="mono">ollama/llama3.2:3b</td></tr>
-          <tr><td><span class="badge post">mid</span></td><td>Handles hard traffic directly; nearly frontier-quality at a fraction of the cost</td><td class="mono">groq/openai/gpt-oss-20b</td></tr>
-          <tr><td><span class="badge delete">frontier</span></td><td>Last resort &mdash; genuinely ambiguous tasks and rare escalations</td><td class="mono">gemini/gemini-3.5-flash</td></tr>
+          <tr><td><span class="badge get">cheap</span></td><td>Starts most traffic. Calibrated 0.89 / 0.95 / 0.81 on easy / medium / hard</td><td class="mono">openrouter/meta-llama/llama-3.1-8b-instruct</td></tr>
+          <tr><td><span class="badge post">judge</span></td><td>Verifies cheap answers. Not a tier &mdash; a separate small model, ~$0.00004 a verdict</td><td class="mono">groq/openai/gpt-oss-20b</td></tr>
+          <tr><td><span class="badge post">mid</span></td><td>Where failed cheap answers escalate. Thinking off; ~$0.002 an answer</td><td class="mono">openrouter/google/gemini-3.5-flash</td></tr>
+          <tr><td><span class="badge delete">frontier</span></td><td>Last resort &mdash; a reasoning model, ~$0.006 an answer and a minute or more</td><td class="mono">openrouter/deepseek/deepseek-r1</td></tr>
         </tbody>
-      </table>
+      </table></div>
       <p>You don't need all three configured &mdash; the cascade works over whichever subset you provide.</p>
     </section>
 
     <section id="cascade">
       <h2>Classifier &amp; cascade</h2>
-      <p>The classifier compares your query's embedding against a labeled reference set (61+ hand-scored examples, growing via an active-learning loop from real escalations) using 1-nearest-neighbor, then combines that with cheap text heuristics (query length, code/multi-step keywords) to guess a starting tier. This costs nothing &mdash; no model call.</p>
-      <p>From there: generate with the guessed tier, verify, escalate to the next tier only on failure. The cascade never revisits a tier once it's been tried and failed.</p>
+      <p>The classifier encodes your query with a sentence-embedding model and takes a <strong>similarity-weighted vote over its 5 nearest neighbours</strong> in a labelled reference set, then applies structural overrides (length, code and multi-step keywords, a cap on short recall questions). This costs nothing &mdash; no model call, about 7ms.</p>
+      <p>That gives a difficulty band, not a tier. The tier comes from <strong>expected cost</strong>: each tier has a measured quality and cost per band from calibration, and a band starts at whichever tier minimises generation + verification + (chance of failing &times; what escalating then costs), among tiers clearing a 0.80 quality floor. So the routing map is derived from measurements, not hardcoded &mdash; give it a stronger cheap model and hard questions start there on their own.</p>
+      <p>From there: generate, verify, escalate to the next tier only on failure. The cascade never revisits a tier once it's been tried and failed.</p>
     </section>
 
     <section id="verification">
       <h2>Verification</h2>
-      <p>Two strategies, chosen by <em>position</em> in the tier sequence, not the literal tier name:</p>
-      <ul>
-        <li><strong>The cheapest configured tier</strong> gets a real, paid LLM-judge check by the next tier up &mdash; asking whether the response addresses every part of the request and stays coherent.</li>
-        <li><strong>Every later tier</strong> gets a free structural check only (non-empty, not a refusal). Verification cost scales with response length, and later tiers' failure rates are low enough that a full judge call there isn't worth the cost.</li>
-        <li><strong>The last tier</strong> in the sequence is never checked &mdash; there's nothing left to escalate to.</li>
-      </ul>
+      <p>The cheapest tier's answer goes through <strong>two stages</strong>; later tiers get a free structural check; the last tier is never checked, because there is nothing left to escalate to.</p>
+      <h3>Stage 1 &mdash; the learned scorer (free)</h3>
+      <p>A logistic regression reads signals the cheap model gives away with every answer: its own per-token logprobs, the entropy of the alternatives it considered, response length, and the difficulty band. All of it is metadata on the generation already made, so this stage costs <strong>nothing</strong> and adds about a millisecond.</p>
+      <table>
+        <thead><tr><th>P(correct)</th><th>What happens</th><th>Cost</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">&ge; 0.95</td><td>Ship the answer &mdash; no judge call</td><td class="mono">$0</td></tr>
+          <tr><td class="mono">otherwise</td><td>Ask the judge</td><td class="mono">~$0.00004</td></tr>
+        </tbody>
+      </table>
+      <p>0.95 is not a guess: it's the highest confidence band in which <em>zero</em> wrong answers slipped through held-out testing (0 of 15). At 0.90 two would have. There is a symmetric reject threshold too, but it ships disabled &mdash; in the low-confidence band most answers the scorer doubts turn out to be correct, so escalating on its word alone buys a needless paid answer.</p>
+      <h3>Stage 2 &mdash; the LLM judge</h3>
+      <p>A small, cheap model (not the tier above) is asked whether the response addresses every part of the request and stays coherent. Measured on 117 graded answers it catches <strong>94%</strong> of wrong ones, against roughly half for the scorer &mdash; which is exactly why the scorer gates the judge rather than replacing it.</p>
+      <div class="callout note"><span class="icon">i</span><p>Set <code>VERIFIER=judge</code> to skip stage 1 entirely, or <code>SCORER_FEATURES=everything</code> and retrain to use the stronger scorer that also samples a second answer and asks the model to self-check &mdash; worth its extra calls only when a judge verdict is expensive relative to an answer.</p></div>
       <div class="callout note"><span class="icon">i</span><p>If a tier is temporarily rate limited, the cascade skips it and moves to the next one rather than failing the whole request.</p></div>
     </section>
 
@@ -356,13 +383,13 @@ resp = requests.post(f"{HOST}/api/v1/route", headers=HEADERS, json={
       <div class="endpoint-title"><span class="badge post">POST</span><code>/api/v1/route</code></div>
       <p>Routes one chat completion through the cascade using your configured models.</p>
       <h3>Request body</h3>
-      <table>
+      <div class="table-wrap"><table>
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
         <tbody>
           <tr><td><code>messages</code></td><td>array</td><td>OpenAI-style <code>{role, content}</code> messages</td></tr>
           <tr><td><code>tier_api_keys</code></td><td>object</td><td>Your upstream keys per tier, used transiently, never stored</td></tr>
         </tbody>
-      </table>
+      </table></div>
       <h3>Response</h3>
       <p>OpenAI-shaped chat completion, plus a <code>_router</code> block:</p>
       <div class="code-block">
@@ -391,7 +418,7 @@ resp = requests.post(f"{HOST}/api/v1/route", headers=HEADERS, json={
 
     <section id="ref-errors">
       <h2>Errors</h2>
-      <table>
+      <div class="table-wrap"><table>
         <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
         <tbody>
           <tr><td class="mono">401</td><td>Missing, invalid, or revoked API key</td></tr>
@@ -399,7 +426,7 @@ resp = requests.post(f"{HOST}/api/v1/route", headers=HEADERS, json={
           <tr><td class="mono">502</td><td>Unexpected upstream failure</td></tr>
           <tr><td class="mono">503</td><td>Every configured tier is temporarily rate limited &mdash; retry shortly</td></tr>
         </tbody>
-      </table>
+      </table></div>
     </section>
 
   </main>

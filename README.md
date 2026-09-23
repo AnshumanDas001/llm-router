@@ -137,9 +137,15 @@ P(YES) read off the logprobs. The scorer's $P(\text{correct})$ then decides:
 
 | scorer says | what happens | cost |
 |---|---|---|
-| $P \ge 0.9$ | ship it | $0 |
-| $P < 0.3$ | escalate | $0 |
-| otherwise | ask the LLM judge on the tier above | one judge call |
+| $P \ge 0.95$ | ship it, no judge call | $0 |
+| otherwise | ask the LLM judge | ~$0.00004 |
+
+The shipped scorer uses only the **free** signals — logprobs, entropy,
+length, difficulty — so stage 1 adds no API call at all. A stronger variant
+that also samples a second answer and asks the model to self-check is one
+env var away (`SCORER_FEATURES=everything`, then retrain); it discriminates
+better (AUC 0.735 vs 0.656) but costs two extra cheap calls, which only pays
+on a stack where a judge verdict is expensive relative to an answer.
 
 This is FrugalGPT's idea (a learned scorer instead of an LLM judge) with one
 correction from measurement: the scorer alone catches about half of the
@@ -147,14 +153,21 @@ wrong answers, the judge catches 94%, so the scorer is not allowed to
 replace the judge — only to decide when the judge is needed. On the local
 3B stack it decided 37% of the time at 100% accuracy on what it shipped.
 
-Whether the gate is worth running is itself a cost question, and on the
-current stack the answer is no: the gate spends a second cheap sample plus a
-self-check (~$0.00003) to skip 38% of judge calls worth $0.000015, and its
-held-out AUC on the 8B's answers was 0.735 — below the 0.75 bar set before
-training. So the built-in stack runs **judge-only** (`VERIFIER=judge`): every
-cheap answer gets a $0.00004 verdict, which is nothing next to the $0.002
-mid answer it protects. The gate stays available for stacks where the judge
-is the expensive part. Later tiers get a free structural check; the last
+Both thresholds are measured, and they are deliberately lopsided because
+the two mistakes are not symmetric. **Accept at 0.95** is the highest band
+where *zero* wrong answers slipped through held-out testing (0 of 15); at
+0.90, two would have. **Reject ships disabled** (threshold 0.0): in the
+low-confidence band most answers the scorer doubts turn out to be correct —
+at P < 0.05, half of them — so escalating on the scorer's word alone buys a
+needless paid answer. The judge is better at that call, so it gets to make it.
+
+How much the gate is worth depends entirely on what a verdict costs relative
+to the answer it protects. On this stack a $0.00004 judge guards a $0.002
+answer, so verification is 2% of the bill and the gate trims ~5% of that —
+real, but small. Point the judge at the tier above instead, as the first
+stack did, and a verdict costs about what the next answer would; there the
+same code is the difference between a cascade that pays for itself and one
+that ties its own mid tier. Later tiers get a free structural check; the last
 tier is never checked.
 
 ```mermaid
@@ -420,16 +433,18 @@ reports/             Pareto chart, generated README charts
   to O(n²)" because both are about quicksort, though one is recall and the
   other is analysis. The structural overrides patch the worst of that; a
   learned difficulty model trained on the escalation log would do better.
-- **The learned scorer cannot replace the judge, only gate it — and here it
-  isn't worth gating.** FrugalGPT replaces the LLM judge with a learned
+- **The learned scorer cannot replace the judge, only gate it.** FrugalGPT replaces the LLM judge with a learned
   scorer outright. Two attempts: sentence embeddings of (query, answer)
   reached held-out ROC-AUC **0.66** — embeddings encode topic, not
   correctness. The cheap model's own logprobs, a second sample and a
   self-check reached **0.80** on the 3B (0.85 on objectively-graded rows) and
   **0.735** on the 8B, which has fewer wrong answers to learn from. On the
-  same answers the LLM judge catches 94% of wrong ones. The gate ships for
-  stacks where the judge is the expensive call; on this one the judge costs
-  2% of the answer it protects, so `VERIFIER=judge`.
+  same answers the LLM judge catches 94% of wrong ones — so the scorer gates
+  the judge and never replaces it. What ships is the free-signal variant at a
+  conservative threshold: it skips ~5% of judge calls having shipped no wrong
+  answer in testing. On this stack that is a couple of percent of a bill that
+  is already 98% generation; its value is much larger on a stack where the
+  judge is the expensive call, which is the configuration it was built for.
 - **Calibration samples are small for the paid tiers.** 8 questions per band
   for mid; the cheap tier gets all 76 because it's nearly free to measure and
   its numbers decide what never reaches a paid model.

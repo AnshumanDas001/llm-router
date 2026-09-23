@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ThriftLLM &mdash; Models</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -39,6 +40,11 @@
   .provider-form .checkbox-row .hint { display: block; }
   .models-title { font-size: 13px; font-weight: 650; margin: 22px 0 4px; }
 
+
+  /* A table can't reflow, so on a phone it scrolls inside its own box
+     instead of pushing the page sideways. */
+  .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-width: 760px) { .table-wrap table { min-width: 520px; } }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
 </head>
@@ -111,13 +117,13 @@
           <p class="section-sub">A model must be calibrated before you can start a session with it.</p>
           <div class="card reveal">
             <div id="calibrate-warnings"></div>
-            <table id="models-table">
+            <div class="table-wrap"><table id="models-table">
               <thead><tr>
                 <th>Model</th><th>Provider</th><th>Easy</th><th>Medium</th><th>Hard</th>
                 <th>Avg cost</th><th>Avg latency</th><th></th>
               </tr></thead>
               <tbody></tbody>
-            </table>
+            </table></div>
             <div id="calibrate-status" class="hint" style="margin-top:10px;"></div>
           </div>
         </section>

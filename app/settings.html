@@ -2,11 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ThriftLLM &mdash; Settings</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
 <style>
+
+  /* A table can't reflow, so on a phone it scrolls inside its own box
+     instead of pushing the page sideways. */
+  .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-width: 760px) { .table-wrap table { min-width: 520px; } }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
 </head>
@@ -41,7 +47,7 @@
           <a href="/sessions">Sessions</a>).</p>
         <div class="card reveal">
           <div id="new-key-banner"></div>
-          <table id="keys-table"><thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody></tbody></table>
+          <div class="table-wrap"><table id="keys-table"><thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody></tbody></table></div>
           <div style="margin-top:12px; display:flex; gap:8px;">
             <input type="text" id="new-key-name" placeholder="key name (optional)">
             <button id="create-key-btn">+ New API key</button>

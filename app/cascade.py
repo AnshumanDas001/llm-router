@@ -82,7 +82,10 @@ class _Sibling(threading.Thread):
     """A second sample of the cheap tier, drawn concurrently with the one
     the user sees, for the scorer's consistency features. On a local model
     it costs nothing but the parallel compute; on a hosted cheap tier it
-    costs one more cheap answer, still well under a judge call."""
+    costs one more cheap answer, still well under a judge call.
+
+    Only started when the trained scorer actually reads those features --
+    the shipped one doesn't, so this stays dormant on the default stack."""
 
     def __init__(self, tier, messages):
         super().__init__(daemon=True)
@@ -111,7 +114,7 @@ def _verify_learned(tier, messages, query, text, logprobs, entropy, finish_reaso
     start = time.perf_counter()
     cost = 0.0
     p_yes = 0.5
-    if scorer.USE_SELF_VERIFY:
+    if scorer.uses(scorer.SELF_VERIFY_FEATURES):
         spent = []
 
         def complete(msgs, **params):
@@ -200,7 +203,7 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
     for i, tier in enumerate(tier_sequence):
         start = time.perf_counter()
         scored = learned and tier in judge_model_for
-        sibling = _Sibling(tier, messages) if scored and scorer.USE_SIBLING else None
+        sibling = _Sibling(tier, messages) if scored and scorer.uses(scorer.SIBLING_FEATURES) else None
         try:
             if scored:
                 resp = router.completion(model=tier, messages=messages, **scorer.LOGPROB_PARAMS)
@@ -354,7 +357,7 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
         start = time.perf_counter()
         text_parts = []
         scored = learned and tier in judge_model_for
-        sibling = _Sibling(tier, messages) if scored and scorer.USE_SIBLING else None
+        sibling = _Sibling(tier, messages) if scored and scorer.uses(scorer.SIBLING_FEATURES) else None
         logprobs, entropy, finish_reason = [], [], None
         try:
             yield {"type": "tier_start", "tier": tier}

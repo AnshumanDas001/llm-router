@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ThriftLLM &mdash; Sessions</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -25,6 +26,11 @@
     .session-card { grid-template-columns: 1fr; gap: 6px; text-align: left; }
     .session-card .stat-col, .session-card .created { text-align: left; }
   }
+
+  /* A table can't reflow, so on a phone it scrolls inside its own box
+     instead of pushing the page sideways. */
+  .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-width: 760px) { .table-wrap table { min-width: 520px; } }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
 </head>
@@ -77,10 +83,10 @@
           <div class="stat"><div class="num" id="detail-cost">-</div><div class="lbl">total cost</div></div>
           <div class="stat"><div class="num good" id="detail-saved">-</div><div class="lbl">saved</div></div>
         </div>
-        <table id="detail-table">
+        <div class="table-wrap"><table id="detail-table">
           <thead><tr><th>Time</th><th>Difficulty</th><th>Tier</th><th>Cost</th><th>Saved</th><th></th></tr></thead>
           <tbody></tbody>
-        </table>
+        </table></div>
       </div>
 
     </div>

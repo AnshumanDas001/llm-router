@@ -1078,9 +1078,14 @@ def _judge_cost_estimate(tiers: list[str], tier_models: dict | None) -> float:
     judge_model = judge_for(tiers, tier_models, None)[0]
     judge = estimate_cost_for_model(judge_model, *JUDGE_PROBE_TOKENS)
     if learned_verifier_on(tier_models):
-        # The gate only sends its uncertain share of answers to the judge.
-        return (estimate_cost_for_model(DEFAULT_TIER_MODELS[tiers[0]], *SCORER_PROBE_TOKENS)
-                + scorer.judge_fraction() * judge)
+        # The gate answers some verifications itself, so only its uncertain
+        # share reaches the judge. It costs extra cheap-tier calls only if
+        # the trained scorer reads features that need them -- the shipped one
+        # reads token confidence off the generation already made, and is free.
+        own_cost = 0.0
+        if scorer.uses(scorer.SIBLING_FEATURES) or scorer.uses(scorer.SELF_VERIFY_FEATURES):
+            own_cost = estimate_cost_for_model(DEFAULT_TIER_MODELS[tiers[0]], *SCORER_PROBE_TOKENS)
+        return own_cost + scorer.judge_fraction() * judge
     return judge
 
 

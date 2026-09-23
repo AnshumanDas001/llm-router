@@ -41,13 +41,16 @@ def _cheap_params() -> dict:
 
 
 # How the cheapest tier's answer is checked before it ships:
-#   learned  the scorer in app/scorer.py (token confidence + a second cheap
-#            sample + cheap self-check). No judge call. Requires the trained
-#            model file; falls back to the judge if it's missing or the
-#            provider returns no logprobs.
-#   judge    the LLM judge on the next tier up, always.
-#   auto     learned when trained, judge otherwise (default).
-VERIFIER = os.getenv("VERIFIER", "judge")
+#   auto     (default) the learned gate in app/scorer.py runs first: it reads
+#            the cheap model's own token confidence, and where it is sure the
+#            answer is right (P >= its accept threshold, measured so that no
+#            wrong answer slipped through) the answer ships with no judge
+#            call at all. Everything else still goes to the judge. Falls back
+#            to the judge whenever there is no scorer trained for the current
+#            CHEAP_MODEL, or the provider returned no logprobs.
+#   judge    always call the judge; never consult the scorer.
+#   learned  same as auto (kept as an explicit spelling).
+VERIFIER = os.getenv("VERIFIER", "auto")
 
 
 # Every tier is env-overridable with any litellm model string, so a deploy

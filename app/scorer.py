@@ -25,18 +25,30 @@ so the two can't drift.
 Measured against the LLM judge on the same answers, the scorer alone is
 not a replacement: the judge catches 94% of wrong cheap answers, the
 scorer about half. What it *is* good at is knowing when it's sure. So it
-runs as a gate in front of the judge, not instead of it:
+runs as a gate in front of the judge, never instead of it:
 
     P(correct) >= ACCEPT_THRESHOLD   ship it, no judge call
-    P(correct) <  REJECT_THRESHOLD   escalate, no judge call (a judge
-                                     verdict here costs more than the
-                                     mid answer it would usually lead to)
+    P(correct) <  REJECT_THRESHOLD   escalate, no judge call
     otherwise                        ask the judge
 
-The judge still runs on the ambiguous middle, but only there, which is
-what brings the per-query verification cost below the mid tier's own
-answer -- the condition under which the expected-cost routing policy
-sends easy and medium questions to the cheap tier at all.
+Both thresholds are chosen from held-out measurement, and the defaults are
+deliberately lopsided because the two errors are not symmetric:
+
+  accept 0.95   the highest band where *zero* wrong answers slipped
+                through (0 of 15). At 0.90 two would have. Skipping a
+                judge call is only free if the answer really was right.
+  reject 0.0    off by default. In the low band most answers the scorer
+                doubts are in fact correct (at P<0.05, half of them), so
+                escalating on the scorer's word alone buys a needless
+                paid answer. Let the judge decide; it is better at this.
+
+How much that is worth depends entirely on what a verdict costs relative
+to the answer it protects. With a cheap judge (gpt-oss-20b at $0.00004)
+in front of a $0.002 answer, verification is 2% of the bill and the gate
+saves a fraction of that. With the judge on the tier above -- where a
+verdict costs about what the next answer would -- it is the difference
+between a cascade that pays for itself and one that ties its own mid
+tier. The gate is the same code either way; only the arithmetic changes.
 """
 import math
 import re
@@ -51,16 +63,22 @@ from app.model_config import CHEAP_MODEL
 
 MODEL_PATH = Path(__file__).resolve().parent.parent / "data" / "answer_scorer.joblib"
 
-# Which paid-for signals the runtime collects. Both are cheap-tier calls
-# (never a judge); set from the ablation in train_scorer.py -- a feature the
-# fitted model doesn't use isn't worth a call.
-USE_SIBLING = True        # one extra cheap generation, drawn in parallel
-USE_SELF_VERIFY = True    # one 1-token cheap call
+# Fallbacks, used only if the model file doesn't carry its own. The live
+# values are whatever train_scorer.py measured and saved.
+ACCEPT_THRESHOLD = 0.95
+REJECT_THRESHOLD = 0.0        # 0 = never escalate without asking the judge
 
-# Both thresholds come from the held-out sweep in train_scorer.py, which
-# saves them into the model file; these are the fallbacks if it didn't.
-ACCEPT_THRESHOLD = 0.9
-REJECT_THRESHOLD = 0.3
+# The features a scorer may be trained on. "Free" ones are read off the
+# generation the cascade already makes; the other two each cost an extra
+# cheap-tier call, so the trained model records which it actually uses and
+# the cascade skips the calls nothing depends on.
+FREE_FEATURES = [
+    "mean_logprob", "min_logprob", "p10_logprob", "frac_uncertain", "head_logprob",
+    "mean_entropy", "max_entropy", "log_tokens", "truncated",
+    "is_easy", "is_medium", "is_hard",
+]
+SIBLING_FEATURES = ["consist_max", "consist_mean", "numeric_agree"]
+SELF_VERIFY_FEATURES = ["self_verify"]
 
 FEATURE_NAMES = [
     "mean_logprob", "min_logprob", "p10_logprob", "frac_uncertain", "head_logprob",
@@ -197,8 +215,18 @@ def _load():
             bundle.setdefault("accept", ACCEPT_THRESHOLD)
             bundle.setdefault("reject", REJECT_THRESHOLD)
             bundle.setdefault("judge_fraction", 1.0)
+            bundle.setdefault("feature_cols", FEATURE_NAMES)
+            bundle["_idx"] = [FEATURE_NAMES.index(c) for c in bundle["feature_cols"]]
             _clf = bundle
     return _clf
+
+
+def uses(feature_group: list[str]) -> bool:
+    """Does the trained scorer read any of these features? The cascade asks
+    before paying for the call that produces them."""
+    if not available():
+        return False
+    return any(c in _load()["feature_cols"] for c in feature_group)
 
 
 def judge_fraction() -> float:
@@ -209,8 +237,9 @@ def judge_fraction() -> float:
 
 
 def p_correct(**kw) -> float:
-    X = features(**kw).reshape(1, -1)
-    return float(_load()["clf"].predict_proba(X)[0, 1])
+    bundle = _load()
+    X = features(**kw).reshape(1, -1)[:, bundle["_idx"]]
+    return float(bundle["clf"].predict_proba(X)[0, 1])
 
 
 def verify_learned(query: str, answer: str, **signals) -> dict:

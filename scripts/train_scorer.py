@@ -8,6 +8,7 @@ choice. Numbers are for spotting a WRONG answer, since that's the job.
     ./venv/bin/python scripts/train_scorer.py
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -22,7 +23,8 @@ from sklearn.preprocessing import StandardScaler
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.classifier import _get_model
 from app.model_config import CHEAP_MODEL
-from app.scorer import ACCEPT_THRESHOLD, FEATURE_NAMES, MODEL_PATH, REJECT_THRESHOLD, features
+from app.scorer import (ACCEPT_THRESHOLD, FEATURE_NAMES, FREE_FEATURES, MODEL_PATH,
+                        REJECT_THRESHOLD, SELF_VERIFY_FEATURES, SIBLING_FEATURES, features)
 
 # One dataset per cheap model: the signals are that model's own confidence.
 DATA_PATH = (Path(__file__).resolve().parent.parent / "data"
@@ -34,16 +36,18 @@ DATA_PATH = (Path(__file__).resolve().parent.parent / "data"
 JUDGE_CATCH, JUDGE_FALSE_ESCALATE = 0.94, 0.12
 
 ABLATIONS = {
-    "confidence only (free)": ["mean_logprob", "min_logprob", "p10_logprob", "frac_uncertain",
-                               "head_logprob", "mean_entropy", "max_entropy", "log_tokens",
-                               "truncated", "is_easy", "is_medium", "is_hard"],
-    "+ self-verify (1 tiny call)": None,   # filled below
-    "+ consistency (1 extra generation)": None,
+    "confidence only (free)": FREE_FEATURES,
+    "+ self-verify (1 tiny call)": FREE_FEATURES + SELF_VERIFY_FEATURES + ["qa_cosine"],
+    "+ consistency (1 extra generation)": FREE_FEATURES + SIBLING_FEATURES + ["qa_cosine"],
     "everything": FEATURE_NAMES,
 }
-ABLATIONS["+ self-verify (1 tiny call)"] = ABLATIONS["confidence only (free)"] + ["self_verify", "qa_cosine"]
-ABLATIONS["+ consistency (1 extra generation)"] = ABLATIONS["confidence only (free)"] + [
-    "consist_max", "consist_mean", "numeric_agree", "qa_cosine"]
+
+# Which ablation actually ships. Free by default: the extra signals buy real
+# discrimination, but each costs a cheap-tier call, and on a stack where a
+# judge verdict is already 2% of the answer it protects that trade never
+# pays. Set SCORER_FEATURES=everything to train the full-signal version for
+# a stack where the judge is the expensive call.
+SHIP = os.getenv("SCORER_FEATURES", "confidence only (free)")
 
 
 def make_clf():
@@ -91,11 +95,12 @@ def main():
         preds[name] = p_correct
         report(name, y_wrong, 1 - p_correct)
 
-    p_correct = preds["everything"]
+    p_correct = preds[SHIP]
+    print(f"\n  shipping: {SHIP!r} ({len(ABLATIONS[SHIP])} features)")
     mask = np.isin(diffs, ["easy", "medium"])
     print(f"\n  on the {mask.sum()} easy/medium rows (what the cheap tier actually sees):")
     print(f"    wrong answers among them: {y_wrong[mask].sum()}")
-    report("everything", y_wrong[mask], 1 - p_correct[mask])
+    report(SHIP, y_wrong[mask], 1 - p_correct[mask])
 
     ym, pm = y[mask], p_correct[mask]
     print("\n=== calibration on easy/medium (held-out P(correct) vs. actual) ===")
@@ -126,19 +131,32 @@ def main():
         shipped_wrong = ((acc & (ym == 0)).sum() + wrong_j - caught) / shipped
         marker = "  <- saved" if (lo, hi) == (REJECT_THRESHOLD, ACCEPT_THRESHOLD) else ""
         print(f"  {lo:>4.2f} {hi:>5.2f} {judged.mean():>11.0%} {shipped_wrong:>13.1%} {escalated / len(ym):>11.0%}{marker}")
-    judged_frac = float(((pm >= REJECT_THRESHOLD) & (pm < ACCEPT_THRESHOLD)).mean())
+    # What the shipped thresholds do on every answer, not just easy/medium:
+    # the accept band is the whole point, so it gets checked on all of it.
+    pa = preds[SHIP]
+    accept, reject = pa >= ACCEPT_THRESHOLD, pa < REJECT_THRESHOLD
+    print(f"\n=== shipped thresholds: accept >= {ACCEPT_THRESHOLD}, reject < {REJECT_THRESHOLD} ===")
+    print(f"  accepted without a judge call: {accept.sum():3} of {len(y)} ({accept.mean():.0%}), "
+          f"wrong among them: {(accept & (y == 0)).sum()}")
+    print(f"  escalated without a judge call: {reject.sum():3} ({reject.mean():.0%}), "
+          f"needlessly (answer was right): {(reject & (y == 1)).sum()}")
+    judged_frac = float((~accept & ~reject).mean())
+    print(f"  judge still called on: {judged_frac:.0%}")
 
-    clf = make_clf().fit(X, y)
+    cols = ABLATIONS[SHIP]
+    idx = [FEATURE_NAMES.index(c) for c in cols]
+    clf = make_clf().fit(X[:, idx], y)
     coef = clf[-1].coef_[0]
     print("\n=== fitted coefficients (standardised; + means 'more likely correct') ===")
-    for name, c in sorted(zip(FEATURE_NAMES, coef), key=lambda t: -abs(t[1]))[:10]:
+    for name, c in sorted(zip(cols, coef), key=lambda t: -abs(t[1]))[:10]:
         print(f"  {name:16} {c:+.2f}")
 
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump({"clf": clf, "accept": ACCEPT_THRESHOLD, "reject": REJECT_THRESHOLD,
-                 "judge_fraction": judged_frac, "n_rows": len(rows), "cheap_model": CHEAP_MODEL}, MODEL_PATH)
-    print(f"\nsaved {MODEL_PATH.relative_to(Path.cwd())} for {CHEAP_MODEL}: accept>={ACCEPT_THRESHOLD}, "
-          f"reject<{REJECT_THRESHOLD}, judge on {judged_frac:.0%} of cheap answers")
+                 "judge_fraction": judged_frac, "n_rows": len(rows), "cheap_model": CHEAP_MODEL,
+                 "feature_cols": cols, "trained_on": SHIP}, MODEL_PATH)
+    print(f"\nsaved {MODEL_PATH.relative_to(Path.cwd())} for {CHEAP_MODEL}: {SHIP}, "
+          f"accept>={ACCEPT_THRESHOLD}, reject<{REJECT_THRESHOLD}, judge on {judged_frac:.0%} of cheap answers")
 
 
 if __name__ == "__main__":

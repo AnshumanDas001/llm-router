@@ -103,12 +103,44 @@ a { color: var(--accent); }
 .app-main { flex: 1; overflow-y: auto; min-width: 0; }
 .app-content { max-width: 920px; margin: 0 auto; padding: 28px 24px 60px; }
 
-@media (max-width: 640px) {
-  .app-shell { flex-direction: column; height: auto; overflow: visible; }
-  .app-nav { width: 100%; flex-direction: row; align-items: center; padding: 8px 4px; overflow-x: auto; }
-  .app-nav .brand, .app-nav-user { display: none; }
-  .app-nav-link { width: auto; white-space: nowrap; }
+/* --- phones --------------------------------------------------------------
+   The sidebar becomes a drawer rather than a squashed column: on a 390px
+   screen a 208px rail leaves nothing for the content. Pages that scroll as
+   documents (Models, Sessions, Settings) let the body scroll; the chat app
+   overrides this to keep its own composer pinned -- see chat_app.html. */
+@media (max-width: 760px) {
+  .app-shell { flex-direction: column; height: auto; min-height: 100dvh; overflow: visible; }
+
+  .app-nav {
+    width: 100%; flex-direction: row; align-items: center; gap: 4px;
+    padding: 8px 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    border-right: none; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 30;
+  }
+  .app-nav::-webkit-scrollbar { display: none; }
+  .app-nav .brand { padding: 0 8px 0 2px; margin: 0; flex-shrink: 0; }
+  .app-nav .brand-version { display: none; }
+  .app-nav-user { margin-left: auto; flex-shrink: 0; padding: 0 2px; }
+  .app-nav-user .nav-user-text { display: none; }
+  /* 44px is the smallest reliably tappable target. */
+  .app-nav-link {
+    width: auto; white-space: nowrap; min-height: 44px; padding: 0 12px;
+    flex-shrink: 0; border-radius: 10px;
+  }
   .app-main { overflow: visible; }
+  .app-content { padding: 18px 14px 48px; }
+
+  .page-header { flex-direction: column; align-items: stretch; gap: 8px; }
+
+  /* Tables are the one thing allowed to scroll sideways, inside themselves. */
+  .table-scroll, .card table { display: block; max-width: 100%; overflow-x: auto; }
+  .card table { white-space: nowrap; }
+}
+
+/* Anything the user types into must be >= 16px or iOS zooms the page in on
+   focus and never zooms back out. */
+@media (max-width: 760px) {
+  input, textarea, select { font-size: 16px; }
 }
 
 /* --- page headers -------------------------------------------------------- */
