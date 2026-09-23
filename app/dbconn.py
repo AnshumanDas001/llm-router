@@ -31,6 +31,16 @@ import threading
 import time
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load .env here, not just in model_config. This module is imported by
+# chat_db, which app/main.py imports before anything touches model_config --
+# so reading the environment without this found no TURSO_* at all and fell
+# back to local SQLite while .env plainly configured Turso. Silently writing
+# to the wrong database is the worst failure this file can have, so it reads
+# its own configuration rather than depending on import order.
+load_dotenv()
+
 TURSO_URL = os.getenv("TURSO_DATABASE_URL") or None
 TURSO_TOKEN = os.getenv("TURSO_AUTH_TOKEN") or None
 # Where the embedded replica is cached. Ephemeral by design: it is rebuilt
@@ -46,8 +56,20 @@ _lock = threading.RLock()
 _last_sync = 0.0
 
 
+def _libsql():
+    """The driver, or None if it isn't installed for this interpreter.
+    libsql ships no wheel for some Python/arch combinations (3.14 on macOS,
+    Linux arm64), and a dev machine shouldn't be unable to start because of
+    it -- it falls back to the local file and says so."""
+    try:
+        import libsql
+        return libsql
+    except ImportError:
+        return None
+
+
 def using_turso() -> bool:
-    return bool(TURSO_URL and TURSO_TOKEN)
+    return bool(TURSO_URL and TURSO_TOKEN and _libsql() is not None)
 
 
 class _Row:
@@ -150,7 +172,7 @@ def _turso_conn():
     global _conn, _last_sync
     with _lock:
         if _conn is None:
-            import libsql
+            libsql = _libsql()
             REPLICA_PATH.parent.mkdir(parents=True, exist_ok=True)
             raw = libsql.connect(str(REPLICA_PATH), sync_url=TURSO_URL, auth_token=TURSO_TOKEN)
             raw.sync()
@@ -182,3 +204,28 @@ def connect(row_factory=False):
 
 def describe() -> str:
     return f"turso ({TURSO_URL}, replica {REPLICA_PATH})" if using_turso() else f"sqlite ({DB_PATH})"
+
+
+def check() -> list[str]:
+    """Warnings worth shouting about at startup. A database that looks
+    configured but isn't loses accounts silently, and the symptom shows up a
+    day later as 'my login stopped working'."""
+    problems = []
+    if using_turso():
+        return problems
+    if TURSO_URL and TURSO_TOKEN and _libsql() is None:
+        problems.append(
+            "TURSO_* is configured but the `libsql` driver is not installed for this "
+            f"Python, so data is going to the local file at {DB_PATH} instead.")
+    elif TURSO_URL or TURSO_TOKEN:
+        problems.append(
+            "TURSO_DATABASE_URL/TURSO_AUTH_TOKEN: only one is set, so Turso is OFF "
+            "and data is going to the local file instead.")
+    # A container filesystem does not survive the container. Cloud Run, Fly,
+    # Railway and friends all set one of these.
+    if any(os.getenv(v) for v in ("K_SERVICE", "FLY_APP_NAME", "RAILWAY_ENVIRONMENT", "RENDER")):
+        problems.append(
+            f"Running on a serverless host with local SQLite at {DB_PATH}. Accounts and "
+            "chats will be LOST whenever the instance is recycled. Set TURSO_DATABASE_URL "
+            "and TURSO_AUTH_TOKEN.")
+    return problems

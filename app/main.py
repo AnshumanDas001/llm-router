@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app import chat_db, key_vault
+from app import chat_db, dbconn, key_vault
 from app.auth import (
     SESSION_COOKIE_NAME,
     SESSION_LIFETIME_DAYS,
@@ -142,6 +142,13 @@ ROUTING_MODES = ("cascade", "direct")
 
 @app.on_event("startup")
 def on_startup():
+    # Say where data is going, every boot. This used to be silent, and a
+    # misconfiguration looked exactly like a working app until the next
+    # restart took the accounts with it.
+    logging.getLogger("uvicorn.error").info("database: %s", dbconn.describe())
+    for problem in dbconn.check():
+        logging.getLogger("uvicorn.error").warning("DATA LOSS RISK - %s", problem)
+
     init_db()
     chat_db.init_chat_db()
 
