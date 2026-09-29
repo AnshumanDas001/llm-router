@@ -174,6 +174,42 @@ Note `libsql` has no wheel for Linux **arm64** — on an Ampere A1 it would
 have to build from Rust source. x86 hosts (Cloud Run, GCP e2-micro, Oracle
 E2.1.Micro) install it from a wheel.
 
+## Cold starts
+
+On a scale-to-zero host the first request after an idle period is slow. It is
+not the app being slow — measured warm, the deployed service answers `/` in
+**~90ms**. The wait is loading the embedding classifier:
+
+| | time (fast laptop; a shared vCPU is slower) |
+|---|---|
+| `import sentence_transformers` | 4.1s |
+| `import litellm` | 2.3s |
+| `import torch` | 1.3s |
+| load MiniLM weights | 5.5s |
+| encode the reference set | 0.3s |
+| **total before the first answer** | **~14s** |
+
+The app warms the classifier *before* reporting ready when it detects a
+serverless host (`K_SERVICE`, `FLY_APP_NAME`, …). That matters because those
+platforms bill by request and throttle CPU outside one: a background warmup
+started at boot barely runs until traffic arrives, so the first visitor would
+otherwise wait for the whole load *at throttled speed*. Doing it inside the
+startup phase gets full CPU, and the request that finally arrives is served warm.
+
+What else helps, in order of effect:
+
+- **Turn on startup CPU boost** (Cloud Run: Edit & Deploy → Containers). Free,
+  and it directly shortens the phase above.
+- **Set minimum instances to 1** to remove cold starts entirely. This keeps an
+  instance alive around the clock and will take the service well past any free
+  allowance — check the pricing estimate before enabling it.
+- **Replace torch with ONNX Runtime** for the classifier. That is where ~11 of
+  the 14 seconds live, and it would cut resident memory from ~660MB to roughly
+  200MB — enough to fit hosts that cap at 512MB. Not done yet; it is the
+  biggest available win and a real piece of work.
+
+Raising the memory limit does *not* fix this. The model load is CPU-bound.
+
 ## Updating
 
 ```bash

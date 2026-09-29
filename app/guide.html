@@ -293,6 +293,17 @@ console.log(data._router);</code></pre></div>
       <p>A small, cheap model (not the tier above) is asked whether the response addresses every part of the request and stays coherent. Measured on 117 graded answers it catches <strong>94%</strong> of wrong ones, against roughly half for the scorer &mdash; which is exactly why the scorer gates the judge rather than replacing it.</p>
       <div class="callout note"><span class="icon">i</span><p>Set <code>VERIFIER=judge</code> to skip stage 1 entirely, or <code>SCORER_FEATURES=everything</code> and retrain to use the stronger scorer that also samples a second answer and asks the model to self-check &mdash; worth its extra calls only when a judge verdict is expensive relative to an answer.</p></div>
       <div class="callout note"><span class="icon">i</span><p>If a tier is temporarily rate limited, the cascade skips it and moves to the next one rather than failing the whole request.</p></div>
+
+      <h3>How well the tiers actually differ</h3>
+      <p>Measured on 288 questions from MATH-500 level&nbsp;5 and 14 BIG-Bench Hard task families, all with ground-truth answers:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>configuration</th><th>accuracy</th><th>cost / question</th></tr></thead>
+        <tbody>
+          <tr><td>mid alone (thinking off)</td><td class="mono">277/288 = 96.2%</td><td class="mono">$0.0038</td></tr>
+          <tr><td>+ thinking frontier on the 11 it failed</td><td class="mono">279/288 = 96.9%</td><td class="mono">$0.0046</td></tr>
+        </tbody>
+      </table></div>
+      <p>+0.7 points for +21% cost. The frontier rescued <code>dyck_languages</code> 1/1 and MATH-500 1/4, and <code>geometric_shapes</code> <strong>0/6</strong> &mdash; reading an SVG path to name a shape is a perception limit, not a reasoning-budget one. Regenerate with <code>scripts/build_hard_probe.py</code> and <code>scripts/run_hard_probe.py</code>.</p>
     </section>
 
     <section id="calibration-ui">

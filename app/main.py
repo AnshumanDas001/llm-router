@@ -152,16 +152,26 @@ def on_startup():
     init_db()
     chat_db.init_chat_db()
 
-    # The embedding classifier takes ~10s to load its model and encode the
-    # reference set. Left lazy, that cost lands on whoever sends the first
-    # prompt -- on the signed-out demo, that's a visitor watching a blank
-    # screen. Warm it on a background thread so boot isn't blocked either.
+    # The embedding classifier takes ~14s to become usable: 7.7s importing
+    # torch and sentence-transformers, 5.5s loading the MiniLM weights.
+    # Left lazy, that lands on whoever sends the first prompt.
     def _warm():
         try:
             classify_initial_tier("warmup")
         except Exception:
             pass  # a failed warmup just means the first real call pays for it
-    threading.Thread(target=_warm, daemon=True).start()
+
+    # On a scale-to-zero host, warm *before* reporting ready. Those platforms
+    # bill by request and throttle CPU outside one, so a background thread
+    # started here barely runs until traffic arrives -- and then the first
+    # visitor waits for the whole load anyway, at throttled speed. Blocking
+    # keeps the work inside the startup phase, which gets full CPU, so the
+    # request that finally arrives is served warm. On a normal box there is
+    # no such throttle and blocking boot would only slow development down.
+    if any(os.getenv(v) for v in ("K_SERVICE", "FLY_APP_NAME", "RAILWAY_ENVIRONMENT", "RENDER")):
+        _warm()
+    else:
+        threading.Thread(target=_warm, daemon=True).start()
 
 
 @app.get("/health")
