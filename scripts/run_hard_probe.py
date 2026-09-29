@@ -109,8 +109,15 @@ def grade(q: dict, answer: str) -> bool:
     got = (m.group(1) if m else tail).strip()
     if _norm(got) == _norm(expected) or _norm_sequence(got) == _norm_sequence(expected):
         return True
+    # Multiple choice: BBH's target is the bare option, "(B)", but models
+    # answer "(B) heptagon" -- the letter *and* what it stands for. Demanding
+    # an exact match scored a model 2/17 on a task it had almost entirely
+    # right. Accept when the reply picks that option, however it labels it.
     letter = re.fullmatch(r"\(([A-Z])\)", expected.strip())
-    return bool(letter) and _norm(got) in (_norm(letter.group(1)), _norm(expected))
+    if letter:
+        chosen = re.match(r"\(?([A-Za-z])[)\.]", got.strip())
+        return bool(chosen) and chosen.group(1).upper() == letter.group(1)
+    return False
 
 
 def ask(model: str, params: dict, query: str) -> dict:
@@ -121,10 +128,15 @@ def ask(model: str, params: dict, query: str) -> dict:
                 model=model, messages=[{"role": "user", "content": query}],
                 timeout=900, **params)
             break
-        except (litellm.RateLimitError, litellm.APIConnectionError, litellm.Timeout) as e:
-            if attempt == 2:
+        except Exception as e:
+            # 402 "in_flight_budget_exhausted" is a throttle, not a failure:
+            # OpenRouter caps concurrent spend against the remaining balance
+            # and asks you to wait, so treat it like a rate limit.
+            transient = isinstance(e, (litellm.RateLimitError, litellm.APIConnectionError,
+                                       litellm.Timeout)) or "in_flight" in str(e)
+            if attempt == 2 or not transient:
                 return {"text": "", "cost": 0.0, "s": 0.0, "error": type(e).__name__}
-            time.sleep(15 * (attempt + 1))
+            time.sleep(30 * (attempt + 1))
     u = resp.usage
     return {"text": resp.choices[0].message.content or "",
             "cost": resp._hidden_params.get("response_cost", 0.0) or 0.0,
@@ -140,7 +152,9 @@ def main():
     ap.add_argument("--questions", default=str(ROOT / "data" / "hard_probe.json"))
     ap.add_argument("--out", default=str(ROOT / "data" / "hard_probe_results.json"))
     ap.add_argument("--limit", type=int)
-    ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--workers", type=int, default=6,
+                    help="too many against a low balance trips the provider's in-flight spend cap")
+    ap.add_argument("--restart", action="store_true", help="ignore any partial results and start over")
     args = ap.parse_args()
 
     questions = json.loads(Path(args.questions).read_text())
@@ -158,26 +172,50 @@ def main():
           ", ".join(f"{l}={m}" + (f"@{p.get('reasoning_effort')}" if p.get("reasoning_effort") else "")
                     for l, m, p in specs) + "\n")
 
+    # Every answer is appended to a JSONL as it arrives, so a crash partway
+    # through costs nothing already paid for -- a 12-worker run once died on
+    # a provider throttle at 221 of 298 and took every result with it. The
+    # same file is what makes a re-run resumable.
+    partial = Path(args.out).with_suffix(".jsonl")
     results, done = {}, [0]
+    already = set()
+    if partial.exists() and not args.restart:
+        for line in partial.read_text().splitlines():
+            if line.strip():
+                row = json.loads(line)
+                results.setdefault(row["tier"], []).append(row)
+                already.add((row["tier"], row["id"]))
+        if already:
+            print(f"resuming: {len(already)} answers already recorded in {partial.name}\n")
+
+    out_lock = threading.Lock()
+    fh = partial.open("a")
 
     def work(item):
         tier, q = item
         model, params = by_label[tier]
         r = ask(model, params, q["query"])
         ok = grade(q, r["text"])
+        row = {"tier": tier, "id": q["id"], "source": q["source"], "correct": ok,
+               "cost": r["cost"], "seconds": r["s"], "expected": q["expected"][0],
+               "got": (r["text"] or "")[-600:], "reasoning_tokens": r.get("reasoning_tokens"),
+               "error": r.get("error")}
+        with out_lock:
+            fh.write(json.dumps(row) + "\n")
+            fh.flush()
         with _print_lock:
             done[0] += 1
-            print(f"  [{done[0]:3}/{len(questions)*len(tiers)}] {tier:8} {q['id'][:34]:36} "
-                  f"{'PASS' if ok else 'FAIL'}  ${r['cost']:.5f}  {r['s']:.0f}s", flush=True)
-        return tier, q, r, ok
+            print(f"  [{done[0]:3}/{n_jobs}] {tier:8} {q['id'][:34]:36} "
+                  f"{'PASS' if ok else 'FAIL'}  ${r['cost']:.5f}  {r['s']:.0f}s"
+                  f"{'  ' + r['error'] if r.get('error') else ''}", flush=True)
+        return row
 
-    jobs = [(t, q) for t in tiers for q in questions]
+    jobs = [(t, q) for t in tiers for q in questions if (t, q["id"]) not in already]
+    n_jobs = len(jobs)
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
-        for tier, q, r, ok in pool.map(work, jobs):
-            results.setdefault(tier, []).append(
-                {"id": q["id"], "source": q["source"], "correct": ok, "cost": r["cost"],
-                 "seconds": r["s"], "expected": q["expected"][0],
-                 "got": (r["text"] or "")[-300:], "reasoning_tokens": r.get("reasoning_tokens")})
+        for row in pool.map(work, jobs):
+            results.setdefault(row["tier"], []).append(row)
+    fh.close()
 
     Path(args.out).write_text(json.dumps(results, indent=2))
     print("\n=== accuracy on questions built to need multi-step reasoning ===")

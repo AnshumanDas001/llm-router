@@ -1,0 +1,123 @@
+[
+  {
+    "id": "math5_test_algebra_2193.json",
+    "query": "Find all values of $x$ that satisfy the equation $x = \\!\\sqrt{11-2x} + 4$.\n\nPut your final answer in \\boxed{}.",
+    "difficulty": "hard",
+    "task_type": "competition_math",
+    "eval_method": "boxed_match",
+    "expected": [
+      "x=5"
+    ],
+    "source": "MATH-500 level 5"
+  },
+  {
+    "id": "math5_test_intermediate_algebra_1454.json",
+    "query": "For $0 \\le x \\le 40$ and $0 \\le y \\le 50,$ find the minimum value of\n\\[\\sqrt{x^2 + 400} + \\sqrt{y^2 + 900} + \\sqrt{x^2 + y^2 - 80x - 100y + 4100}.\\]\n\nPut your final answer in \\boxed{}.",
+    "difficulty": "hard",
+    "task_type": "competition_math",
+    "eval_method": "boxed_match",
+    "expected": [
+      "70 \\sqrt{2}"
+    ],
+    "source": "MATH-500 level 5"
+  },
+  {
+    "id": "math5_test_intermediate_algebra_662.json",
+    "query": "Find the real roots of\n\\[\\frac{( x+ 1)(x - 3)}{5(x + 2)(x - 4)} + \\frac{(x + 3)(x - 5)}{9(x + 4)(x - 6)} - \\frac{2(x + 5)(x - 7)}{13(x + 6)(x - 8)} = \\frac{92}{585}.\\]Enter the real roots, separated by commas.\n\nPut your final answer in \\boxed{}.",
+    "difficulty": "hard",
+    "task_type": "competition_math",
+    "eval_method": "boxed_match",
+    "expected": [
+      "1 \\pm \\sqrt{19}"
+    ],
+    "source": "MATH-500 level 5"
+  },
+  {
+    "id": "math5_test_geometry_183.json",
+    "query": "A hexagon is inscribed in a circle: [asy]\npair pA, pB, pC, pD, pE, pF, pO;\npO = (0, 0);\npA = pO + dir(-10);\npB = pO + dir(60);\npC = pO + dir(130);\npD = pO + dir(170);\npE = pO + dir(-160);\npF = pO + dir(-80);\ndraw(pA--pB--pC--pD--pE--pF--pA);\nlabel(\"$105^\\circ$\", pF, N * 2);\nlabel(\"$110^\\circ$\", pB, SW * 1.5);\nlabel(\"$\\alpha$\", pD, E);\ndraw(circle(pO, 1));\n[/asy] What is the measure of $\\alpha$, in degrees?\n\nPut your final answer in \\boxed{}.",
+    "difficulty": "hard",
+    "task_type": "competition_math",
+    "eval_method": "boxed_match",
+    "expected": [
+      "145^\\circ"
+    ],
+    "source": "MATH-500 level 5"
+  },
+  {
+    "id": "bbh_dyck_languages_1",
+    "query": "Complete the rest of the sequence, making sure that the parentheses are closed properly. Input: < [ [\n\nEnd your reply with: Answer: <answer>",
+    "difficulty": "hard",
+    "task_type": "bbh_dyck_languages",
+    "eval_method": "suffix_match",
+    "expected": [
+      "] ] >"
+    ],
+    "source": "BBH dyck_languages"
+  },
+  {
+    "id": "bbh_geometric_shapes_2",
+    "query": "This SVG path element <path d=\"M 21.10,97.94 L 22.14,97.44 L 10.48,73.34 L 9.43,73.84 L 21.10,97.94\"/> draws a\nOptions:\n(A) circle\n(B) heptagon\n(C) hexagon\n(D) kite\n(E) line\n(F) octagon\n(G) pentagon\n(H) rectangle\n(I) sector\n(J) triangle\n(K) trapezoid\n\nEnd your reply with: Answer: <answer>",
+    "difficulty": "hard",
+    "task_type": "bbh_geometric_shapes",
+    "eval_method": "suffix_match",
+    "expected": [
+      "(K)"
+    ],
+    "source": "BBH geometric_shapes"
+  },
+  {
+    "id": "bbh_geometric_shapes_4",
+    "query": "This SVG path element <path d=\"M 90.54,84.19 L 72.03,34.41 L 33.90,48.59 M 33.90,48.59 L 52.41,98.37 M 52.41,98.37 L 90.54,84.19\"/> draws a\nOptions:\n(A) circle\n(B) heptagon\n(C) hexagon\n(D) kite\n(E) line\n(F) octagon\n(G) pentagon\n(H) rectangle\n(I) sector\n(J) triangle\n(K) trapezoid\n\nEnd your reply with: Answer: <answer>",
+    "difficulty": "hard",
+    "task_type": "bbh_geometric_shapes",
+    "eval_method": "suffix_match",
+    "expected": [
+      "(K)"
+    ],
+    "source": "BBH geometric_shapes"
+  },
+  {
+    "id": "bbh_geometric_shapes_8",
+    "query": "This SVG path element <path d=\"M 22.06,65.18 L 22.58,64.52 L 7.52,52.61 L 7.00,53.26 L 22.06,65.18\"/> draws a\nOptions:\n(A) circle\n(B) heptagon\n(C) hexagon\n(D) kite\n(E) line\n(F) octagon\n(G) pentagon\n(H) rectangle\n(I) sector\n(J) triangle\n(K) trapezoid\n\nEnd your reply with: Answer: <answer>",
+    "difficulty": "hard",
+    "task_type": "bbh_geometric_shapes",
+    "eval_method": "suffix_match",
+    "expected": [
+      "(K)"
+    ],
+    "source": "BBH geometric_shapes"
+  },
+  {
+    "id": "bbh_geometric_shapes_12",
+    "query": "This SVG path element <path d=\"M 22.34,17.53 A 19.21,19.21 220.48 1,0 51.57,42.47 A 19.21,19.21 220.48 1,0 22.34,17.53\"/> draws a\nOptions:\n(A) circle\n(B) heptagon\n(C) hexagon\n(D) kite\n(E) line\n(F) octagon\n(G) pentagon\n(H) rectangle\n(I) sector\n(J) triangle\n(K) ellipse\n\nEnd your reply with: Answer: <answer>",
+    "difficulty": "hard",
+    "task_type": "bbh_geometric_shapes",
+    "eval_method": "suffix_match",
+    "expected": [
+      "(K)"
+    ],
+    "source": "BBH geometric_shapes"
+  },
+  {
+    "id": "bbh_geometric_shapes_13",
+    "query": "This SVG path element <path d=\"M 65.00,42.00 A 21.00,21.00 0.00 1,0 23.00,42.00 A 21.00,21.00 0.00 1,0 65.00,42.00\"/> draws a\nOptions:\n(A) circle\n(B) heptagon\n(C) hexagon\n(D) kite\n(E) line\n(F) octagon\n(G) pentagon\n(H) rectangle\n(I) sector\n(J) triangle\n(K) ellipse\n\nEnd your reply with: Answer: <answer>",
+    "difficulty": "hard",
+    "task_type": "bbh_geometric_shapes",
+    "eval_method": "suffix_match",
+    "expected": [
+      "(K)"
+    ],
+    "source": "BBH geometric_shapes"
+  },
+  {
+    "id": "bbh_geometric_shapes_14",
+    "query": "This SVG path element <path d=\"M 4.70,85.15 L 2.36,37.14 L 18.76,36.34 M 18.76,36.34 L 21.10,84.35 L 4.70,85.15\"/> draws a\nOptions:\n(A) circle\n(B) heptagon\n(C) hexagon\n(D) kite\n(E) line\n(F) octagon\n(G) pentagon\n(H) rectangle\n(I) sector\n(J) triangle\n(K) trapezoid\n\nEnd your reply with: Answer: <answer>",
+    "difficulty": "hard",
+    "task_type": "bbh_geometric_shapes",
+    "eval_method": "suffix_match",
+    "expected": [
+      "(K)"
+    ],
+    "source": "BBH geometric_shapes"
+  }
+]

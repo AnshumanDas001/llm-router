@@ -333,7 +333,7 @@
     {
       "id": "bbh_tracking_shuffled_objects_seven_objects_3",
       "source": "BBH tracking_shuffled_objects_seven_objects",
-      "correct": false,
+      "correct": true,
       "cost": 0.00399,
       "seconds": 2.7586081660119817,
       "expected": "(E)",

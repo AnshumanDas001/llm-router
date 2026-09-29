@@ -263,7 +263,7 @@ console.log(data._router);</code></pre></div>
           <tr><td><span class="badge get">cheap</span></td><td>Starts most traffic. Calibrated 0.89 / 0.95 / 0.81 on easy / medium / hard</td><td class="mono">openrouter/meta-llama/llama-3.1-8b-instruct</td></tr>
           <tr><td><span class="badge post">judge</span></td><td>Verifies cheap answers. Not a tier &mdash; a separate small model, ~$0.00004 a verdict</td><td class="mono">groq/openai/gpt-oss-20b</td></tr>
           <tr><td><span class="badge post">mid</span></td><td>Where failed cheap answers escalate. Thinking <strong>off</strong>; ~$0.002 an answer, 3s</td><td class="mono">openrouter/google/gemini-3.5-flash</td></tr>
-          <tr><td><span class="badge delete">frontier</span></td><td>Last resort. The same model with thinking <strong>on</strong> &mdash; +4 points of accuracy on hard questions for ~4&times; the price</td><td class="mono">openrouter/google/gemini-3.5-flash</td></tr>
+          <tr><td><span class="badge delete">frontier</span></td><td>Last resort. The same model with thinking <strong>on</strong> &mdash; measured at +0.7 points on 288 hard benchmark questions, for ~4&times; the price</td><td class="mono">openrouter/google/gemini-3.5-flash</td></tr>
         </tbody>
       </table></div>
       <p>You don't need all three configured &mdash; the cascade works over whichever subset you provide.</p>

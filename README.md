@@ -248,24 +248,52 @@ like "write a palindrome check". In a full 116-query run the frontier tier
 was **never reached even once**.
 
 `scripts/build_hard_probe.py` builds a set that can tell them apart, from
-MATH-500 level 5 and BIG-Bench Hard — both shipping ground-truth answers, so
-grading stays automatic. Measured over 50 questions for $0.35:
+MATH-500 level 5 and 14 BIG-Bench Hard task families — both shipping
+ground-truth answers, so grading stays automatic. Measured over 288
+questions for $1.33:
 
-| | accuracy | cost / question | latency |
-|---|---|---|---|
-| mid (thinking off) | **44/50 = 88%** | $0.0069 | 5s |
-| + frontier on the 6 it failed | **46/50 = 92%** | $0.0097 | 34s when used |
-| `deepseek-r1` (the previous frontier) | rescued **0** of those tested | $0.030 | **467s** |
+| | accuracy | cost / question |
+|---|---|---|
+| mid alone (thinking off) | 277/288 = **96.2%** | $0.0038 |
+| + thinking frontier on the 11 it failed | 279/288 = **96.9%** | $0.0046 |
 
-So the frontier buys **+4 points of accuracy for +40% cost**, and the gain is
-concentrated: it rescued `tracking_shuffled_objects` and `dyck_languages` —
-tasks that are pure step-by-step bookkeeping — and rescued none of the three
-competition-math failures, where the model's underlying mathematics is the
-limit rather than its reasoning budget.
+**+0.7 points of accuracy for +21% cost.** That is a thin result, and it is
+the honest one. The frontier rescued 2 of mid's 11 failures:
+
+| task | rescued |
+|---|---|
+| BBH `dyck_languages` | 1/1 |
+| MATH-500 level 5 | 1/4 |
+| BBH `geometric_shapes` | **0/6** |
+
+The shape of it matters more than the average. Thinking recovers
+bracket-matching, and half the competition-maths misses stay missed —
+but `geometric_shapes`, which asks a model to read an SVG path and name the
+figure, is **not helped at all**. That is a perception limit, not a
+reasoning-budget one, and no amount of thinking time fixes it.
+
+So the frontier tier is defensible but marginal on this workload, and the
+reason is that mid is already at 96% on benchmarks built to be hard. The
+headroom for *any* stronger tier is eleven questions.
 
 `deepseek-r1` held the frontier slot before this and lost the comparison
-outright: no better on the questions tested, 3× the price, and 467s per
-answer, which no interactive request can absorb.
+outright: it rescued none of the failures tested, cost 3x, and averaged
+**467s** per answer, which no interactive request can absorb.
+
+**Three grading bugs found while measuring this**, each of which made a
+model look worse than it was, and all three caught only by reading the
+answers rather than trusting the score:
+
+| the grader wanted | the model said | verdict |
+|---|---|---|
+| `syndrome therefrom` | `syndrome, therefrom` | scored 0/5 on a task it got 5/5 right |
+| `(B)` | `(B) heptagon` | scored 2/17 on a task it got 11/17 right |
+| `hypertext transfer protocol` | `**H**yper**T**ext **T**ransfer **P**rotocol` | marked wrong for its bold |
+
+Fixing the second alone moved mid from 83.2% to 97.5% on the BBH set, and
+retired a "frontier rescued this" result that was really mid having been
+marked wrong. An automatic grader measures formatting as readily as
+correctness; treat any accuracy number here as a lower bound.
 
 ### Strategy comparison
 

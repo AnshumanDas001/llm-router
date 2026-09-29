@@ -30,14 +30,27 @@ sys.path.insert(0, str(ROOT))
 
 ROWS_URL = "https://datasets-server.huggingface.co/rows"
 
-# BBH configs where success hinges on tracking several constraints at once,
-# rather than on recall or a single lookup.
+# BBH configs where success hinges on carrying several constraints through
+# a chain of steps, rather than on recall or a single lookup -- i.e. where a
+# model that is allowed to think should beat one that isn't. Weighted heavily
+# over competition maths because that is where the first 50-question probe
+# found the difference, and because a BBH question costs mid $0.003 against
+# $0.011 for a MATH-500 one.
 BBH_CONFIGS = [
-    "logical_deduction_seven_objects",
     "tracking_shuffled_objects_seven_objects",
+    "tracking_shuffled_objects_five_objects",
+    "logical_deduction_seven_objects",
+    "logical_deduction_five_objects",
     "multistep_arithmetic_two",
-    "word_sorting",
     "dyck_languages",
+    "word_sorting",
+    "web_of_lies",
+    "navigate",
+    "temporal_sequences",
+    "object_counting",
+    "geometric_shapes",
+    "penguins_in_a_table",
+    "formal_fallacies",
 ]
 
 
@@ -87,9 +100,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=50, help="total questions")
     ap.add_argument("--out", default=str(ROOT / "data" / "hard_probe.json"))
+    ap.add_argument("--math-fraction", type=float, default=0.2,
+                    help="share from MATH-500 level 5; the rest from BBH")
     args = ap.parse_args()
 
-    n_math = args.n // 2
+    n_math = int(args.n * args.math_fraction)
     per_config = max(1, (args.n - n_math) // len(BBH_CONFIGS))
     questions = math_questions(n_math) + bbh_questions(per_config)
 
@@ -97,7 +112,9 @@ def main():
     by_source = {}
     for q in questions:
         by_source[q["source"]] = by_source.get(q["source"], 0) + 1
-    print(f"wrote {len(questions)} questions to {Path(args.out).relative_to(ROOT)}")
+    out = Path(args.out).resolve()
+    print(f"wrote {len(questions)} questions to "
+          f"{out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}")
     for source, count in sorted(by_source.items()):
         print(f"  {count:3}  {source}")
 
