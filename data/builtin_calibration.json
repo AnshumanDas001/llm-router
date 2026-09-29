@@ -2,37 +2,9 @@
   "models": {
     "cheap": "openrouter/meta-llama/llama-3.1-8b-instruct",
     "mid": "openrouter/google/gemini-3.5-flash",
-    "frontier": "openrouter/deepseek/deepseek-r1"
+    "frontier": "openrouter/google/gemini-3.5-flash"
   },
   "tiers": {
-    "frontier": {
-      "quality": {
-        "easy": 1.0,
-        "medium": 1.0,
-        "hard": 1.0
-      },
-      "cost": {
-        "easy": 0.0025163333333333335,
-        "medium": 0.0086068,
-        "hard": 0.00596535
-      },
-      "n_queries": 9,
-      "latency_ms": 102941
-    },
-    "mid": {
-      "quality": {
-        "easy": 1.0,
-        "medium": 1.0,
-        "hard": 1.0
-      },
-      "cost": {
-        "easy": 0.00044512500000000005,
-        "medium": 0.002394,
-        "hard": 0.0021226875
-      },
-      "latency_ms": 2726,
-      "n_queries": 24
-    },
     "cheap": {
       "quality": {
         "easy": 0.8947368421052632,
@@ -46,6 +18,34 @@
       },
       "latency_ms": 6102,
       "n_queries": 76
+    },
+    "mid": {
+      "quality": {
+        "easy": 1.0,
+        "medium": 1.0,
+        "hard": 1.0
+      },
+      "cost": {
+        "easy": 0.000476625,
+        "medium": 0.002386125,
+        "hard": 0.0023251875
+      },
+      "latency_ms": 3334.8500696689975,
+      "n_queries": 24
+    },
+    "frontier": {
+      "quality": {
+        "easy": 1.0,
+        "medium": 1.0,
+        "hard": 1.0
+      },
+      "cost": {
+        "easy": 0.002251875,
+        "medium": 0.008737874999999999,
+        "hard": 0.008724187500000001
+      },
+      "latency_ms": 5260.561024285077,
+      "n_queries": 24
     }
   }
 }

@@ -61,11 +61,20 @@ VERIFIER = os.getenv("VERIFIER", "auto")
 # Notes on the choices:
 #   mid      gemini-3.5-flash through OpenRouter (Google's own free tier is
 #            capped at 20 requests/day). Runs with thinking off, below.
-#   frontier deepseek-r1: only reached when mid fails its structural check
-#            or is rate-limited. Reasons for thousands of tokens; ~3x mid's
-#            price and a minute or more per answer.
+#   frontier the same model with thinking ON. Measured on 50 hard questions
+#            (MATH level 5 + BBH): it rescued 2 of the 6 mid got wrong, for
+#            88% -> 92% at +40% spend. deepseek-r1 was the frontier before
+#            and lost this comparison outright -- it rescued none of the
+#            ones tested, cost 3x, and averaged 467s per answer, which no
+#            interactive request can absorb.
+#
+# Two tiers sharing a model is not a mistake: what separates them is whether
+# the model is allowed to think, which is the axis that actually predicted
+# success here. It does mean their per-token list price is identical, so
+# cost comparisons must come from calibration (which measures the reasoning
+# tokens) rather than from a price-times-tokens estimate.
 MID_MODEL = os.getenv("MID_MODEL", "openrouter/google/gemini-3.5-flash")
-FRONTIER_MODEL = os.getenv("FRONTIER_MODEL", "openrouter/deepseek/deepseek-r1")
+FRONTIER_MODEL = os.getenv("FRONTIER_MODEL", "openrouter/google/gemini-3.5-flash")
 
 # Reasoning effort for the mid tier's own answers. A thinking model as mid
 # is a trap without this: gemini-3.5-flash spent 720 reasoning tokens on a
@@ -80,7 +89,7 @@ MID_REASONING_EFFORT = os.getenv("MID_REASONING_EFFORT", "minimal") or None
 # *because* it thinks -- measured on 50 hard questions (MATH level 5 + BBH),
 # a thinking frontier rescued 2 of the 6 mid got wrong, taking the set from
 # 88% to 92% for 40% more spend. Left unset it inherits the provider default.
-FRONTIER_REASONING_EFFORT = os.getenv("FRONTIER_REASONING_EFFORT") or None
+FRONTIER_REASONING_EFFORT = os.getenv("FRONTIER_REASONING_EFFORT", "high") or None
 
 
 def _frontier_params() -> dict:

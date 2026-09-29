@@ -39,18 +39,27 @@ tokens before answering:
 |---|---|---|---|---|---|
 | cheap | `llama-3.1-8b-instruct` (OpenRouter) | 0.868 | $0.00002 | 6.1s | all 76 auto-gradable queries |
 | judge | `gpt-oss-20b` (Groq) | catches 94% of wrong cheap answers | $0.00004 / verdict | ~1s | 117 graded answers |
-| mid | `gemini-3.5-flash`, thinking off (OpenRouter) | 1.000 | $0.00192 | 2.7s | 24 queries |
-| frontier | `deepseek-r1` (OpenRouter) | 1.000 | $0.00619 | 103s | 9 queries |
+| mid | `gemini-3.5-flash`, thinking **off** | 1.000 | $0.00192 | 3.3s | 24 queries |
+| frontier | `gemini-3.5-flash`, thinking **on** | 1.000 | $0.00700 | 5.3s | 24 queries |
 
 Quality and cost are per-band calibration numbers weighted by the eval set's
 difficulty mix; cost is what the provider charged, hidden reasoning tokens
 included. Regenerate with `scripts/calibrate_builtin.py`.
 
-Two of these rows are choices worth explaining. Gemini runs with
-`reasoning_effort=minimal`: at its default it spent 720 thinking tokens on a
-two-sentence answer — 94% of a $0.0069 bill — and gave the same answer for
-$0.0005 without. The judge is a *different, cheaper* model than mid, which
-is the single decision that makes the cascade pay; see below.
+Three of these rows are choices worth explaining.
+
+**Mid and frontier are the same model**, separated only by whether it is
+allowed to think. That is not a shortcut — it is what the measurements
+picked. Mid runs `reasoning_effort=minimal`: at its default it spent 720
+thinking tokens on a two-sentence answer, 94% of a $0.0069 bill, and gave
+the same answer for $0.0005 without. The frontier is the same model with
+thinking on, which on hard questions is worth real accuracy (below).
+
+**The judge is a different, cheaper model than mid** — the single decision
+that makes the cascade pay; see below.
+
+The 1.000 quality scores are a limitation of the eval set, not a claim that
+these tiers are equivalent; see "Does the frontier tier earn its slot?".
 
 ## The routing decision
 
@@ -229,6 +238,34 @@ fallacy; the verdicts read like a grader's margin notes. Everything else was
 answered where it started, and the 76 answers with an objective check were
 all correct, including all 58 that shipped from the cheap tier
 (`scripts/score_cascade_log.py`).
+
+### Does the frontier tier earn its slot?
+
+Both paid tiers score 1.000 on the 116-query eval set, which sounds like the
+frontier is pointless — but it only means the set cannot see the difference.
+Its "hard" band was labelled against a 3B local model, so it contains things
+like "write a palindrome check". In a full 116-query run the frontier tier
+was **never reached even once**.
+
+`scripts/build_hard_probe.py` builds a set that can tell them apart, from
+MATH-500 level 5 and BIG-Bench Hard — both shipping ground-truth answers, so
+grading stays automatic. Measured over 50 questions for $0.35:
+
+| | accuracy | cost / question | latency |
+|---|---|---|---|
+| mid (thinking off) | **44/50 = 88%** | $0.0069 | 5s |
+| + frontier on the 6 it failed | **46/50 = 92%** | $0.0097 | 34s when used |
+| `deepseek-r1` (the previous frontier) | rescued **0** of those tested | $0.030 | **467s** |
+
+So the frontier buys **+4 points of accuracy for +40% cost**, and the gain is
+concentrated: it rescued `tracking_shuffled_objects` and `dyck_languages` —
+tasks that are pure step-by-step bookkeeping — and rescued none of the three
+competition-math failures, where the model's underlying mathematics is the
+limit rather than its reasoning budget.
+
+`deepseek-r1` held the frontier slot before this and lost the comparison
+outright: no better on the questions tested, 3× the price, and 467s per
+answer, which no interactive request can absorb.
 
 ### Strategy comparison
 

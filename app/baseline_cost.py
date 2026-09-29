@@ -12,7 +12,7 @@ this project.
 """
 import litellm
 
-from app.model_config import TIER_MODEL_LIST
+from app.model_config import BUILTIN_CALIBRATION, TIER_MODEL_LIST
 
 FRONTIER_MODEL = next(
     t["litellm_params"]["model"] for t in TIER_MODEL_LIST if t["model_name"] == "frontier"
@@ -34,7 +34,21 @@ def estimate_cost_for_model(model_name: str, tokens_in: int, tokens_out: int) ->
         return 0.0
 
 
-def estimate_frontier_cost(tokens_in: int, tokens_out: int) -> float:
+def estimate_frontier_cost(tokens_in: int, tokens_out: int, difficulty: str | None = None) -> float:
     """Baseline against our own built-in frontier tier (used by the
-    default demo/chat, not BYOM)."""
+    default demo/chat, not BYOM).
+
+    Prefers the frontier tier's *calibrated* cost for this difficulty band,
+    because pricing tokens at list rate misses hidden reasoning tokens --
+    and on the current stack those are the entire difference between mid and
+    frontier, which run the same model with thinking off and on. Priced by
+    tokens alone the two look identical and the saving reads as zero.
+
+    Falls back to the token estimate when the band is unknown or the tier
+    has never been calibrated.
+    """
+    if difficulty:
+        band = ((BUILTIN_CALIBRATION.get("frontier") or {}).get("cost") or {}).get(difficulty)
+        if band:
+            return band
     return estimate_cost_for_model(FRONTIER_MODEL, tokens_in, tokens_out)

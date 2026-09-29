@@ -408,7 +408,7 @@ def api_try(req: DemoRequest, response: Response, tl_demo: str | None = Cookie(d
             for event in run_cascade_stream(messages, difficulty_to_tier=_tier_map_for(0, None),
                                             skip_cheapest=(req.routing_mode == "direct")):
                 if event["type"] == "done":
-                    baseline = estimate_frontier_cost(event["tokens_in"], event["tokens_out"])
+                    baseline = estimate_frontier_cost(event["tokens_in"], event["tokens_out"], event["difficulty"])
                     event["baseline_cost"] = baseline
                     event["saved"] = max(0.0, baseline - event["total_cost"])
                     event["remaining"] = max(0, DEMO_PROMPT_LIMIT - used)
@@ -603,7 +603,7 @@ def _finish_send(chat_id: int, user_id: int, content: str, result: dict,
         baseline_cost = estimate_cost_for_model(
             tier_models[strongest], result["tokens_in"], result["tokens_out"])
     else:
-        baseline_cost = estimate_frontier_cost(result["tokens_in"], result["tokens_out"])
+        baseline_cost = estimate_frontier_cost(result["tokens_in"], result["tokens_out"], result["difficulty"])
 
     chat_db.add_chat_message(
         chat_id, "assistant", result["text"], datetime.now(timezone.utc).isoformat(),
@@ -718,7 +718,7 @@ def api_send_message(chat_id: int, req: SendMessageRequest, user=Depends(get_cur
             tier_models[strongest_configured], result["tokens_in"], result["tokens_out"],
         )
     else:
-        baseline_cost = estimate_frontier_cost(result["tokens_in"], result["tokens_out"])
+        baseline_cost = estimate_frontier_cost(result["tokens_in"], result["tokens_out"], result["difficulty"])
 
     chat_db.add_chat_message(
         chat_id, "assistant", result["text"], datetime.now(timezone.utc).isoformat(),
