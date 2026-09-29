@@ -76,6 +76,20 @@ FRONTIER_MODEL = os.getenv("FRONTIER_MODEL", "openrouter/deepseek/deepseek-r1")
 MID_REASONING_EFFORT = os.getenv("MID_REASONING_EFFORT", "minimal") or None
 
 
+# Reasoning effort for the frontier tier. Unlike mid, the frontier exists
+# *because* it thinks -- measured on 50 hard questions (MATH level 5 + BBH),
+# a thinking frontier rescued 2 of the 6 mid got wrong, taking the set from
+# 88% to 92% for 40% more spend. Left unset it inherits the provider default.
+FRONTIER_REASONING_EFFORT = os.getenv("FRONTIER_REASONING_EFFORT") or None
+
+
+def _frontier_params() -> dict:
+    params = {"model": FRONTIER_MODEL, "max_tokens": 32000, "drop_params": True}
+    if FRONTIER_REASONING_EFFORT:
+        params["reasoning_effort"] = FRONTIER_REASONING_EFFORT
+    return params
+
+
 def _mid_params() -> dict:
     params = {
         "model": MID_MODEL,
@@ -103,10 +117,12 @@ JUDGE_MODEL = os.getenv("JUDGE_MODEL", "groq/openai/gpt-oss-20b") or None
 TIER_MODEL_LIST = [
     {"model_name": "cheap", "litellm_params": _cheap_params()},
     {"model_name": "mid", "litellm_params": _mid_params()},
-    # A reasoning frontier needs headroom: DeepSeek R1 spent 3,400 thinking
-    # tokens on a 330-token answer and, at the provider default, sometimes
-    # ran out before saying anything.
-    {"model_name": "frontier", "litellm_params": {"model": FRONTIER_MODEL, "max_tokens": 16000}},
+    # A reasoning frontier needs real headroom, and the cap must be generous
+    # because providers bill tokens *used*, not tokens allowed. 16000 was not
+    # enough: R1 spent 13,697 tokens thinking and returned an EMPTY answer,
+    # which reads downstream as a wrong answer -- it silently failed 3 of 12
+    # calibration questions that way.
+    {"model_name": "frontier", "litellm_params": _frontier_params()},
 ]
 
 # Per-tier extra call parameters, for code paths that call litellm directly
