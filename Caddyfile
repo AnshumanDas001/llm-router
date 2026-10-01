@@ -10,7 +10,7 @@
 #
 # Not included: rate limiting on /auth/* and /api/try. That needs either the
 # caddy-ratelimit plugin (a custom image via xcaddy) or Cloudflare's free
-# tier in front of this box. See deploy/ORACLE.md, "After it's up".
+# tier in front of this box. See docs/deploy-oracle.md, "After it's up".
 
 {$SITE_ADDRESS} {
 	encode zstd gzip

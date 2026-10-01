@@ -1,0 +1,347 @@
+[
+  {
+    "id": "x_countdown_00",
+    "query": "Using the numbers 25, 1, 2, 9, 7, 75, make exactly 253. You may use +, -, * and /, and parentheses. Each number may be used at most once, and every intermediate result must be a positive whole number. Give the full expression on one line.",
+    "difficulty": "expert",
+    "task_type": "countdown",
+    "source": "generated",
+    "eval_method": "countdown",
+    "numbers": [
+      25,
+      1,
+      2,
+      9,
+      7,
+      75
+    ],
+    "target": 253,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <expression>"
+  },
+  {
+    "id": "x_countdown_01",
+    "query": "Using the numbers 50, 2, 7, 25, 2, 4, make exactly 568. You may use +, -, * and /, and parentheses. Each number may be used at most once, and every intermediate result must be a positive whole number. Give the full expression on one line.",
+    "difficulty": "expert",
+    "task_type": "countdown",
+    "source": "generated",
+    "eval_method": "countdown",
+    "numbers": [
+      50,
+      2,
+      7,
+      25,
+      2,
+      4
+    ],
+    "target": 568,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <expression>"
+  },
+  {
+    "id": "x_countdown_02",
+    "query": "Using the numbers 4, 10, 7, 75, 1, 25, make exactly 415. You may use +, -, * and /, and parentheses. Each number may be used at most once, and every intermediate result must be a positive whole number. Give the full expression on one line.",
+    "difficulty": "expert",
+    "task_type": "countdown",
+    "source": "generated",
+    "eval_method": "countdown",
+    "numbers": [
+      4,
+      10,
+      7,
+      75,
+      1,
+      25
+    ],
+    "target": 415,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <expression>"
+  },
+  {
+    "id": "x_countdown_03",
+    "query": "Using the numbers 5, 25, 9, 75, 2, 3, make exactly 783. You may use +, -, * and /, and parentheses. Each number may be used at most once, and every intermediate result must be a positive whole number. Give the full expression on one line.",
+    "difficulty": "expert",
+    "task_type": "countdown",
+    "source": "generated",
+    "eval_method": "countdown",
+    "numbers": [
+      5,
+      25,
+      9,
+      75,
+      2,
+      3
+    ],
+    "target": 783,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <expression>"
+  },
+  {
+    "id": "x_countdown_04",
+    "query": "Using the numbers 25, 1, 75, 10, 4, 8, make exactly 882. You may use +, -, * and /, and parentheses. Each number may be used at most once, and every intermediate result must be a positive whole number. Give the full expression on one line.",
+    "difficulty": "expert",
+    "task_type": "countdown",
+    "source": "generated",
+    "eval_method": "countdown",
+    "numbers": [
+      25,
+      1,
+      75,
+      10,
+      4,
+      8
+    ],
+    "target": 882,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <expression>"
+  },
+  {
+    "id": "x_countdown_05",
+    "query": "Using the numbers 4, 50, 4, 5, 3, 100, make exactly 956. You may use +, -, * and /, and parentheses. Each number may be used at most once, and every intermediate result must be a positive whole number. Give the full expression on one line.",
+    "difficulty": "expert",
+    "task_type": "countdown",
+    "source": "generated",
+    "eval_method": "countdown",
+    "numbers": [
+      4,
+      50,
+      4,
+      5,
+      3,
+      100
+    ],
+    "target": 956,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <expression>"
+  },
+  {
+    "id": "x_knights_knaves_00",
+    "query": "On an island, every inhabitant is either a knight, who always tells the truth, or a knave, who always lies. You meet 7 inhabitants: Dev, Ada, Hana, Cleo, Eli, Ivo, Kai.\n\nDev says: \"Hana is a knight if and only if Eli is a knave.\"\nAda says: \"Cleo is a knight if and only if Ivo is a knave.\"\nHana says: \"Exactly 5 of the 7 of us are knights.\"\nCleo says: \"Exactly one of Ivo and Dev is a knight.\"\nEli says: \"Exactly one of Kai and Ivo is a knight.\"\nIvo says: \"Exactly one of Cleo and Kai is a knight.\"\nKai says: \"Exactly 4 of the 7 of us are knights.\"\n\nExactly one assignment is consistent with these statements. Which of them are knights? List every knight, separated by commas (or 'none').",
+    "difficulty": "expert",
+    "task_type": "knights_knaves",
+    "source": "generated",
+    "eval_method": "answer_set",
+    "expected": [],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <names>"
+  },
+  {
+    "id": "x_knights_knaves_01",
+    "query": "On an island, every inhabitant is either a knight, who always tells the truth, or a knave, who always lies. You meet 8 inhabitants: Dev, Ivo, Kai, Jun, Fay, Hana, Ben, Eli.\n\nDev says: \"Eli and Kai are the same kind.\"\nIvo says: \"Exactly 7 of the 8 of us are knights.\"\nKai says: \"Ivo is a knight if and only if Eli is a knave.\"\nJun says: \"Exactly 1 of the 8 of us are knights.\"\nFay says: \"Exactly one of Dev and Kai is a knight.\"\nHana says: \"Exactly 5 of the 8 of us are knights.\"\nBen says: \"Kai and Jun are the same kind.\"\nEli says: \"At least one of Hana and Kai is a knave.\"\n\nExactly one assignment is consistent with these statements. Which of them are knights? List every knight, separated by commas (or 'none').",
+    "difficulty": "expert",
+    "task_type": "knights_knaves",
+    "source": "generated",
+    "eval_method": "answer_set",
+    "expected": [
+      "Dev",
+      "Kai",
+      "Eli"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <names>"
+  },
+  {
+    "id": "x_knights_knaves_02",
+    "query": "On an island, every inhabitant is either a knight, who always tells the truth, or a knave, who always lies. You meet 7 inhabitants: Ivo, Cleo, Gus, Dev, Lena, Ada, Kai.\n\nIvo says: \"Gus is a knight if and only if Dev is a knave.\"\nCleo says: \"At least one of Gus and Ada is a knave.\"\nGus says: \"Exactly one of Dev and Ada is a knight.\"\nDev says: \"Exactly 3 of the 7 of us are knights.\"\nLena says: \"Dev and Ada are the same kind.\"\nAda says: \"Lena and Dev are the same kind.\"\nKai says: \"Lena is a knight if and only if Cleo is a knave.\"\n\nExactly one assignment is consistent with these statements. Which of them are knights? List every knight, separated by commas (or 'none').",
+    "difficulty": "expert",
+    "task_type": "knights_knaves",
+    "source": "generated",
+    "eval_method": "answer_set",
+    "expected": [
+      "Cleo",
+      "Lena"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <names>"
+  },
+  {
+    "id": "x_knights_knaves_03",
+    "query": "On an island, every inhabitant is either a knight, who always tells the truth, or a knave, who always lies. You meet 8 inhabitants: Cleo, Ivo, Kai, Ada, Hana, Gus, Ben, Eli.\n\nCleo says: \"Ivo and Kai are both knights.\"\nIvo says: \"Kai is a knight if and only if Hana is a knave.\"\nKai says: \"Ben is a knight if and only if Cleo is a knave.\"\nAda says: \"Exactly 5 of the 8 of us are knights.\"\nHana says: \"Exactly one of Gus and Eli is a knight.\"\nGus says: \"Eli is a knight if and only if Cleo is a knave.\"\nBen says: \"Cleo and Ivo are both knights.\"\nEli says: \"Kai and Cleo are the same kind.\"\n\nExactly one assignment is consistent with these statements. Which of them are knights? List every knight, separated by commas (or 'none').",
+    "difficulty": "expert",
+    "task_type": "knights_knaves",
+    "source": "generated",
+    "eval_method": "answer_set",
+    "expected": [
+      "Gus",
+      "Eli"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <names>"
+  },
+  {
+    "id": "x_knights_knaves_04",
+    "query": "On an island, every inhabitant is either a knight, who always tells the truth, or a knave, who always lies. You meet 7 inhabitants: Ben, Ivo, Hana, Kai, Ada, Gus, Jun.\n\nBen says: \"Ada is a knight if and only if Kai is a knave.\"\nIvo says: \"Gus is a knight if and only if Jun is a knave.\"\nHana says: \"Exactly one of Ivo and Kai is a knight.\"\nKai says: \"Gus and Jun are the same kind.\"\nAda says: \"Kai and Gus are both knights.\"\nGus says: \"At least one of Jun and Ada is a knave.\"\nJun says: \"Ada and Ivo are the same kind.\"\n\nExactly one assignment is consistent with these statements. Which of them are knights? List every knight, separated by commas (or 'none').",
+    "difficulty": "expert",
+    "task_type": "knights_knaves",
+    "source": "generated",
+    "eval_method": "answer_set",
+    "expected": [
+      "Ivo",
+      "Hana",
+      "Gus"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <names>"
+  },
+  {
+    "id": "x_knights_knaves_05",
+    "query": "On an island, every inhabitant is either a knight, who always tells the truth, or a knave, who always lies. You meet 8 inhabitants: Dev, Cleo, Gus, Ivo, Jun, Kai, Lena, Ben.\n\nDev says: \"Ivo is a knave.\"\nCleo says: \"Dev is a knight if and only if Ivo is a knave.\"\nGus says: \"Exactly 1 of the 8 of us are knights.\"\nIvo says: \"Jun is a knight if and only if Gus is a knave.\"\nJun says: \"Kai is a knight if and only if Gus is a knave.\"\nKai says: \"Dev and Ben are the same kind.\"\nLena says: \"Cleo is a knave.\"\nBen says: \"Gus and Dev are the same kind.\"\n\nExactly one assignment is consistent with these statements. Which of them are knights? List every knight, separated by commas (or 'none').",
+    "difficulty": "expert",
+    "task_type": "knights_knaves",
+    "source": "generated",
+    "eval_method": "answer_set",
+    "expected": [
+      "Dev",
+      "Cleo"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <names>"
+  },
+  {
+    "id": "x_zebra_00",
+    "query": "Four houses stand in a row, numbered 1 to 4 from left to right. Each is home to one person, and the four people have different names (Alice, Bruno, Chen, Dara), drinks (coffee, tea, milk, juice), pets (cat, dog, parrot, fish) and jobs (baker, doctor, pilot, teacher).\n\n1. Bruno lives next to the juice drinker.\n2. The fish owner is the baker.\n3. The teacher lives in house 3.\n4. The dog owner lives next to Alice.\n5. Bruno is the pilot.\n6. The dog owner lives directly to the left of Dara.\n7. The cat owner lives next to the juice drinker.\n8. The tea drinker lives in house 3.\n9. The milk drinker is the doctor.\n\nWho lives in each house? Give the four names in house order, 1 to 4, separated by commas.",
+    "difficulty": "expert",
+    "task_type": "zebra",
+    "source": "generated",
+    "eval_method": "answer_sequence",
+    "expected": [
+      "Bruno",
+      "Alice",
+      "Chen",
+      "Dara"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <name>, <name>, <name>, <name>"
+  },
+  {
+    "id": "x_zebra_01",
+    "query": "Four houses stand in a row, numbered 1 to 4 from left to right. Each is home to one person, and the four people have different names (Alice, Bruno, Chen, Dara), drinks (coffee, tea, milk, juice), pets (cat, dog, parrot, fish) and jobs (baker, doctor, pilot, teacher).\n\n1. The teacher is the parrot owner.\n2. Alice lives next to the coffee drinker.\n3. The fish owner lives in house 1.\n4. The milk drinker is the baker.\n5. The pilot lives somewhere to the left of Dara.\n6. The tea drinker lives directly to the left of Chen.\n7. The fish owner lives somewhere to the left of the doctor.\n8. The coffee drinker lives next to the baker.\n9. The cat owner is the milk drinker.\n10. Chen is not the doctor.\n11. Bruno is the milk drinker.\n\nWho lives in each house? Give the four names in house order, 1 to 4, separated by commas.",
+    "difficulty": "expert",
+    "task_type": "zebra",
+    "source": "generated",
+    "eval_method": "answer_sequence",
+    "expected": [
+      "Alice",
+      "Chen",
+      "Bruno",
+      "Dara"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <name>, <name>, <name>, <name>"
+  },
+  {
+    "id": "x_zebra_02",
+    "query": "Four houses stand in a row, numbered 1 to 4 from left to right. Each is home to one person, and the four people have different names (Alice, Bruno, Chen, Dara), drinks (coffee, tea, milk, juice), pets (cat, dog, parrot, fish) and jobs (baker, doctor, pilot, teacher).\n\n1. The doctor is the cat owner.\n2. Bruno lives in house 1.\n3. The milk drinker lives in house 4.\n4. The parrot owner is the tea drinker.\n5. The fish owner is Dara.\n6. The pilot is Chen.\n7. The coffee drinker does not live in house 2.\n8. The cat owner lives in house 2.\n9. The dog owner lives in house 1.\n10. The teacher lives in house 1.\n\nWho lives in each house? Give the four names in house order, 1 to 4, separated by commas.",
+    "difficulty": "expert",
+    "task_type": "zebra",
+    "source": "generated",
+    "eval_method": "answer_sequence",
+    "expected": [
+      "Bruno",
+      "Alice",
+      "Chen",
+      "Dara"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <name>, <name>, <name>, <name>"
+  },
+  {
+    "id": "x_zebra_03",
+    "query": "Four houses stand in a row, numbered 1 to 4 from left to right. Each is home to one person, and the four people have different names (Alice, Bruno, Chen, Dara), drinks (coffee, tea, milk, juice), pets (cat, dog, parrot, fish) and jobs (baker, doctor, pilot, teacher).\n\n1. The baker lives in house 4.\n2. Alice lives somewhere to the left of the doctor.\n3. The coffee drinker is the cat owner.\n4. The milk drinker lives in house 4.\n5. Chen is the parrot owner.\n6. Bruno is the dog owner.\n7. The tea drinker is the teacher.\n8. The teacher lives next to Bruno.\n9. Alice is the juice drinker.\n\nWho lives in each house? Give the four names in house order, 1 to 4, separated by commas.",
+    "difficulty": "expert",
+    "task_type": "zebra",
+    "source": "generated",
+    "eval_method": "answer_sequence",
+    "expected": [
+      "Alice",
+      "Dara",
+      "Chen",
+      "Bruno"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <name>, <name>, <name>, <name>"
+  },
+  {
+    "id": "x_zebra_04",
+    "query": "Four houses stand in a row, numbered 1 to 4 from left to right. Each is home to one person, and the four people have different names (Alice, Bruno, Chen, Dara), drinks (coffee, tea, milk, juice), pets (cat, dog, parrot, fish) and jobs (baker, doctor, pilot, teacher).\n\n1. The baker is the milk drinker.\n2. The coffee drinker lives in house 2.\n3. The doctor lives in house 4.\n4. The parrot owner lives in house 2.\n5. Chen lives in house 2.\n6. The pilot is the juice drinker.\n7. Dara is not the doctor.\n8. The milk drinker is Alice.\n9. The fish owner is Bruno.\n10. The milk drinker is the cat owner.\n11. The baker lives in house 3.\n\nWho lives in each house? Give the four names in house order, 1 to 4, separated by commas.",
+    "difficulty": "expert",
+    "task_type": "zebra",
+    "source": "generated",
+    "eval_method": "answer_sequence",
+    "expected": [
+      "Dara",
+      "Chen",
+      "Alice",
+      "Bruno"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <name>, <name>, <name>, <name>"
+  },
+  {
+    "id": "x_zebra_05",
+    "query": "Four houses stand in a row, numbered 1 to 4 from left to right. Each is home to one person, and the four people have different names (Alice, Bruno, Chen, Dara), drinks (coffee, tea, milk, juice), pets (cat, dog, parrot, fish) and jobs (baker, doctor, pilot, teacher).\n\n1. The pilot lives in house 1.\n2. The dog owner is the teacher.\n3. The juice drinker is the teacher.\n4. The tea drinker is Dara.\n5. The cat owner is Chen.\n6. The milk drinker lives in house 3.\n7. The coffee drinker is the fish owner.\n8. The doctor lives in house 4.\n9. Alice lives in house 1.\n\nWho lives in each house? Give the four names in house order, 1 to 4, separated by commas.",
+    "difficulty": "expert",
+    "task_type": "zebra",
+    "source": "generated",
+    "eval_method": "answer_sequence",
+    "expected": [
+      "Alice",
+      "Bruno",
+      "Chen",
+      "Dara"
+    ],
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <name>, <name>, <name>, <name>"
+  },
+  {
+    "id": "x_shortest_path_00",
+    "query": "An undirected road network connects towns A to L. Each road and its length:\nA-B: 13; A-C: 11; A-D: 29; A-F: 17; B-C: 12; B-D: 22; B-F: 26; B-G: 27; B-L: 11; C-D: 12; C-E: 23; C-H: 15; C-I: 25; C-J: 26; D-E: 11; D-H: 20; E-F: 8; E-I: 29; E-K: 28; F-K: 23; F-L: 3; G-H: 17; G-L: 30; J-K: 21\n\nWhat is the length of the shortest route from A to L?",
+    "difficulty": "expert",
+    "task_type": "shortest_path",
+    "source": "generated",
+    "eval_method": "answer_integer",
+    "expected": 20,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <number>"
+  },
+  {
+    "id": "x_shortest_path_01",
+    "query": "An undirected road network connects towns A to L. Each road and its length:\nA-B: 12; A-C: 20; A-E: 24; A-J: 25; A-L: 22; B-E: 24; B-F: 3; B-H: 6; B-I: 15; B-L: 4; C-D: 8; C-G: 30; C-I: 22; D-I: 3; D-L: 25; E-G: 18; E-H: 9; F-G: 19; F-I: 24; F-K: 3; G-I: 2; G-L: 6; H-I: 11; I-L: 18\n\nWhat is the length of the shortest route from A to L?",
+    "difficulty": "expert",
+    "task_type": "shortest_path",
+    "source": "generated",
+    "eval_method": "answer_integer",
+    "expected": 16,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <number>"
+  },
+  {
+    "id": "x_shortest_path_02",
+    "query": "An undirected road network connects towns A to L. Each road and its length:\nA-B: 22; A-G: 23; A-I: 21; A-J: 24; B-C: 9; B-F: 9; B-L: 14; C-D: 24; D-E: 25; D-I: 7; D-K: 27; E-I: 21; E-J: 10; F-H: 18; F-I: 18; F-K: 16; G-H: 4; G-L: 13; H-I: 12; H-J: 20; H-K: 19; I-J: 14; I-K: 14; K-L: 12\n\nWhat is the length of the shortest route from A to L?",
+    "difficulty": "expert",
+    "task_type": "shortest_path",
+    "source": "generated",
+    "eval_method": "answer_integer",
+    "expected": 36,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <number>"
+  },
+  {
+    "id": "x_shortest_path_03",
+    "query": "An undirected road network connects towns A to L. Each road and its length:\nA-B: 28; A-C: 9; A-F: 22; A-K: 6; B-E: 16; B-H: 16; B-L: 14; C-D: 6; C-I: 6; C-J: 11; D-G: 12; D-I: 2; D-K: 21; E-G: 11; E-J: 3; E-K: 6; F-H: 18; F-I: 12; F-L: 23; G-H: 13; G-I: 29; G-J: 5; H-K: 4; I-L: 11\n\nWhat is the length of the shortest route from A to L?",
+    "difficulty": "expert",
+    "task_type": "shortest_path",
+    "source": "generated",
+    "eval_method": "answer_integer",
+    "expected": 26,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <number>"
+  },
+  {
+    "id": "x_shortest_path_04",
+    "query": "An undirected road network connects towns A to L. Each road and its length:\nA-B: 24; A-H: 29; A-K: 5; B-C: 12; B-D: 9; B-F: 4; B-H: 14; B-K: 8; C-H: 30; C-I: 8; D-E: 28; D-G: 22; D-J: 29; E-F: 4; E-J: 15; E-L: 15; F-G: 3; F-K: 21; G-H: 14; G-I: 17; G-J: 6; G-K: 21; H-L: 3; J-L: 13\n\nWhat is the length of the shortest route from A to L?",
+    "difficulty": "expert",
+    "task_type": "shortest_path",
+    "source": "generated",
+    "eval_method": "answer_integer",
+    "expected": 30,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <number>"
+  },
+  {
+    "id": "x_shortest_path_05",
+    "query": "An undirected road network connects towns A to L. Each road and its length:\nA-B: 17; A-C: 18; A-D: 23; A-E: 11; A-I: 24; A-J: 5; A-K: 8; B-E: 25; B-H: 29; B-K: 5; B-L: 9; C-J: 15; D-E: 6; D-G: 27; D-J: 16; E-F: 14; E-G: 23; E-H: 11; E-I: 18; F-G: 3; F-L: 17; G-I: 12; G-L: 28; H-J: 26\n\nWhat is the length of the shortest route from A to L?",
+    "difficulty": "expert",
+    "task_type": "shortest_path",
+    "source": "generated",
+    "eval_method": "answer_integer",
+    "expected": 22,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <number>"
+  },
+  {
+    "id": "x_grid_paths_00",
+    "query": "A walker starts at (0, 0) and must reach (7, 7). Each step moves exactly one unit right (x + 1) or one unit up (y + 1). The walker may never stand on any of these blocked points: (3, 7), (4, 1), (4, 5), (6, 1), (6, 5), (6, 7).\n\nHow many different routes are there?",
+    "difficulty": "expert",
+    "task_type": "grid_paths",
+    "source": "generated",
+    "eval_method": "answer_integer",
+    "expected": 412,
+    "answer_format": "\n\nEnd your reply with a final line of the form: Answer: <number>"
+  }
+]

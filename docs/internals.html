@@ -266,11 +266,11 @@ out at <span class="num">$0.0204</span> against <span class="num">$0.0205</span>
 
 <h2 id="lifecycle"><span class="n">2</span>Request lifecycle</h2>
 <p>Every request — chat UI, demo, or API — goes through the same path in
-<code>app/cascade.py</code>. Nothing about it requires an LLM to make the routing decision.</p>
+<code>app/routing/cascade.py</code>. Nothing about it requires an LLM to make the routing decision.</p>
 
 <pre class="mermaid">
 flowchart TD
-    Q[Prompt] --> C["Classify difficulty<br/>MiniLM-L6 · weighted k=5 · ~7ms · no model call"]
+    Q[Prompt] --> C["Classify difficulty<br/>MiniLM-L6 · expert gate + weighted k=5 · ~7ms · no model call"]
     C --> P["Pick start tier<br/>min expected total cost, subject to a 0.80 quality floor"]
     P --> G[Generate at that tier]
     G --> S{"Learned scorer<br/>P(correct) from token logprobs · free"}
@@ -295,29 +295,50 @@ flowchart TD
 </ul>
 
 <h2 id="classify"><span class="n">3</span>Difficulty classifier</h2>
-<p class="lede"><code>app/classifier.py</code> — 152 lines, no model call, about 7ms.</p>
+<p class="lede"><code>app/routing/classifier.py</code> — 187 lines, no model call, about 7ms.</p>
 
 <p>The prompt is encoded with <code>all-MiniLM-L6-v2</code> (22M parameters, pinned to CPU) and
-compared by cosine similarity against a labelled reference set of 116 queries. Difficulty is a
-<strong>similarity-weighted vote over the 5 nearest neighbours</strong>: each neighbour contributes
-its similarity score to its own label, and the heaviest label wins.</p>
+compared by cosine similarity against 176 labelled reference questions: 116 everyday ones
+(<code>easy</code> / <code>medium</code> / <code>hard</code>) and 60 AIME problems
+(<code>expert</code>). Two stages:</p>
+<ol>
+  <li><strong>Expert gate.</strong> If at least half the similarity weight among the 7 nearest
+  neighbours belongs to expert questions, the prompt is <code>expert</code>.</li>
+  <li>Otherwise, a <strong>similarity-weighted vote over the 5 nearest everyday neighbours</strong>:
+  each contributes its similarity score to its own label, and the heaviest label wins.</li>
+</ol>
+
+<h3>Why a gate rather than a fourth label in the vote</h3>
+<p>A wrong <code>expert</code> pays for a thinking answer it didn't need, so the gate is tuned
+against those false positives. Leave-one-out over all 176 questions:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>design</th><th class="num">AIME caught</th><th class="num">everyday pulled to expert</th><th class="num">everyday exact</th></tr></thead>
+  <tbody>
+    <tr><td>one k=5 vote over four labels</td><td class="num">53/60</td><td class="num">10/116</td><td class="num">—</td></tr>
+    <tr><td>no expert band at all</td><td class="num">—</td><td class="num">—</td><td class="num">75/116</td></tr>
+    <tr><td><strong>gate (k=7, share ≥ 0.5), then k=5 over everyday</strong></td><td class="num"><strong>54/60</strong></td><td class="num"><strong>4/116</strong></td><td class="num"><strong>72/116</strong></td></tr>
+  </tbody>
+</table></div>
+<p class="caption">The four false experts are maths questions such as "the smallest n with n! divisible
+by 1000". The frontier answers them correctly, at a higher price.
+<code>python -m scripts.classifier.evaluate_loo</code> prints the full confusion matrix.</p>
 
 <h3>Why k=5 and not 1-NN</h3>
 <p>It began as single-nearest-neighbour, on the theory that k-voting lets mediocre matches outvote
-one clearly-best match. Measured properly — leave-one-out across all 116 labelled queries — that
-reasoning was wrong:</p>
+one clearly-best match. Measured properly — leave-one-out across the 116 everyday queries, with
+today's overrides — that reasoning was wrong:</p>
 
 <div class="table-wrap"><table>
   <thead><tr><th>classifier</th><th class="num">exact label</th><th class="num">over-routed</th><th class="num">under-routed</th></tr></thead>
   <tbody>
-    <tr><td>1-nearest-neighbour</td><td class="num">56.0%</td><td class="num">21</td><td class="num">23</td></tr>
-    <tr><td>weighted k=5 vote</td><td class="num">65.5%</td><td class="num">18</td><td class="num">11</td></tr>
-    <tr><td>weighted k=5 + structural overrides</td><td class="num">64.7%</td><td class="num">14</td><td class="num">15</td></tr>
+    <tr><td>1-nearest-neighbour</td><td class="num">55.2%</td><td class="num">22</td><td class="num">30</td></tr>
+    <tr><td>weighted k=5 vote</td><td class="num">64.7%</td><td class="num">24</td><td class="num">17</td></tr>
+    <tr><td>expert gate, then the k=5 vote</td><td class="num">62.1%</td><td class="num">27</td><td class="num">17</td></tr>
   </tbody>
 </table></div>
-<p class="caption">Over-routed = paid for a stronger tier than needed. Under-routed = caught by the
-verifier and escalated. The overrides trade 0.8 points of exact accuracy for four fewer
-over-routes, because an over-route costs money immediately while an under-route is recoverable.</p>
+<p class="caption">Over-routed = labelled harder than it is, and so possibly paid for a stronger tier
+than needed. Under-routed = labelled easier, which the verifier usually catches. All rows are counted
+the same way; an earlier version of this table mixed counting methods.</p>
 
 <p>Single-neighbour is fragile here because the reference set is 52% <code>hard</code>, so one
 spurious topical match drags a query straight to the mid tier. Summing similarity over five
@@ -349,7 +370,7 @@ quicksort, though one is recall and the other is analysis. Four rules patch the 
 </div>
 
 <h2 id="policy"><span class="n">4</span>Expected-cost routing policy</h2>
-<p class="lede"><code>app/routing_policy.py</code> — 114 lines. Turns calibration numbers into a
+<p class="lede"><code>app/routing/policy.py</code> — 118 lines. Turns calibration numbers into a
 difficulty→tier map.</p>
 
 <p>Before this existed, calibration was inert: it measured quality and then only displayed it, while
@@ -398,7 +419,7 @@ failure-weighted escalation. Cheap wins every band on this stack because its qua
 everywhere and it is ~100× cheaper.</p>
 
 <h2 id="verify"><span class="n">5</span>Two-stage verification</h2>
-<p class="lede"><code>app/scorer.py</code> (266 lines) and <code>app/verifier.py</code> (131 lines).</p>
+<p class="lede"><code>app/routing/scorer.py</code> (267 lines) and <code>app/routing/verifier.py</code> (131 lines).</p>
 
 <p>The cheapest tier's answer passes through a learned gate, then — only if the gate is unsure — an
 LLM judge. Later tiers get a free structural check; the last tier gets nothing.</p>
@@ -496,20 +517,21 @@ choice when the cheap tier is slow — a locally-hosted model, say — and laten
 cost.</p>
 
 <h2 id="tiers"><span class="n">7</span>Tiers and configuration</h2>
-<p class="lede"><code>app/model_config.py</code> — 183 lines, the single source of truth.</p>
+<p class="lede"><code>app/config.py</code> — 186 lines, the single source of truth.</p>
 
 <div class="table-wrap"><table>
   <thead><tr><th>role</th><th>model</th><th class="num">quality</th><th class="num">$/answer</th><th class="num">latency</th><th class="num">measured on</th></tr></thead>
   <tbody>
-    <tr><td><span class="tier c">cheap</span></td><td class="mono">openrouter/meta-llama/llama-3.1-8b-instruct</td><td class="num">0.89 / 0.95 / 0.81</td><td class="num">$0.000003 / 0.000013 / 0.000025</td><td class="num">6.1s</td><td class="num">76</td></tr>
+    <tr><td><span class="tier c">cheap</span></td><td class="mono">openrouter/meta-llama/llama-3.1-8b-instruct</td><td class="num">0.89 / 0.95 / 0.81 / 0.00</td><td class="num">$0.000003 / 0.000013 / 0.000025 / 0.0002</td><td class="num">6.1s</td><td class="num">76</td></tr>
     <tr><td><span class="tier j">judge</span></td><td class="mono">groq/openai/gpt-oss-20b</td><td class="num">94% catch</td><td class="num">$0.00004 / verdict</td><td class="num">~1s</td><td class="num">117</td></tr>
-    <tr><td><span class="tier m">mid</span></td><td class="mono">openrouter/google/gemini-3.5-flash</td><td class="num">1.00 / 1.00 / 1.00</td><td class="num">$0.000477 / 0.002386 / 0.002325</td><td class="num">3.3s</td><td class="num">24</td></tr>
-    <tr><td><span class="tier f">frontier</span></td><td class="mono">openrouter/google/gemini-3.5-flash</td><td class="num">1.00 / 1.00 / 1.00</td><td class="num">$0.002252 / 0.008738 / 0.008724</td><td class="num">5.3s</td><td class="num">24</td></tr>
+    <tr><td><span class="tier m">mid</span></td><td class="mono">openrouter/google/gemini-3.5-flash</td><td class="num">1.00 / 1.00 / 1.00 / <strong>0.70</strong></td><td class="num">$0.000477 / 0.002386 / 0.002325 / 0.019</td><td class="num">3.3s</td><td class="num">24</td></tr>
+    <tr><td><span class="tier f">frontier</span></td><td class="mono">openrouter/google/gemini-3.5-flash</td><td class="num">1.00 / 1.00 / 1.00 / —</td><td class="num">$0.002252 / 0.008738 / 0.008724 / 0.19</td><td class="num">5.3s</td><td class="num">24 + 3</td></tr>
   </tbody>
 </table></div>
-<p class="caption">Quality and cost are per easy / medium / hard band. Cost is what the provider
-charged, hidden reasoning tokens included. The 1.00 scores are a property of the 116-query eval set,
-not a claim the two paid tiers are equivalent — see §10.</p>
+<p class="caption">Quality and cost are per easy / medium / hard / expert band. Cost is what the
+provider charged, hidden reasoning tokens included. The expert band comes from the AIME probe: ten
+problems for cheap and mid, and only mid's three misses for the frontier, so its own score is left
+blank. The 1.00 scores are a property of the everyday eval set — see §10.</p>
 
 <h3>Three choices worth explaining</h3>
 <p><strong>Mid and frontier are the same model</strong>, separated only by whether it may think. Mid
@@ -536,7 +558,8 @@ Groq's gpt-oss takes <code>low</code>/<code>medium</code>/<code>high</code> and 
 </div>
 
 <h2 id="calibration"><span class="n">8</span>Calibration</h2>
-<p class="lede"><code>app/calibration.py</code> (157 lines), <code>scripts/calibrate_builtin.py</code>.</p>
+<p class="lede"><code>app/evaluation/calibration.py</code> (159 lines),
+<code>scripts/calibration/calibrate_builtin.py</code>.</p>
 
 <p>Calibration runs objectively-scoreable questions against a model and scores each difficulty band
 separately. Those numbers are the only input to the routing policy, so their shape matters more than
@@ -568,8 +591,12 @@ questions to it on noise.</p>
   whole budget thinking and returns nothing has failed to answer.</li>
   <li>An unreachable tier is priced from list price at typical per-band token counts and flagged
   <code>unmeasured</code>, rather than aborting the run.</li>
-  <li>Results go to <code>data/builtin_calibration.json</code>, which is used only if its recorded
+  <li>Results go to <code>data/calibration/builtin.json</code>, which is used only if its recorded
   model names still match the configured ones.</li>
+  <li>The built-in expert band is read from the AIME probe results rather than re-measured: a
+  frontier AIME answer costs $0.13–0.29, so it is paid for once and kept
+  (<code>calibrate_builtin --expert-only</code>). BYOM calibration measures it live, six AIME
+  problems out of 24 questions.</li>
 </ul>
 
 <h2 id="byom"><span class="n">9</span>Bring your own models</h2>
@@ -591,7 +618,7 @@ another. The routing map is assembled per session from whichever tiers it was cr
   </tbody>
 </table></div>
 
-<p>Two deliberate properties of <code>app/key_vault.py</code>: with no server secret set, storing is
+<p>Two deliberate properties of <code>app/storage/key_vault.py</code>: with no server secret set, storing is
 <strong>refused</strong> rather than silently downgraded to plaintext — a "we encrypted it" claim we
 cannot honour is worse than an error saying storage is unavailable. And on secret rotation, decrypt
 returns <code>None</code> rather than raising, so users are simply asked for the key again.</p>
@@ -626,38 +653,70 @@ answers. Every one of those 26 escalations was the judge catching a real error: 
 miscounted permutation, a missed fallacy.</p>
 
 <h3>Does the frontier tier earn its slot?</h3>
-<p>Both paid tiers score 1.000 on the 116-query set, which sounds like the frontier is pointless. It
-only means the set cannot see the difference: its <code>hard</code> band was labelled against a 3B
-local model, so it contains things like "write a palindrome check". In a full run the frontier tier
-was <strong>never reached once</strong>.</p>
+<p>On everyday questions, no. On competition maths, yes, and the routing policy now acts on that.</p>
 
-<p><code>scripts/build_hard_probe.py</code> builds a set that can tell them apart — MATH-500 level 5
-plus 14 BIG-Bench Hard task families, 288 questions, all with ground-truth answers so grading stays
-automatic and free:</p>
+<p><strong>Everyday questions can't see a difference.</strong> Both paid tiers score 1.000 on the
+116-query set: its <code>hard</code> band was labelled against a 3B local model, so it contains
+things like "write a palindrome check". In a full run the frontier tier was <strong>never reached
+once</strong>.</p>
 
+<p><strong>Benchmarks built to be hard barely see it.</strong>
+<code>scripts/probe/build_bbh_math.py</code>: MATH-500 level 5 plus 14 BIG-Bench Hard families, all
+with ground-truth answers.</p>
 <div class="table-wrap"><table>
-  <thead><tr><th>configuration</th><th class="num">accuracy</th><th class="num">$/question</th></tr></thead>
+  <thead><tr><th>263 questions</th><th class="num">accuracy</th><th class="num">$/question</th></tr></thead>
   <tbody>
-    <tr><td>mid alone (thinking off)</td><td class="num">277/288 = <strong>96.2%</strong></td><td class="num">$0.0038</td></tr>
-    <tr><td>+ thinking frontier on the 11 it failed</td><td class="num">279/288 = <strong>96.9%</strong></td><td class="num">$0.0046</td></tr>
+    <tr><td>mid alone (thinking off)</td><td class="num">252/263 = <strong>95.8%</strong></td><td class="num">$0.0038</td></tr>
+    <tr><td>+ thinking frontier on the 11 it failed</td><td class="num">254/263 = <strong>96.6%</strong></td><td class="num">$0.0047</td></tr>
   </tbody>
 </table></div>
-
-<p><strong>+0.7 points for +21% cost.</strong> Thin, and honest. The shape matters more than the
-average:</p>
-
+<p class="caption">This was published as 288 questions: two runs overlapped on 25 BBH questions and both
+were counted. One of them, a <code>dyck_languages</code> item, failed in one run and passed in the
+other, so its "rescue" below is partly a coin toss.</p>
 <div class="table-wrap"><table>
   <thead><tr><th>task</th><th class="num">rescued by thinking</th><th>reading</th></tr></thead>
   <tbody>
-    <tr><td>BBH <code>dyck_languages</code></td><td class="num">1/1</td><td>bracket matching is pure step-by-step bookkeeping</td></tr>
-    <tr><td>MATH-500 level 5</td><td class="num">1/4</td><td>mathematical ability, not thinking budget, is the limit</td></tr>
+    <tr><td>BBH <code>dyck_languages</code></td><td class="num">1/1</td><td>bracket matching; mid is unstable on it</td></tr>
+    <tr><td>MATH-500 level 5</td><td class="num">1/4</td><td>competition maths, the first sign of where thinking pays</td></tr>
     <tr><td>BBH <code>geometric_shapes</code></td><td class="num"><strong>0/6</strong></td><td>reading an SVG path to name a figure is a perception limit; no thinking time fixes it</td></tr>
   </tbody>
 </table></div>
 
-<p>The deeper reason the frontier looks marginal is that <strong>mid is already at 96% on benchmarks
-built to be hard.</strong> The headroom for any stronger tier is eleven questions. If a larger
-measured gap is wanted, the lever is a weaker, cheaper mid tier — not harder questions.</p>
+<p><strong>Mid reasons in the open.</strong> With thinking off, mid still writes its working into the
+answer, which is all BBH asks for. So the next attempt targeted <em>search</em>, where a model has to
+try a branch, find it fails and back up. <code>scripts/probe/build_expert_set.py</code> generates
+puzzles and brute-forces each to a unique answer: Countdown, knights and knaves with 7–8 islanders,
+minimal-clue 4×4 logic grids, shortest paths with a greedy trap, lattice paths. Mid solved
+<strong>25 of 25</strong>, in about 1,000 visible tokens each.</p>
+
+<p><strong>Competition maths separates them.</strong> The first ten AIME 2025 problems of a seeded
+shuffle:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>tier</th><th class="num">AIME 2025</th><th class="num">$/problem</th><th class="num">time</th></tr></thead>
+  <tbody>
+    <tr><td>cheap (8B)</td><td class="num">0/10</td><td class="num">$0.0002</td><td class="num">92s</td></tr>
+    <tr><td>mid (thinking off)</td><td class="num"><strong>7/10</strong></td><td class="num">$0.019</td><td class="num">14s</td></tr>
+    <tr><td>frontier (thinking on), on mid's 3 misses</td><td class="num"><strong>2/3</strong></td><td class="num">$0.19</td><td class="num">119s</td></tr>
+  </tbody>
+</table></div>
+<p>Mid's misses are real wrong answers: 88 instead of 81, 73 instead of 60, and one cut off by its
+4,096-token cap. The frontier spent 13–17k reasoning tokens getting two right. The third hit its own
+32k cap while still thinking.</p>
+
+<p>These problems form the <code>expert</code> band. Mid calibrates at 0.70 there, under the 0.80
+floor, so the policy derives <code>expert → frontier</code>. This is the first map in which anything
+starts at the frontier. Starting at mid and escalating would be cheaper on paper ($0.077 expected
+against $0.19), but that arithmetic assumes mid's failures get caught. Mid's answers only get the
+structural check, which can't tell 88 from 81, so the floor is what stops the 30% from shipping.</p>
+
+<div class="note warn">
+  <span class="lbl">How far to trust it</span>
+  <p>Ten problems: 7/10 has a 95% interval of roughly 0.40–0.89, so mid sitting under the floor is
+  likely, not certain. The frontier's own accuracy on the band is unmeasured, because it only ran on
+  mid's misses. The run stopped at ten because a frontier AIME answer costs $0.13–0.29 and the
+  balance was low. <code>scripts/probe/run_probe.py --budget</code> makes extending it a bounded
+  spend.</p>
+</div>
 
 <h2 id="negative"><span class="n">11</span>What didn't work</h2>
 <p>Four results worth more than the features they replaced.</p>
@@ -682,8 +741,8 @@ now 32,000 — providers bill tokens <em>used</em>, not tokens allowed.</p>
 <p>Google AI Studio allows <strong>20 requests per day</strong> per model, which cannot support a
 116-query eval, let alone traffic. The built-in stack reaches the same model through OpenRouter.</p>
 
-<h3>Three grading bugs (the most instructive)</h3>
-<p>Each made a model look worse than it was, and all three were caught by reading answers rather
+<h3>Four grading bugs (the most instructive)</h3>
+<p>Each made a model look worse than it was, and all four were caught by reading answers rather
 than trusting a score:</p>
 
 <div class="table-wrap"><table>
@@ -692,6 +751,7 @@ than trusting a score:</p>
     <tr><td class="mono">(B)</td><td class="mono">(B) heptagon</td><td>scored <strong>2/17</strong> on a task it got 11/17 right</td></tr>
     <tr><td class="mono">syndrome therefrom</td><td class="mono">syndrome, therefrom</td><td>scored <strong>0/5</strong> on a task it got 5/5 right</td></tr>
     <tr><td class="mono">hypertext transfer protocol</td><td class="mono">**H**yper**T**ext **T**ransfer **P**rotocol</td><td>marked wrong for its markdown bold</td></tr>
+    <tr><td class="mono">a Countdown expression</td><td class="mono">(25 * 7) + 75 + 2 + 1</td><td>scored <strong>0/6</strong> on a task it got 6/6 right: stripping <code>*</code> as markdown deleted the multiplication</td></tr>
   </tbody>
 </table></div>
 
@@ -700,7 +760,9 @@ than trusting a score:</p>
   <p>Fixing the multiple-choice bug alone moved the mid tier from <strong>83.2% to 97.5%</strong> on
   the BBH set, and retired a "the frontier rescued this" result that was really mid having been
   mis-graded — which in turn corrected a published claim of "+4 points for +40% cost" down to
-  <strong>+0.7 points for +21%</strong>. An automatic grader measures formatting as readily as
+  <strong>+0.7 points for +21%</strong> (since recounted as +0.8 for +23% over the 263 distinct
+  questions). The fourth bug, found building the expert set, nearly recorded "mid fails every
+  Countdown puzzle" as the result that justified a frontier band. An automatic grader measures formatting as readily as
   correctness. Treat every accuracy figure here as a lower bound.</p>
 </div>
 
@@ -708,8 +770,9 @@ than trusting a score:</p>
 <ul>
   <li><strong>The mid-only baseline is a range, not a number</strong> — $0.225 from calibration,
   $0.360 from token repricing. The 41% claim uses the lower one.</li>
-  <li><strong>The classifier is the weakest component.</strong> ~65% exact-label accuracy on a k-NN
-  over 116 examples. A learned difficulty model trained on the escalation log would do better, and
+  <li><strong>The classifier is the weakest component.</strong> 62% exact-label accuracy on the
+  everyday set, from a k-NN over 176 examples, and 6 of 60 AIME problems are classed as merely hard.
+  Those start at the cheap tier and end at mid, whose answer only gets a structural check. A learned difficulty model trained on the escalation log would do better, and
   every misroute is either a wasted cheap call or an overpriced answer.</li>
   <li><strong><code>hard → cheap</code> is a marginal call.</strong> The 8B calibrated at 0.81 against
   a 0.80 floor on 37 questions; a 120-sample dataset put it at 0.74. The judge caught every wrong
@@ -718,9 +781,9 @@ than trusting a score:</p>
   <li><strong>The cheap tier is slower than mid</strong> — 6.1s against 3.3s. Cheaper is not faster.</li>
   <li><strong>The scorer is model-specific.</strong> Confidence profiles don't transfer, so a scorer
   trained for one cheap model is treated as absent for another and the judge runs instead.</li>
-  <li><strong>Paid-tier calibration samples are small</strong> — 24 questions, 8 per band.</li>
-  <li><strong>The frontier is measured on 24 calibration questions and 11 probe questions.</strong>
-  It is the escalation target of last resort, not a tier the policy routes to.</li>
+  <li><strong>Paid-tier calibration samples are small</strong> — 6–8 questions per band.</li>
+  <li><strong>The expert band rests on ten AIME problems</strong>, and the frontier's own accuracy on
+  it is unmeasured. See §10.</li>
   <li><strong>Auth is project-grade.</strong> bcrypt passwords, cookie sessions, per-account and
   per-device prompt caps — but no CSRF token and no rate limit on login attempts.</li>
   <li><strong>The escalation cost tail is real.</strong> One rate-limit fallback to a frontier tier
@@ -728,8 +791,8 @@ than trusting a score:</p>
 </ul>
 
 <h2 id="data"><span class="n">13</span>Data model</h2>
-<p>SQLite dialect throughout, 17 tables across two modules. <code>app/db.py</code> holds evaluation
-and request logging; <code>app/chat_db.py</code> holds everything user-facing.</p>
+<p>SQLite dialect throughout, 17 tables across two modules. <code>app/storage/eval_log.py</code> holds
+evaluation and request logging; <code>app/storage/chat_db.py</code> holds everything user-facing.</p>
 
 <div class="table-wrap"><table>
   <thead><tr><th>table</th><th>holds</th></tr></thead>
@@ -804,7 +867,7 @@ site do without fingerprinting, and the cap exists to bound cost per casual visi
 unbypassable.</p>
 
 <h2 id="persistence"><span class="n">16</span>Persistence</h2>
-<p class="lede"><code>app/dbconn.py</code> — 271 lines. Chooses the backend; the app's SQL is
+<p class="lede"><code>app/storage/connection.py</code> — 272 lines. Chooses the backend; the app's SQL is
 identical either way.</p>
 
 <p>Local development and a single VM use a SQLite file. A host with no durable disk points at
@@ -884,51 +947,66 @@ load is CPU-bound.</p>
 <div class="table-wrap"><table>
   <thead><tr><th>file</th><th class="num">lines</th><th>responsibility</th></tr></thead>
   <tbody>
-    <tr><td class="mono">app/main.py</td><td class="num">1300</td><td>FastAPI app: routing, auth, chat, providers, demo, API, quotas</td></tr>
-    <tr><td class="mono">app/chat_db.py</td><td class="num">816</td><td>user-facing schema and queries</td></tr>
-    <tr><td class="mono">app/cascade.py</td><td class="num">437</td><td>classify → generate → verify → escalate, blocking and streaming</td></tr>
-    <tr><td class="mono">app/dbconn.py</td><td class="num">271</td><td>SQLite or Turso backend selection, embedded replica, config checks</td></tr>
-    <tr><td class="mono">app/scorer.py</td><td class="num">266</td><td>learned verification gate, shared feature definition</td></tr>
-    <tr><td class="mono">app/model_config.py</td><td class="num">183</td><td>tier definitions, per-tier call params, built-in calibration</td></tr>
-    <tr><td class="mono">app/calibration.py</td><td class="num">157</td><td>stratified per-band measurement of any model</td></tr>
-    <tr><td class="mono">app/classifier.py</td><td class="num">152</td><td>embedding difficulty classifier and overrides</td></tr>
-    <tr><td class="mono">app/db.py</td><td class="num">149</td><td>eval and request logging schema</td></tr>
-    <tr><td class="mono">app/verifier.py</td><td class="num">131</td><td>LLM judge and structural check</td></tr>
-    <tr><td class="mono">app/scoring.py</td><td class="num">118</td><td>automatic graders: exact match, numeric, set, schema, pattern</td></tr>
-    <tr><td class="mono">app/routing_policy.py</td><td class="num">114</td><td>expected-cost tier selection under a quality floor</td></tr>
+    <tr><td class="mono">app/main.py</td><td class="num">94</td><td>FastAPI app: mounts the routers, static files, startup warmup, health</td></tr>
+    <tr><td class="mono">app/config.py</td><td class="num">186</td><td>tier definitions, per-tier call params, built-in calibration</td></tr>
+    <tr><td class="mono">app/paths.py</td><td class="num">42</td><td>every data file the code reads or writes</td></tr>
+    <tr><td class="mono">app/pricing.py</td><td class="num">54</td><td>"what would a stronger tier have cost" estimates</td></tr>
     <tr><td class="mono">app/auth.py</td><td class="num">95</td><td>passwords, sessions, API keys</td></tr>
-    <tr><td class="mono">app/key_vault.py</td><td class="num">58</td><td>Fernet encryption for stored provider keys</td></tr>
-    <tr><td class="mono">app/baseline_cost.py</td><td class="num">54</td><td>"what would a stronger tier have cost" estimates</td></tr>
+    <tr><td class="mono">app/api/chats.py</td><td class="num">272</td><td>chats and the send path, blocking and streamed; live tier prediction</td></tr>
+    <tr><td class="mono">app/api/common.py</td><td class="num">221</td><td>quotas, routing map per session, baselines, provider keys, response shape</td></tr>
+    <tr><td class="mono">app/api/models.py</td><td class="num">179</td><td>BYOM providers, models, calibration</td></tr>
+    <tr><td class="mono">app/api/demo.py</td><td class="num">116</td><td>signed-out demo, capped per device</td></tr>
+    <tr><td class="mono">app/api/v1.py</td><td class="num">106</td><td>OpenAI-compatible endpoint, BYOM route and calibrate</td></tr>
+    <tr><td class="mono">app/api/{account,usage,pages,schemas}.py</td><td class="num">292</td><td>auth and API keys, spend dashboards, HTML pages, request bodies</td></tr>
+    <tr><td class="mono">app/routing/cascade.py</td><td class="num">449</td><td>classify → generate → verify → escalate, blocking and streaming</td></tr>
+    <tr><td class="mono">app/routing/scorer.py</td><td class="num">267</td><td>learned verification gate, shared feature definition</td></tr>
+    <tr><td class="mono">app/routing/classifier.py</td><td class="num">187</td><td>expert gate, embedding vote, structural overrides</td></tr>
+    <tr><td class="mono">app/routing/verifier.py</td><td class="num">131</td><td>LLM judge and structural check</td></tr>
+    <tr><td class="mono">app/routing/policy.py</td><td class="num">118</td><td>expected-cost tier selection under a quality floor</td></tr>
+    <tr><td class="mono">app/evaluation/graders.py</td><td class="num">329</td><td>every automatic grader, shared by evals, probes and calibration</td></tr>
+    <tr><td class="mono">app/evaluation/calibration.py</td><td class="num">159</td><td>stratified per-band measurement of any model</td></tr>
+    <tr><td class="mono">app/evaluation/datasets.py</td><td class="num">45</td><td>the labelled sets and the four difficulty bands</td></tr>
+    <tr><td class="mono">app/storage/chat_db.py</td><td class="num">759</td><td>user-facing schema and queries</td></tr>
+    <tr><td class="mono">app/storage/connection.py</td><td class="num">272</td><td>SQLite or Turso backend selection, embedded replica, config checks</td></tr>
+    <tr><td class="mono">app/storage/eval_log.py</td><td class="num">149</td><td>eval and request logging schema</td></tr>
+    <tr><td class="mono">app/storage/key_vault.py</td><td class="num">58</td><td>Fernet encryption for stored provider keys</td></tr>
   </tbody>
 </table></div>
-<p>Front end: <code>chat_app.html</code> (1499 — also serves the demo at <code>/try</code> behind one
-injected flag), <code>guide.html</code> (527), <code>models.html</code> (358),
-<code>static/app.css</code> (355), <code>landing.html</code> (321), <code>demo.html</code> (200),
-<code>sessions.html</code> (198), <code>settings.html</code> (115), <code>static/nav.js</code> (89),
-<code>static/reveal.js</code> (25).</p>
+<p>Front end, in <code>app/web/</code>: <code>templates/chat_app.html</code> (1501 — also serves the demo
+at <code>/try</code> behind one injected flag), <code>guide.html</code> (528), <code>models.html</code>
+(359), <code>landing.html</code> (323), <code>demo.html</code> (200), <code>sessions.html</code> (198),
+<code>settings.html</code> (115), and <code>static/</code>: <code>app.css</code> (355),
+<code>nav.js</code> (89), <code>reveal.js</code> (25), <code>charts/</code>.</p>
+<p>Data, in <code>data/</code>: <code>eval/</code> (the labelled sets and judge scores),
+<code>probe/</code> (probe question sets and every answer from every run, one JSONL each),
+<code>calibration/builtin.json</code>, <code>scorer/</code> (the trained gate). Tests in
+<code>tests/</code> never call a model and refuse to run against Turso.</p>
 
 <h2 id="scripts"><span class="n">19</span>Scripts</h2>
+<p>Run as modules from the repo root, e.g. <code>./venv/bin/python -m scripts.probe.run_probe</code>.</p>
 <div class="table-wrap"><table>
   <thead><tr><th>script</th><th>what it does</th></tr></thead>
   <tbody>
-    <tr><td class="mono">calibrate_builtin.py</td><td>measures the configured tiers, writes <code>builtin_calibration.json</code>; <code>--tiers</code> to redo a subset</td></tr>
-    <tr><td class="mono">run_cascade_eval.py</td><td>runs the eval set through the live router, snapshotting the previous log first</td></tr>
-    <tr><td class="mono">compare_strategies.py</td><td>prices cascade vs mid-only vs frontier-only, both baselines</td></tr>
-    <tr><td class="mono">score_cascade_log.py</td><td>grades what the cascade actually shipped, split by tier and difficulty</td></tr>
-    <tr><td class="mono">build_hard_probe.py</td><td>assembles a hard set from MATH-500 and BIG-Bench Hard</td></tr>
-    <tr><td class="mono">run_hard_probe.py</td><td>runs any models or candidate specs against it; resumable, writes incrementally</td></tr>
-    <tr><td class="mono">build_scorer_data.py</td><td>samples the cheap tier with logprobs to build scorer training data</td></tr>
-    <tr><td class="mono">train_scorer.py</td><td>trains the gate, prints ablations and threshold sweeps, saves thresholds with the model</td></tr>
-    <tr><td class="mono">migrate_to_turso.py</td><td>copies a local database up, parents before children, safe to re-run</td></tr>
-    <tr><td class="mono">make_readme_charts.py</td><td>regenerates the three SVG charts from measured data</td></tr>
-    <tr><td class="mono">harvest_active_learning_candidates.py</td><td>mines the escalation log for queries worth labelling</td></tr>
-    <tr><td class="mono">merge_candidates.py</td><td>folds reviewed candidates into the reference set</td></tr>
+    <tr><td class="mono">calibration/calibrate_builtin</td><td>measures the configured tiers, writes <code>data/calibration/builtin.json</code>; <code>--tiers</code> to redo a subset, <code>--expert-only</code> to refresh the expert band from probe results</td></tr>
+    <tr><td class="mono">probe/build_expert_set</td><td>the expert band: AIME 2024–25, and generated puzzles with brute-forced answers</td></tr>
+    <tr><td class="mono">probe/build_bbh_math</td><td>a hard set from MATH-500 and BIG-Bench Hard</td></tr>
+    <tr><td class="mono">probe/run_probe</td><td>runs any tiers or candidate specs on a question set; resumable, hard <code>--budget</code> stop, per-family summary</td></tr>
+    <tr><td class="mono">classifier/evaluate_loo</td><td>leave-one-out confusion matrix, expert recall and false experts</td></tr>
+    <tr><td class="mono">classifier/harvest_candidates</td><td>mines the escalation log for queries worth labelling</td></tr>
+    <tr><td class="mono">classifier/merge_candidates</td><td>folds reviewed candidates into the reference set</td></tr>
+    <tr><td class="mono">eval/run_cascade_eval</td><td>runs the eval set through the live router, snapshotting the previous log first</td></tr>
+    <tr><td class="mono">eval/compare_strategies</td><td>prices cascade vs mid-only vs frontier-only, both baselines</td></tr>
+    <tr><td class="mono">eval/score_cascade_log</td><td>grades what the cascade actually shipped, split by tier and difficulty</td></tr>
+    <tr><td class="mono">eval/make_readme_charts</td><td>regenerates the SVG charts from measured data; <code>--charts</code> to pick</td></tr>
+    <tr><td class="mono">scorer/build_scorer_data</td><td>samples the cheap tier with logprobs to build scorer training data</td></tr>
+    <tr><td class="mono">scorer/train_scorer</td><td>trains the gate, prints ablations and threshold sweeps, saves thresholds with the model</td></tr>
+    <tr><td class="mono">ops/migrate_to_turso</td><td>copies a local database up, parents before children, safe to re-run</td></tr>
   </tbody>
 </table></div>
 
 <div class="note warn">
   <span class="lbl">Harness lesson</span>
-  <p><code>run_hard_probe.py</code> writes every answer to a JSONL as it arrives and resumes from it.
+  <p><code>run_probe</code> writes every answer to a JSONL as it arrives and resumes from it.
   A 12-worker run once tripped the provider's in-flight spend cap at 221 of 298 questions and lost
   every paid-for result — about a dollar. Concurrency against a low balance is itself a failure mode.</p>
 </div>

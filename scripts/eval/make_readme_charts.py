@@ -1,0 +1,289 @@
+"""Regenerate the README's SVG charts straight from the eval database.
+
+Everything plotted here is measured, not illustrative -- run this after a
+new eval and the README updates with it. SVGs are written with a
+transparent background and mid-grey text so they stay legible on both
+GitHub's light and dark themes.
+
+    ./venv/bin/python -m scripts.eval.make_readme_charts [--charts quality,cost,savings]
+
+The savings chart reads cascade_log from the configured database -- with
+TURSO_DATABASE_URL set, that is live traffic, not the eval run. Pass
+--charts quality,cost to leave it alone.
+"""
+import argparse
+
+from app.config import BUILTIN_CALIBRATION
+from app.paths import STATIC_DIR
+from app.pricing import estimate_cost_for_model, estimate_frontier_cost
+from app.routing.cascade import DEFAULT_TIER_MODELS
+from app.storage.eval_log import get_conn
+
+OUT_DIR = STATIC_DIR / "charts"
+
+TIERS = ["cheap", "mid", "frontier"]
+DIFFICULTIES = ["easy", "medium", "hard"]            # the eval set's bands
+QUALITY_BANDS = DIFFICULTIES + ["expert"]             # + the AIME probe
+COLORS = {"cheap": "#3987e5", "mid": "#d95926", "frontier": "#199e70"}
+INK = "#767676"          # readable on both GitHub themes
+INK_STRONG = "#9b9b9b"
+GRID = "#8884"
+THRESHOLD = 0.80         # app/routing/policy.py QUALITY_THRESHOLD
+
+FONT = ('font-family="IBM Plex Sans, -apple-system, Segoe UI, sans-serif"')
+MONO = ('font-family="IBM Plex Mono, SFMono-Regular, Consolas, monospace"')
+
+
+def _esc(text):
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _text(x, y, content, size=12, fill=INK, anchor="start", weight="400", mono=False):
+    face = MONO if mono else FONT
+    return (f'<text x="{x:.1f}" y="{y:.1f}" {face} font-size="{size}" fill="{fill}" '
+            f'text-anchor="{anchor}" font-weight="{weight}">{_esc(content)}</text>')
+
+
+def _svg(width, height, body, title):
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
+            f'width="{width}" height="{height}" role="img" aria-label="{_esc(title)}">\n'
+            f'{body}\n</svg>\n')
+
+
+# --- data ------------------------------------------------------------------
+
+# The eval set's difficulty mix, for weighting per-band calibration numbers
+# into one figure per tier.
+BAND_MIX = {"easy": 20, "medium": 36, "hard": 60}
+
+
+def load_quality_by_difficulty():
+    """Per-band quality of each built-in tier, from its calibration on the
+    eval set (the cheap tier on all 76 auto-gradable queries, the paid tiers
+    on a stratified sample). This is what the routing policy actually uses."""
+    return {t: dict(BUILTIN_CALIBRATION[t]["quality"]) for t in TIERS}
+
+
+def load_tier_summary():
+    """One (quality, cost, latency) per tier, band numbers weighted by the
+    eval set's difficulty mix. Cost includes any hidden reasoning tokens,
+    because calibration records what the provider actually charged."""
+    n = sum(BAND_MIX.values())
+    out = {}
+    for tier in TIERS:
+        cal = BUILTIN_CALIBRATION[tier]
+        q = [cal["quality"][d] for d in DIFFICULTIES]
+        if any(v is None for v in q):
+            continue
+        out[tier] = {
+            "quality": sum(cal["quality"][d] * k for d, k in BAND_MIX.items()) / n,
+            "cost": sum(cal["cost"][d] * k for d, k in BAND_MIX.items()) / n,
+            "latency": cal.get("latency_ms"), "n": cal.get("n_queries"),
+        }
+    return out
+
+
+def _from_calibration(tier, rows):
+    cal = BUILTIN_CALIBRATION.get(tier) or {}
+    if cal.get("unmeasured") or not cal.get("cost"):
+        return None
+    return sum(cal["cost"].get(r[5]) or 0.0 for r in rows)
+
+
+def load_cascade_totals():
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT total_cost, tokens_in, tokens_out, final_tier, escalated, difficulty FROM cascade_log",
+        ).fetchall()
+    actual = sum(r[0] for r in rows)
+    # Baselines from calibration: what that model's own answers cost per band
+    # on the eval set, times this run's mix. Pricing the cascade's tokens at
+    # the other model's rates instead is wrong in both directions -- a wordy
+    # cheap model's tokens overstate mid, and a reasoning model's hidden
+    # thinking tokens (13x its visible ones, measured) aren't counted at all.
+    # Where a tier was never measured, fall back to the token-based estimate
+    # and say so. See scripts/eval/compare_strategies.py for both numbers.
+    baseline = _from_calibration("frontier", rows)
+    frontier_measured = baseline is not None
+    if baseline is None:
+        baseline = sum(estimate_frontier_cost(r[1], r[2]) for r in rows)
+    mid_only = _from_calibration("mid", rows)
+    if mid_only is None:
+        mid_only = sum(estimate_cost_for_model(DEFAULT_TIER_MODELS["mid"], r[1], r[2]) for r in rows)
+    by_tier = {t: sum(1 for r in rows if r[3] == t) for t in TIERS}
+    return {
+        "n": len(rows), "actual": actual, "baseline": baseline, "mid_only": mid_only,
+        "frontier_measured": frontier_measured,
+        "by_tier": by_tier, "escalated": sum(1 for r in rows if r[4]),
+    }
+
+
+# --- charts ----------------------------------------------------------------
+
+def chart_quality_by_difficulty(data, path):
+    W, H = 720, 390
+    ml, mr, mt, mb = 54, 150, 68, 54
+    plot_w, plot_h = W - ml - mr, H - mt - mb
+    y0, y1 = 0.0, 1.0
+
+    def sy(v):
+        return mt + plot_h - (v - y0) / (y1 - y0) * plot_h
+
+    parts = [_text(0, 22, "Answer quality by question difficulty", 15, INK_STRONG, weight="600")]
+    parts.append(_text(0, 38, "from calibration: the eval set, and AIME 2025 for expert - what the routing policy sees", 11.5, INK))
+
+    for gv in [0, 0.2, 0.4, 0.6, 0.8, 1.0]:
+        y = sy(gv)
+        parts.append(f'<line x1="{ml}" y1="{y:.1f}" x2="{ml+plot_w}" y2="{y:.1f}" stroke="{GRID}" stroke-width="1"/>')
+        parts.append(_text(ml - 9, y + 4, f"{gv:.1f}", 11, INK, anchor="end", mono=True))
+
+    # The line that decides routing: a tier below it doesn't get that difficulty.
+    ty = sy(THRESHOLD)
+    parts.append(f'<line x1="{ml}" y1="{ty:.1f}" x2="{ml+plot_w}" y2="{ty:.1f}" '
+                 f'stroke="#e0a020" stroke-width="1.5" stroke-dasharray="5 4"/>')
+    parts.append(_text(ml + plot_w + 8, ty + 4, "0.80 routing", 11, "#e0a020", weight="600"))
+    parts.append(_text(ml + plot_w + 8, ty + 17, "threshold", 11, "#e0a020", weight="600"))
+
+    group_w = plot_w / len(QUALITY_BANDS)
+    bar_w = group_w / (len(TIERS) + 1.4)
+    for gi, difficulty in enumerate(QUALITY_BANDS):
+        gx = ml + gi * group_w
+        for ti, tier in enumerate(TIERS):
+            v = data[tier].get(difficulty)
+            x = gx + group_w / 2 - (len(TIERS) * bar_w) / 2 + ti * bar_w
+            if v is None:
+                # measured only where the tier below failed: no fair score
+                parts.append(_text(x + (bar_w - 3) / 2, mt + plot_h - 6, "n/m", 10,
+                                   COLORS[tier], anchor="middle", mono=True))
+                continue
+            y = sy(v)
+            h = mt + plot_h - y
+            parts.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bar_w-3:.1f}" height="{h:.1f}" '
+                         f'rx="2" fill="{COLORS[tier]}"/>')
+            parts.append(_text(x + (bar_w - 3) / 2, y - 6, f"{v:.2f}", 10.5,
+                               INK_STRONG, anchor="middle", mono=True))
+        parts.append(_text(gx + group_w / 2, mt + plot_h + 22, difficulty, 12.5, INK_STRONG,
+                           anchor="middle", weight="600"))
+
+    parts.append(f'<line x1="{ml}" y1="{mt+plot_h}" x2="{ml+plot_w}" y2="{mt+plot_h}" '
+                 f'stroke="{INK}" stroke-width="1"/>')
+
+    # Legend sits below the threshold label so the two never collide.
+    lx, ly = ml + plot_w + 20, ty + 48
+    for tier in TIERS:
+        parts.append(f'<rect x="{lx}" y="{ly-9}" width="11" height="11" rx="2" fill="{COLORS[tier]}"/>')
+        parts.append(_text(lx + 17, ly, tier, 12, INK_STRONG))
+        ly += 21
+
+    path.write_text(_svg(W, H, "\n".join(parts), "Answer quality by question difficulty"))
+
+
+def chart_cost_quality(summary, path):
+    W, H = 720, 370
+    ml, mr, mt, mb = 62, 150, 58, 54
+    plot_w, plot_h = W - ml - mr, H - mt - mb
+    max_cost = max(s["cost"] for s in summary.values()) * 1.18
+    y0, y1 = 0.70, 1.02
+
+    def sx(v):
+        return ml + (v / max_cost) * plot_w
+
+    def sy(v):
+        return mt + plot_h - (v - y0) / (y1 - y0) * plot_h
+
+    parts = [_text(0, 22, "Cost against quality, per tier", 15, INK_STRONG, weight="600")]
+    parts.append(_text(0, 38, "Average per query, 115 queries. Frontier point is gemini-3.5-flash-lite, since replaced by 3.5-flash", 11.5, INK))
+
+    for gv in [0.7, 0.8, 0.9, 1.0]:
+        y = sy(gv)
+        parts.append(f'<line x1="{ml}" y1="{y:.1f}" x2="{ml+plot_w}" y2="{y:.1f}" stroke="{GRID}" stroke-width="1"/>')
+        parts.append(_text(ml - 9, y + 4, f"{gv:.1f}", 11, INK, anchor="end", mono=True))
+
+    for frac in [0, 0.25, 0.5, 0.75, 1.0]:
+        cost = max_cost * frac
+        x = sx(cost)
+        parts.append(_text(x, mt + plot_h + 20, f"${cost:.5f}", 10, INK, anchor="middle", mono=True))
+
+    for tier, s in summary.items():
+        x, y = sx(s["cost"]), sy(s["quality"])
+        parts.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="7" fill="{COLORS[tier]}"/>')
+        parts.append(_text(x, y - 14, tier, 12, INK_STRONG, anchor="middle", weight="600"))
+
+    parts.append(f'<line x1="{ml}" y1="{mt+plot_h}" x2="{ml+plot_w}" y2="{mt+plot_h}" '
+                 f'stroke="{INK}" stroke-width="1"/>')
+    parts.append(_text(ml + plot_w / 2, H - 12, "cost per query (USD)", 11.5, INK, anchor="middle"))
+    parts.append(_text(-(mt + plot_h / 2), 16, "quality", 11.5, INK, anchor="middle") .replace(
+        "<text ", '<text transform="rotate(-90)" '))
+
+    lx, ly = ml + plot_w + 20, mt + 30
+    for tier, s in summary.items():
+        parts.append(f'<circle cx="{lx+5}" cy="{ly-4}" r="5" fill="{COLORS[tier]}"/>')
+        parts.append(_text(lx + 17, ly, tier, 12, INK_STRONG, weight="600"))
+        parts.append(_text(lx + 17, ly + 14, f"{s['latency']/1000:.1f}s per query", 10.5, INK, mono=True))
+        ly += 38
+
+    path.write_text(_svg(W, H, "\n".join(parts), "Cost against quality per tier"))
+
+
+def chart_cascade_savings(totals, path):
+    W, H = 720, 250
+    ml, mr, mt = 150, 120, 56
+    bar_h, gap = 30, 16
+    plot_w = W - ml - mr
+    max_v = totals["baseline"] * 1.05
+
+    vs_frontier = (totals["baseline"] - totals["actual"]) / totals["baseline"] * 100
+    vs_mid = (totals["mid_only"] - totals["actual"]) / totals["mid_only"] * 100
+    parts = [_text(0, 22, "What the cascade actually cost", 15, INK_STRONG, weight="600")]
+    how = "alternatives priced from each model's own calibrated per-question cost" if totals["frontier_measured"] \
+        else "mid from calibration; frontier priced over the cascade's tokens (unmeasured)"
+    parts.append(_text(0, 38, f"{totals['n']} routed queries, measured - {how}", 11.5, INK))
+
+    rows = [
+        ("frontier-only", totals["baseline"], COLORS["frontier"]),
+        ("mid-only", totals["mid_only"], COLORS["mid"]),
+        ("cascade", totals["actual"], COLORS["cheap"]),
+    ]
+    for i, (label, value, color) in enumerate(rows):
+        y = mt + i * (bar_h + gap)
+        w = max(4, (value / max_v) * plot_w)   # keep the small bars visible
+        parts.append(f'<rect x="{ml}" y="{y}" width="{w:.1f}" height="{bar_h}" rx="3" fill="{color}"/>')
+        parts.append(_text(ml - 12, y + bar_h / 2 + 4, label, 12.5, INK_STRONG, anchor="end", weight="600"))
+        parts.append(_text(ml + w + 10, y + bar_h / 2 + 4, f"${value:.5f}", 12, INK_STRONG, mono=True))
+
+    y_note = mt + len(rows) * (bar_h + gap) + 14
+    mid_word = "cheaper" if vs_mid >= 0 else "dearer"
+    parts.append(_text(ml, y_note, f"{vs_frontier:.0f}% under frontier-only", 13, COLORS["cheap"], weight="700"))
+    parts.append(_text(ml + 220, y_note, f"{abs(vs_mid):.0f}% {mid_word} than mid-only", 13,
+                       INK_STRONG, weight="600"))
+    routed = "  ".join(f"{t}: {n}" for t, n in totals["by_tier"].items())
+    parts.append(_text(ml, y_note + 20, f"routed - {routed}   |   escalated: {totals['escalated']}",
+                       11, INK, mono=True))
+
+    path.write_text(_svg(W, H, "\n".join(parts), "Cascade cost versus frontier-only and mid-only"))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--charts", default="quality,cost,savings")
+    wanted = set(ap.parse_args().charts.split(","))
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    if "quality" in wanted:
+        chart_quality_by_difficulty(load_quality_by_difficulty(), OUT_DIR / "quality-by-difficulty.svg")
+        print("wrote quality-by-difficulty.svg")
+    if "cost" in wanted:
+        summary = load_tier_summary()
+        chart_cost_quality(summary, OUT_DIR / "cost-vs-quality.svg")
+        print("wrote cost-vs-quality.svg")
+        for tier, s in summary.items():
+            print(f"  {tier:9} quality={s['quality']:.3f} cost=${s['cost']:.5f} latency={s['latency']:.0f}ms")
+    if "savings" in wanted:
+        totals = load_cascade_totals()
+        chart_cascade_savings(totals, OUT_DIR / "cascade-savings.svg")
+        print("wrote cascade-savings.svg")
+        print(f"  cascade  {totals['n']} runs  ${totals['actual']:.5f} vs ${totals['baseline']:.5f} baseline")
+
+
+if __name__ == "__main__":
+    main()

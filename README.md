@@ -12,7 +12,7 @@ above zero took two measured attempts. The first stack tied mid-only
 exactly, and the reason why is the most useful thing in this README (see
 [Strategy comparison](#strategy-comparison)).
 
-<img src="app/static/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only and mid-only over 116 queries: $0.13214 against $0.73475 frontier-only and $0.22548 mid-only" width="720">
+<img src="app/web/static/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only and mid-only over 116 queries: $0.13214 against $0.73475 frontier-only and $0.22548 mid-only" width="720">
 
 ---
 
@@ -22,7 +22,7 @@ Because the cheap model is fine right up until it isn't. Calibrated on the
 eval set, the 8B model is right about nine times in ten and wrong the tenth,
 and you can't tell which from the outside:
 
-<img src="app/static/charts/quality-by-difficulty.svg" alt="Answer quality by difficulty: cheap scores 0.89 easy, 0.95 medium, 0.81 hard; mid and frontier score 1.0 on every band" width="720">
+<img src="app/web/static/charts/quality-by-difficulty.svg" alt="Answer quality by difficulty: cheap scores 0.89 easy, 0.95 medium, 0.81 hard and 0.00 expert; mid scores 1.0 on easy, medium and hard but 0.70 on expert (AIME), under the 0.80 routing threshold; frontier 1.0 on the first three" width="720">
 
 That tenth answer is the whole argument. A single-model setup makes you
 choose between paying 100× more for "what is 2+2", or shipping the wrong
@@ -33,18 +33,19 @@ The cost gap it's exploiting is two orders of magnitude, and the reasoning
 frontier is also the *slowest* by far, because it thinks for thousands of
 tokens before answering:
 
-<img src="app/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier: cheap $0.00002 at 0.868, mid $0.00192 at 1.000, frontier $0.00619 at 1.000" width="720">
+<img src="app/web/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier: cheap $0.00002 at 0.868, mid $0.00192 at 1.000, frontier $0.00619 at 1.000" width="720">
 
-| tier | model | quality | cost / answer | latency | measured on |
-|---|---|---|---|---|---|
-| cheap | `llama-3.1-8b-instruct` (OpenRouter) | 0.868 | $0.00002 | 6.1s | all 76 auto-gradable queries |
-| judge | `gpt-oss-20b` (Groq) | catches 94% of wrong cheap answers | $0.00004 / verdict | ~1s | 117 graded answers |
-| mid | `gemini-3.5-flash`, thinking **off** | 1.000 | $0.00192 | 3.3s | 24 queries |
-| frontier | `gemini-3.5-flash`, thinking **on** | 1.000 | $0.00700 | 5.3s | 24 queries |
+| tier | model | quality | AIME 2025 | cost / answer | latency | measured on |
+|---|---|---|---|---|---|---|
+| cheap | `llama-3.1-8b-instruct` (OpenRouter) | 0.868 | 0/10 | $0.00002 | 6.1s | all 76 auto-gradable queries |
+| judge | `gpt-oss-20b` (Groq) | catches 94% of wrong cheap answers | — | $0.00004 / verdict | ~1s | 117 graded answers |
+| mid | `gemini-3.5-flash`, thinking **off** | 1.000 | 7/10 | $0.00192 | 3.3s | 24 queries + 10 AIME |
+| frontier | `gemini-3.5-flash`, thinking **on** | 1.000 | 2 of mid's 3 misses | $0.00700 | 5.3s | 24 queries + 3 AIME |
 
 Quality and cost are per-band calibration numbers weighted by the eval set's
 difficulty mix; cost is what the provider charged, hidden reasoning tokens
-included. Regenerate with `scripts/calibrate_builtin.py`.
+included. Regenerate with `./venv/bin/python -m scripts.calibration.calibrate_builtin`.
+The AIME column is the expert band, below.
 
 Three of these rows are choices worth explaining.
 
@@ -58,8 +59,10 @@ thinking on, which on hard questions is worth real accuracy (below).
 **The judge is a different, cheaper model than mid** — the single decision
 that makes the cascade pay; see below.
 
-The 1.000 quality scores are a limitation of the eval set, not a claim that
-these tiers are equivalent; see "Does the frontier tier earn its slot?".
+The 1.000 quality scores are a limitation of the everyday eval set, not a
+claim that these tiers are equivalent. Competition maths is where they part:
+mid gets 7 of 10 AIME 2025 problems, and the router now starts those at the
+frontier; see "Does the frontier tier earn its slot?".
 
 ## The routing decision
 
@@ -92,7 +95,7 @@ deciding where a prompt goes — the whole decision costs ~7ms.
                          ┌─────────────┴─────────────┐
                          ▼                           ▼
                  [ cheap tier ]                [ mid / frontier ]
-                 llama-3.1-8b                  gemini-3.5-flash, deepseek-r1
+                 llama-3.1-8b                  gemini-3.5-flash, thinking off / on
                          │                           ▲
                          ▼                           │
                  ┌───────────────┐   fails check     │
@@ -103,9 +106,12 @@ deciding where a prompt goes — the whole decision costs ~7ms.
 ```
 
 **Step 1 — difficulty by weighted similarity.** Each prompt $q$ is encoded with
-`all-MiniLM-L6-v2` into $E(q) \in \mathbb{R}^{384}$ and scored against 116
-labelled reference queries. The predicted difficulty is the similarity-weighted
-majority over the $k$ nearest neighbours:
+`all-MiniLM-L6-v2` into $E(q) \in \mathbb{R}^{384}$ and scored against 176
+labelled reference queries: 116 everyday ones (easy / medium / hard) and 60
+AIME problems (expert). An **expert gate** goes first: if at least half the
+similarity weight among the 7 nearest neighbours is expert, the prompt is
+expert. Otherwise the difficulty is the similarity-weighted majority over the
+$k$ nearest *everyday* neighbours:
 
 $$\hat{d}(q)=\arg\max_{d\,\in\,\{\text{easy},\text{med},\text{hard}\}}\ \sum_{i\,\in\,\mathcal{N}_k(q)}\cos\!\big(E(q),E(x_i)\big)\cdot\mathbb{1}[y_i=d],\qquad k=5$$
 
@@ -134,7 +140,8 @@ path makes the policy route *around* a cheap tier that can't pay for its
 verification, and *to* one that can. Fed the local 3B stack's measurements
 it derived `easy→cheap, medium→cheap, hard→mid`; fed the current stack's,
 where the 8B clears 0.80 on hard and the judge $J$ is a $0.00004 call, it
-derives `hard→cheap` too — the map is an output, not a setting.
+derives `hard→cheap` too, and `expert→frontier`, because mid scores 0.70 on
+competition maths. The map is an output, not a setting.
 
 **Step 3 — verify, then escalate.** The cheapest tier's answer goes through a
 learned gate before anything is paid for. The gate is a logistic regression
@@ -215,13 +222,26 @@ hard questions skipped straight to mid.
 
 ### How well does the routing itself do?
 
-Classifier accuracy, leave-one-out across all 116 labelled queries — the number
-that actually moved when the algorithm changed:
+Classifier accuracy, leave-one-out across the 116 everyday labelled queries —
+the number that actually moved when the algorithm changed:
 
 | classifier | exact-label accuracy | over-routed (paid too much) | under-routed (caught by verifier) |
 |---|---|---|---|
-| 1-nearest-neighbour | 56.0% | 21 | 23 |
-| **weighted k=5 vote + overrides** | **64.7%** | **14** | **15** |
+| 1-nearest-neighbour + overrides | 55.2% | 22 | 30 |
+| weighted k=5 vote + overrides | 64.7% | 24 | 17 |
+| **expert gate, then the k=5 vote** | **62.1%** | **27** | **17** |
+
+All three rows are counted the same way: the predicted label against the
+true one, with today's structural overrides. Earlier versions of this table
+mixed counting methods.
+
+The last row is the price of the expert band: four everyday maths questions
+("smallest $n$ with $n!$ divisible by 1000", the interior angles of a
+heptagon) now look enough like competition problems to start at the
+frontier, which answers them correctly at a higher price. The gate catches
+54 of the 60 AIME problems. A single four-band vote did worse on both counts
+(10 false experts, 53 caught); `./venv/bin/python -m scripts.classifier.evaluate_loo`
+prints the full confusion matrix.
 
 And where the traffic landed over 116 routed queries:
 
@@ -237,28 +257,31 @@ in the 8B's answer — a wrong modulo, a miscounted permutation, a missed
 fallacy; the verdicts read like a grader's margin notes. Everything else was
 answered where it started, and the 76 answers with an objective check were
 all correct, including all 58 that shipped from the cheap tier
-(`scripts/score_cascade_log.py`).
+(`scripts/eval/score_cascade_log.py`). This run predates the expert band.
 
 ### Does the frontier tier earn its slot?
 
-Both paid tiers score 1.000 on the 116-query eval set, which sounds like the
-frontier is pointless — but it only means the set cannot see the difference.
-Its "hard" band was labelled against a 3B local model, so it contains things
-like "write a palindrome check". In a full 116-query run the frontier tier
-was **never reached even once**.
+On everyday questions, no. On competition maths, yes, and the router now
+routes by that difference instead of never reaching the frontier at all.
 
-`scripts/build_hard_probe.py` builds a set that can tell them apart, from
-MATH-500 level 5 and 14 BIG-Bench Hard task families — both shipping
-ground-truth answers, so grading stays automatic. Measured over 288
-questions for $1.33:
+**Everyday questions can't see a difference.** Both paid tiers score 1.000 on
+the 116-question eval set. Its "hard" band was labelled against a 3B local
+model, so it contains things like "write a palindrome check". In a full
+116-query run the frontier tier was **never reached even once**.
 
-| | accuracy | cost / question |
+**Benchmarks built to be hard barely see it.**
+`scripts/probe/build_bbh_math.py` draws from MATH-500 level 5 and 14
+BIG-Bench Hard task families, all with ground-truth answers:
+
+| 263 questions | accuracy | cost / question |
 |---|---|---|
-| mid alone (thinking off) | 277/288 = **96.2%** | $0.0038 |
-| + thinking frontier on the 11 it failed | 279/288 = **96.9%** | $0.0046 |
+| mid alone (thinking off) | 252/263 = **95.8%** | $0.0038 |
+| + thinking frontier on the 11 it failed | 254/263 = **96.6%** | $0.0047 |
 
-**+0.7 points of accuracy for +21% cost.** That is a thin result, and it is
-the honest one. The frontier rescued 2 of mid's 11 failures:
+**+0.8 points for +23% cost.** Earlier versions of this README said 288
+questions. The probe had run twice, and 25 BBH questions were counted in both
+runs. One of those, a `dyck_languages` question, failed in one run and passed
+in the other. So its "rescue" below is partly a coin toss.
 
 | task | rescued |
 |---|---|
@@ -266,22 +289,81 @@ the honest one. The frontier rescued 2 of mid's 11 failures:
 | MATH-500 level 5 | 1/4 |
 | BBH `geometric_shapes` | **0/6** |
 
-The shape of it matters more than the average. Thinking recovers
-bracket-matching, and half the competition-maths misses stay missed —
-but `geometric_shapes`, which asks a model to read an SVG path and name the
-figure, is **not helped at all**. That is a perception limit, not a
-reasoning-budget one, and no amount of thinking time fixes it.
+`geometric_shapes` asks a model to read an SVG path and name the figure.
+That is a perception limit, not a reasoning-budget one, and thinking time
+doesn't fix it.
 
-So the frontier tier is defensible but marginal on this workload, and the
-reason is that mid is already at 96% on benchmarks built to be hard. The
-headroom for *any* stronger tier is eleven questions.
+**Mid reasons in the open.** Turning thinking off doesn't stop a model
+reasoning. It stops it reasoning *privately*: mid writes its working into
+the answer, which is exactly what BBH rewards. So the next attempt targeted
+*search*, where a model has to try a branch, find it fails and back up.
+`scripts/probe/build_expert_set.py` generates puzzles and brute-forces each
+one to a unique answer:
+
+| generated family | mid, thinking off |
+|---|---|
+| Countdown: hit a 3-digit target with 6 numbers, needing at least 5 of them | 6/6 |
+| knights and knaves, 7–8 islanders | 6/6 |
+| 4×4 logic grid, every redundant clue removed | 6/6 |
+| shortest path where the greedy route is a trap | 6/6 |
+| lattice paths around blocked points | 1/1 |
+
+**25/25**, at $0.014 a puzzle. Mid searches in the open too, in about 1,000
+visible tokens per puzzle.
+
+**Competition maths separates them.** AIME 2025, the first ten problems of a
+seeded shuffle (`data/eval/expert_queries.json`):
+
+| tier | AIME 2025 | cost / problem | time |
+|---|---|---|---|
+| cheap (8B) | 0/10 | $0.0002 | 92 s |
+| mid (thinking off) | **7/10** | $0.019 | 14 s |
+| frontier (thinking on), on mid's 3 misses | **2/3** | $0.19 | 119 s |
+
+Mid's three misses are real wrong answers: 88 instead of 81, 73 instead of
+60, and one cut off by its 4,096-token cap partway through the arithmetic.
+The frontier spent 13–17k reasoning tokens getting two of those right. The
+third ran into its own 32k cap while still thinking. Mid with the frontier
+behind it gets **9/10**.
+
+**What the router does with it.** These problems are a fourth difficulty
+band, `expert`. Calibration puts mid at 0.70 there, under the 0.80 floor, so
+the policy derives `expert → frontier`. It is the first time anything starts
+at the frontier on measured evidence:
+
+| band | cheap | mid | frontier | starts at |
+|---|---|---|---|---|
+| easy | 0.89 | 1.00 | 1.00 | cheap |
+| medium | 0.95 | 1.00 | 1.00 | cheap |
+| hard | 0.81 | 1.00 | 1.00 | cheap |
+| expert | 0.00 | **0.70** | rescues 2/3 | **frontier** |
+
+On paper, starting expert questions at mid and escalating would be cheaper:
+$0.077 expected against $0.19. That arithmetic assumes mid's failures get
+caught, but mid's answers only get the free structural check, which cannot
+tell 88 from 81. The floor stops the policy shipping that 30%.
+
+**How far to trust it.** Ten problems is a small sample: 7/10 has a 95%
+interval of roughly 0.40–0.89, so mid being below the floor is likely rather
+than certain. The frontier's own accuracy on the band is unmeasured, because
+it only ran on mid's misses. As the last tier its score never gates routing,
+so the calibration file leaves it blank rather than quoting 2/3. The run
+stopped at ten because a frontier AIME answer costs $0.13–0.29 and the
+account balance was low. To extend it (about $0.02 per problem for mid,
+$0.20 for the frontier; `--budget` is a hard stop):
+
+```bash
+./venv/bin/python -m scripts.probe.run_probe --models mid --per-family 30 --budget 1
+./venv/bin/python -m scripts.probe.run_probe --models frontier --per-family 30 --budget 6
+./venv/bin/python -m scripts.calibration.calibrate_builtin --expert-only
+```
 
 `deepseek-r1` held the frontier slot before this and lost the comparison
 outright: it rescued none of the failures tested, cost 3x, and averaged
 **467s** per answer, which no interactive request can absorb.
 
-**Three grading bugs found while measuring this**, each of which made a
-model look worse than it was, and all three caught only by reading the
+**Four grading bugs found while measuring this**, each of which made a
+model look worse than it was, and all four caught only by reading the
 answers rather than trusting the score:
 
 | the grader wanted | the model said | verdict |
@@ -289,6 +371,7 @@ answers rather than trusting the score:
 | `syndrome therefrom` | `syndrome, therefrom` | scored 0/5 on a task it got 5/5 right |
 | `(B)` | `(B) heptagon` | scored 2/17 on a task it got 11/17 right |
 | `hypertext transfer protocol` | `**H**yper**T**ext **T**ransfer **P**rotocol` | marked wrong for its bold |
+| a Countdown expression | `(25 * 7) + 75 + 2 + 1` | scored 0/6 on a task it got 6/6 right: stripping `*` as markdown deleted the multiplication |
 
 Fixing the second alone moved mid from 83.2% to 97.5% on the BBH set, and
 retired a "frontier rescued this" result that was really mid having been
@@ -302,7 +385,7 @@ model's own calibrated cost per answer on each difficulty band, times this
 run's mix — not by re-pricing the cascade's tokens, which overstates a wordy
 cheap model's mid-tier cost and misses a reasoning model's hidden thinking
 entirely (priced that way, DeepSeek R1 came out *cheaper than Gemini*; it
-isn't, by 3×). `scripts/compare_strategies.py` prints both.
+isn't, by 3×). `scripts/eval/compare_strategies.py` prints both.
 
 | strategy | total cost | per query | graded accuracy |
 |---|---|---|---|
@@ -350,18 +433,23 @@ The escalation cost tail is still real: one query where mid is rate-limited
 falls through to the frontier, and a DeepSeek R1 answer costs 3× a Gemini
 one and takes a minute or more.
 
-Regenerate with `./venv/bin/python scripts/compare_strategies.py` and grade
-with `./venv/bin/python scripts/score_cascade_log.py`.
+Regenerate with `./venv/bin/python -m scripts.eval.compare_strategies` and grade
+with `./venv/bin/python -m scripts.eval.score_cascade_log`.
 
 ## Bring your own models
 
 You can run the router on your own models instead of the built-in three.
 Connect a provider, list its models, calibrate them, then pick three per chat.
 
-**Calibration is what makes routing work.** It runs ~24 objectively-scoreable
-questions against your model, stratified across easy/medium/hard, and scores
-each band separately. Those scores decide the routing map: each difficulty
-starts at the cheapest model that scored ≥ 0.80 *on that difficulty*.
+**Calibration is what makes routing work.** It runs 24 objectively-scoreable
+questions against your model, six from each of easy, medium, hard and expert,
+and scores each band separately. Those scores decide the routing map: each
+difficulty starts at the cheapest model that scored ≥ 0.80 *on that
+difficulty*. The six expert questions are AIME problems. On a thinking model
+they are most of the calibration bill: about $1 on a frontier-class model,
+against cents for everything else. A calibration made before the expert band
+existed has no expert score, so those questions start at the strongest model
+in the session until you re-calibrate.
 
 That rule isn't arbitrary — fed the built-in tiers' own measurements it
 reproduces the hand-derived map above exactly. Change the models and the map
@@ -399,8 +487,9 @@ cp .env.example .env          # add OPENROUTER_API_KEY (a few $ of credit) + GRO
 
 No GPU or local model needed: the built-in stack is entirely hosted. To run
 the cheap tier locally instead, `ollama pull llama3.2:3b` and set
-`CHEAP_MODEL=ollama/llama3.2:3b` — then `scripts/calibrate_builtin.py` so
-the routing map is derived from *that* model's numbers.
+`CHEAP_MODEL=ollama/llama3.2:3b` — then
+`./venv/bin/python -m scripts.calibration.calibrate_builtin` so the routing
+map is derived from *that* model's numbers.
 
 Then:
 
@@ -412,7 +501,7 @@ Then:
 | API guide | http://localhost:8000/guide |
 | The chat app, no login, 3 prompts per device | http://localhost:8000/try |
 | Single-shot routing demo, no login | http://localhost:8000/demo |
-| Terminal demo | `./venv/bin/python scripts/demo_cli.py` |
+| Terminal demo | `./venv/bin/python -m scripts.ops.demo_cli` |
 
 ## Using it from code
 
@@ -457,21 +546,42 @@ curl -X POST http://localhost:8000/api/v1/calibrate \
 
 ```
 app/
-  main.py            FastAPI app - routing, auth, chat, providers, API
-  classifier.py      embedding difficulty classifier (no LLM call)
-  cascade.py         classify -> generate -> verify -> escalate
-  verifier.py        judge call for the cheapest tier, structural check after
-  scorer.py          learned gate in front of the judge (logprobs, consistency,
-                     self-check); trained by scripts/train_scorer.py on data
-                     from scripts/build_scorer_data.py
-  routing_policy.py  turns calibration scores into a routing map
-  calibration.py     measures a model across easy/medium/hard
-  key_vault.py       opt-in encryption for stored provider keys
-  scoring.py         exact-match / numeric / schema scorers
-scripts/             eval harness, demos, chart generation
-data/                116-query labelled eval set
-reports/             Pareto chart, generated README charts
+  main.py              FastAPI app: mounts the routers, warms the classifier
+  config.py            the three tiers and the judge, from env vars
+  paths.py             every data file the code reads or writes
+  pricing.py           cost estimates and the "what frontier would have cost" baseline
+  auth.py              passwords, sessions, API keys
+  api/                 HTTP routers: pages, account, chats, demo, v1, models, usage
+  routing/
+    classifier.py      embedding difficulty classifier (no LLM call)
+    policy.py          turns calibration scores into a routing map
+    cascade.py         classify -> generate -> verify -> escalate
+    verifier.py        judge call for the cheapest tier, structural check after
+    scorer.py          learned gate in front of the judge
+  evaluation/
+    datasets.py        the labelled question sets and difficulty bands
+    graders.py         every automatic grader, shared by evals, probes and calibration
+    calibration.py     measures a model across all four bands
+  storage/             SQLite / Turso connection, accounts and chats, eval log, key vault
+  web/                 HTML templates and static assets
+scripts/               run as modules, e.g. ./venv/bin/python -m scripts.probe.run_probe
+  eval/                the 116-query eval harness, strategy comparison, README charts
+  probe/               build and run the tier-separating question sets
+  calibration/         calibrate the built-in stack
+  classifier/          leave-one-out accuracy, active-learning candidates
+  scorer/              build data for and train the learned gate
+  ops/                 Turso migration, terminal demo
+data/
+  eval/                eval_queries.json (116 everyday), expert_queries.json (60 AIME), judge scores
+  probe/               probe question sets and every answer from every run (.jsonl)
+  calibration/         builtin.json: measured quality and cost per tier and band
+  scorer/              the trained gate (+ its training data, gitignored)
+tests/                 graders, policy, classifier rules, and the HTTP layer with models stubbed
+docs/                  internals reference, failure analysis, deploy guide, roadmap
 ```
+
+Run the tests with `./venv/bin/python -m pytest`. They never call a model,
+and they refuse to run against Turso even when `.env` configures it.
 
 ## Full internals document
 
@@ -492,11 +602,20 @@ from below.
   cost says $0.225 for these questions; the cascade's tokens at Gemini's
   rates say $0.360. The first is measured on 24 questions, the second prices
   another model's answer lengths. The 41% claim uses the lower one.
-- **The frontier tier is measured on 9 questions.** DeepSeek R1 takes one to
-  four minutes per answer and sometimes exhausts its budget while still
-  thinking (3 of 12 calibration calls returned nothing; they now count as
-  wrong). It's the escalation target of last resort, not a tier the policy
-  routes to, so its numbers only affect the "frontier for everything" column.
+- **The expert band rests on ten AIME problems.** Mid's 0.70 there has a
+  wide interval (roughly 0.40–0.89), and the frontier's own accuracy on the
+  band is unmeasured. It only ran on the three problems mid missed, at
+  $0.13–0.29 each. The commands to extend it are under "Does the frontier
+  tier earn its slot?". Until then, `expert → frontier` is a likely call
+  rather than a settled one.
+- **Expert questions the classifier misses get mid-quality answers.** Six of
+  the 60 AIME problems classify as hard, start at the cheap tier, and end at
+  mid once the judge rejects the 8B's attempt. Mid's answer only gets the
+  structural check, so a wrong one ships. A frontier-strength check on mid's
+  answers would close that gap, at a frontier price.
+- **The "frontier for everything" column predates the current frontier.** It
+  was measured with DeepSeek R1, which takes one to four minutes per answer
+  and sometimes exhausts its budget while still thinking.
 - **Hard → cheap is a marginal call.** The 8B calibrated at 0.81 on hard
   against a 0.80 floor, on 37 questions; the 120-sample scorer dataset had it
   at 0.74. The judge caught every wrong hard answer in this run, but a
@@ -504,8 +623,10 @@ from below.
   errors. The floor is configurable (`QUALITY_THRESHOLD`).
 - **The cheap tier is slow.** 6.5 s per answer through OpenRouter, 17 s when
   it escalates, against 2.7 s for Gemini alone. Cheaper is not faster here.
-- **The classifier is still the weak link.** 64.7% exact-label accuracy is
-  better than the 56.0% it replaced, but it's a k-NN over 116 examples, and
+- **The classifier is still the weak link.** 62.1% exact-label accuracy on
+  the everyday set (64.7% before the expert gate took four of its maths
+  questions) is better than the 56.0% it replaced, but it's a k-NN over 176
+  examples, and
   embedding similarity measures *topic* rather than difficulty — "what's the
   worst case of quicksort" sits next to "explain why naive quicksort degrades
   to O(n²)" because both are about quicksort, though one is recall and the
@@ -523,12 +644,12 @@ from below.
   answer in testing. On this stack that is a couple of percent of a bill that
   is already 98% generation; its value is much larger on a stack where the
   judge is the expensive call, which is the configuration it was built for.
-- **Calibration samples are small for the paid tiers.** 8 questions per band
-  for mid; the cheap tier gets all 76 because it's nearly free to measure and
-  its numbers decide what never reaches a paid model.
+- **Calibration samples are small for the paid tiers.** 6–8 questions per
+  band for mid; the cheap tier gets all 76 because it's nearly free to measure
+  and its numbers decide what never reaches a paid model.
 - **Auth is project-grade, not production-grade.** bcrypt passwords and cookie
   sessions; prompts are capped per account (10/day) and per demo device (3),
   but there's no CSRF token and no rate limit on login attempts.
 
-See [FAILURE_ANALYSIS.md](FAILURE_ANALYSIS.md) for cases where the verifier
+See [docs/FAILURE_ANALYSIS.md](docs/FAILURE_ANALYSIS.md) for cases where the verifier
 caught a bad answer, missed one, and escalated when it shouldn't have.

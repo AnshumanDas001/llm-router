@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 import bcrypt
 from fastapi import Cookie, Header, HTTPException
 
-from app import chat_db
+from app.storage import chat_db
 
 SESSION_COOKIE_NAME = "router_session"
 SESSION_LIFETIME_DAYS = 30

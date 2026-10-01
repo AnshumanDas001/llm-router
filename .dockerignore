@@ -7,9 +7,10 @@ __pycache__/
 .claude/
 .DS_Store
 logs/
-reports/
+docs/
+tests/
 *.md
-llm-router-4-week-roadmap.md
-deploy/
 docker-compose.yml
 Caddyfile
+data/scorer/training_*.jsonl
+data/probe/
