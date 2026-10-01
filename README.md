@@ -473,6 +473,19 @@ data/                116-query labelled eval set
 reports/             Pareto chart, generated README charts
 ```
 
+## Full internals document
+
+[`docs/internals.html`](docs/internals.html) is the complete reference: every
+mechanism, the measurement behind each decision, and the approaches that were
+tried and abandoned. Twenty sections covering the classifier's weighted k=5
+vote and its structural overrides, the expected-cost policy with a worked
+example, two-stage verification and why both thresholds are lopsided,
+calibration's stratify-then-interleave design, the data model's 17 tables, the
+HTTP surface, Turso's embedded replica, cold starts, and a file-by-file map.
+
+Open it locally (`open docs/internals.html`) or read the sections it draws
+from below.
+
 ## Honest limitations
 
 - **The mid-only baseline is a range, not a number.** Gemini's own calibrated

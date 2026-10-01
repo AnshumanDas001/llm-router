@@ -1,0 +1,965 @@
+<title>ThriftLLM Internals</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ink: #15181c;
+    --ink-2: #4b535c;
+    --ink-3: #7a838d;
+    --ground: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #eef1f5;
+    --border: #e2e6eb;
+    --border-strong: #cfd5dd;
+    --accent: #2f6fd0;
+    --accent-soft: #e8f0fb;
+    --cheap: #3987e5;
+    --mid: #d95926;
+    --frontier: #199e70;
+    --good: #0f8a44;
+    --warn: #b4690e;
+    --bad: #c4403a;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #e7eaee;
+      --ink-2: #a8b1bb;
+      --ink-3: #78818c;
+      --ground: #101317;
+      --surface: #171b20;
+      --surface-2: #1f242b;
+      --border: #272d35;
+      --border-strong: #3a424c;
+      --accent: #6aa5f0;
+      --accent-soft: #17243a;
+      --cheap: #5b9df0;
+      --mid: #e87f52;
+      --frontier: #3dbb8c;
+      --good: #4cc47d;
+      --warn: #d9a13c;
+      --bad: #e4736d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #e7eaee;
+    --ink-2: #a8b1bb;
+    --ink-3: #78818c;
+    --ground: #101317;
+    --surface: #171b20;
+    --surface-2: #1f242b;
+    --border: #272d35;
+    --border-strong: #3a424c;
+    --accent: #6aa5f0;
+    --accent-soft: #17243a;
+    --cheap: #5b9df0;
+    --mid: #e87f52;
+    --frontier: #3dbb8c;
+    --good: #4cc47d;
+    --warn: #d9a13c;
+    --bad: #e4736d;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+
+  /* --- shell ------------------------------------------------------------ */
+  .shell { display: grid; grid-template-columns: 252px minmax(0, 1fr); max-width: 1180px; margin: 0 auto; }
+
+  nav.toc {
+    position: sticky; top: 0; align-self: start; max-height: 100dvh; overflow-y: auto;
+    padding: 36px 20px 40px 24px; border-right: 1px solid var(--border);
+  }
+  nav.toc .mark { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--accent); letter-spacing: 0.02em; }
+  nav.toc .proj { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; margin: 2px 0 20px; }
+  nav.toc a {
+    display: block; color: var(--ink-2); text-decoration: none; font-size: 13px;
+    padding: 4px 8px; border-radius: 5px; line-height: 1.45;
+  }
+  nav.toc a:hover { background: var(--surface-2); color: var(--ink); }
+  nav.toc a .n { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); margin-right: 7px; }
+  nav.toc .grp {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-3);
+    font-weight: 600; padding: 16px 8px 5px;
+  }
+
+  main { padding: 36px 40px 100px; min-width: 0; }
+  .measure { max-width: 790px; }
+
+  /* --- type ------------------------------------------------------------- */
+  h1 {
+    font-size: clamp(27px, 4vw, 38px); line-height: 1.12; letter-spacing: -0.025em;
+    font-weight: 700; margin: 0 0 14px; text-wrap: balance;
+  }
+  .standfirst { font-size: 17px; line-height: 1.6; color: var(--ink-2); margin: 0 0 10px; text-wrap: pretty; }
+  .meta { font-family: var(--mono); font-size: 12px; color: var(--ink-3); margin: 22px 0 0; }
+
+  h2 {
+    font-size: 23px; letter-spacing: -0.02em; font-weight: 650; margin: 58px 0 6px;
+    padding-top: 26px; border-top: 1px solid var(--border); text-wrap: balance;
+  }
+  h2 .n { font-family: var(--mono); font-size: 14px; color: var(--accent); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 16px; font-weight: 650; margin: 32px 0 4px; letter-spacing: -0.01em; }
+  h4 { font-size: 13.5px; font-weight: 650; margin: 22px 0 2px; color: var(--ink-2); }
+  p { margin: 10px 0; text-wrap: pretty; }
+  ul, ol { margin: 10px 0; padding-left: 22px; }
+  li { margin: 5px 0; }
+  a { color: var(--accent); }
+  strong { font-weight: 600; }
+  code {
+    font-family: var(--mono); font-size: 0.875em; background: var(--surface-2);
+    padding: 1.5px 5px; border-radius: 4px; word-break: break-word;
+  }
+  .lede { color: var(--ink-2); font-size: 15.5px; }
+
+  /* --- blocks ----------------------------------------------------------- */
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px;
+    overflow-x: auto; margin: 14px 0;
+  }
+  pre.mermaid { background: var(--surface); text-align: center; }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.055em; color: var(--ink-3);
+    font-weight: 600; background: var(--surface-2); white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.mono { font-family: var(--mono); font-size: 12.5px; }
+
+  .note {
+    border-left: 3px solid var(--accent); background: var(--surface);
+    border-top: 1px solid var(--border); border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    border-radius: 0 8px 8px 0; padding: 13px 17px; margin: 18px 0;
+  }
+  .note.warn { border-left-color: var(--warn); }
+  .note.bad { border-left-color: var(--bad); }
+  .note .lbl {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 650;
+    color: var(--ink-3); display: block; margin-bottom: 3px;
+  }
+  .note p { margin: 4px 0; font-size: 14px; }
+
+  .tier { font-family: var(--mono); font-size: 11.5px; font-weight: 600; padding: 1.5px 7px; border-radius: 4px; white-space: nowrap; }
+  .tier.c { color: #fff; background: var(--cheap); }
+  .tier.m { color: #fff; background: var(--mid); }
+  .tier.f { color: #fff; background: var(--frontier); }
+  .tier.j { color: var(--ink); background: var(--surface-2); border: 1px solid var(--border-strong); }
+
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 18px; margin: 14px 0; font-size: 14px; }
+  .kv dt { font-family: var(--mono); font-size: 12.5px; color: var(--ink-3); }
+  .kv dd { margin: 0; }
+
+  .formula {
+    font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 15px 17px; margin: 14px 0; overflow-x: auto; line-height: 1.8;
+  }
+  .caption { font-size: 12.5px; color: var(--ink-3); margin: -6px 0 16px; }
+
+  footer { border-top: 1px solid var(--border); margin-top: 64px; padding-top: 20px; font-size: 13px; color: var(--ink-3); }
+
+  /* --- phones ----------------------------------------------------------- */
+  @media (max-width: 880px) {
+    .shell { grid-template-columns: 1fr; }
+    nav.toc {
+      position: sticky; top: 0; z-index: 10; max-height: none; border-right: none;
+      border-bottom: 1px solid var(--border); background: var(--ground);
+      padding: 10px 16px; white-space: nowrap; overflow-x: auto;
+    }
+    nav.toc .proj, nav.toc .mark, nav.toc .grp { display: none; }
+    nav.toc a { display: inline-block; font-size: 12.5px; }
+    main { padding: 24px 16px 72px; }
+    h2 { margin-top: 44px; }
+  }
+</style>
+
+<div class="shell">
+<nav class="toc">
+  <div class="mark">THRIFTLLM</div>
+  <div class="proj">Internals</div>
+  <div class="grp">Orientation</div>
+  <a href="#thesis"><span class="n">1</span>The problem</a>
+  <a href="#lifecycle"><span class="n">2</span>Request lifecycle</a>
+  <div class="grp">The routing decision</div>
+  <a href="#classify"><span class="n">3</span>Difficulty classifier</a>
+  <a href="#policy"><span class="n">4</span>Expected-cost policy</a>
+  <a href="#verify"><span class="n">5</span>Two-stage verification</a>
+  <a href="#escalate"><span class="n">6</span>Escalation &amp; failure</a>
+  <div class="grp">The models</div>
+  <a href="#tiers"><span class="n">7</span>Tiers &amp; configuration</a>
+  <a href="#calibration"><span class="n">8</span>Calibration</a>
+  <a href="#byom"><span class="n">9</span>Bring your own models</a>
+  <div class="grp">Evidence</div>
+  <a href="#results"><span class="n">10</span>Measured results</a>
+  <a href="#negative"><span class="n">11</span>What didn't work</a>
+  <a href="#limits"><span class="n">12</span>Limitations</a>
+  <div class="grp">The system</div>
+  <a href="#data"><span class="n">13</span>Data model</a>
+  <a href="#api"><span class="n">14</span>HTTP surface</a>
+  <a href="#auth"><span class="n">15</span>Auth, keys, quotas</a>
+  <a href="#persistence"><span class="n">16</span>Persistence</a>
+  <a href="#deploy"><span class="n">17</span>Deployment</a>
+  <div class="grp">Reference</div>
+  <a href="#files"><span class="n">18</span>File map</a>
+  <a href="#scripts"><span class="n">19</span>Scripts</a>
+  <a href="#env"><span class="n">20</span>Configuration</a>
+</nav>
+
+<main>
+<div class="measure">
+
+<h1>ThriftLLM internals</h1>
+<p class="standfirst">A cost-routing cascade for LLM traffic: classify each request, send it to the
+cheapest model that can plausibly handle it, check the answer, and escalate only when the check
+fails. This document describes every mechanism, the measurements behind each decision, and the
+things that were tried and abandoned.</p>
+<p class="meta">4,301 lines of Python · 3,687 lines of templates · 1,974 lines of eval tooling · 17 tables · 45 endpoints</p>
+
+<h2 id="thesis"><span class="n">1</span>The problem, and the one that matters</h2>
+<p>Most traffic to a language model does not need the most expensive model available. The naive
+saving is obvious: route easy work to a small model. The hard part is that <strong>the obvious
+baseline is not "the frontier model" — it is "one good mid-tier model for everything."</strong>
+A cascade that beats frontier-only but ties mid-only has bought nothing.</p>
+
+<p>That distinction drove most of this project's design. The first built-in stack
+(<code>llama3.2:3b</code> locally → <code>gpt-oss-20b</code> → <code>gemini-3.5-flash</code>) came
+out at <span class="num">$0.0204</span> against <span class="num">$0.0205</span> for mid-only over
+116 queries — a tie — and the breakdown said why:</p>
+<ul>
+  <li><strong>80% of spend was hard questions</strong>, which the 3B model could not do, so they
+  went to mid either way.</li>
+  <li>On the rest, verification cost what it saved: 63% of cheap answers paid a judge call, 28%
+  escalated and paid a full mid answer, and <code>0.63 × judge + 0.28 × escalation</code> came to
+  mid's own price. With the judge <em>being</em> the mid model, that is a ratio — it holds at any
+  price level, so simply picking a pricier mid would not have fixed it.</li>
+</ul>
+
+<p>Two changes turned the tie into a win, and they are the heart of the current design:</p>
+<ol>
+  <li><strong>A judge far cheaper than the answer it protects.</strong> A verdict reads ~450 tokens
+  and writes one word. <code>gpt-oss-20b</code> does that for <span class="num">$0.00004</span> and
+  catches 94% of wrong cheap answers. Tying the judge to the tier above makes verification scale
+  with that tier's price; decoupling it is what makes the cascade pay.</li>
+  <li><strong>A cheap tier that clears the quality floor on more bands</strong>, so the paid model
+  only sees what the cheap one actually gets wrong.</li>
+</ol>
+
+<div class="note">
+  <span class="lbl">Result</span>
+  <p>Over the same 116 queries: <strong>$0.132 against $0.225–0.360 for mid-only</strong> and
+  $0.735 for frontier-only, with <strong>76/76</strong> objectively-graded answers correct.
+  41–63% under mid-only depending on which baseline estimate you take; the project quotes the
+  conservative one.</p>
+</div>
+
+<h2 id="lifecycle"><span class="n">2</span>Request lifecycle</h2>
+<p>Every request — chat UI, demo, or API — goes through the same path in
+<code>app/cascade.py</code>. Nothing about it requires an LLM to make the routing decision.</p>
+
+<pre class="mermaid">
+flowchart TD
+    Q[Prompt] --> C["Classify difficulty<br/>MiniLM-L6 · weighted k=5 · ~7ms · no model call"]
+    C --> P["Pick start tier<br/>min expected total cost, subject to a 0.80 quality floor"]
+    P --> G[Generate at that tier]
+    G --> S{"Learned scorer<br/>P(correct) from token logprobs · free"}
+    S -->|"P ≥ 0.95"| OUT[Ship the answer]
+    S -->|otherwise| J{"LLM judge<br/>small model · $0.00004"}
+    J -->|passes| OUT
+    J -->|fails| E[Escalate one tier]
+    E --> G2[Generate at next tier]
+    G2 --> ST{Structural check<br/>non-empty, not a refusal}
+    ST -->|passes| OUT
+    ST -->|fails| F[Final tier · never checked]
+    F --> OUT
+</pre>
+
+<p>Three invariants hold throughout:</p>
+<ul>
+  <li><strong>Only the cheapest configured tier gets a real judge call.</strong> Later tiers fail
+  rarely and their answers are long; judging every tier once accounted for 82% of total spend.</li>
+  <li><strong>The last tier in a sequence is never verified.</strong> There is nothing left to
+  escalate to, so a verdict cannot change the outcome.</li>
+  <li><strong>A tier is never revisited</strong> once tried and failed.</li>
+</ul>
+
+<h2 id="classify"><span class="n">3</span>Difficulty classifier</h2>
+<p class="lede"><code>app/classifier.py</code> — 152 lines, no model call, about 7ms.</p>
+
+<p>The prompt is encoded with <code>all-MiniLM-L6-v2</code> (22M parameters, pinned to CPU) and
+compared by cosine similarity against a labelled reference set of 116 queries. Difficulty is a
+<strong>similarity-weighted vote over the 5 nearest neighbours</strong>: each neighbour contributes
+its similarity score to its own label, and the heaviest label wins.</p>
+
+<h3>Why k=5 and not 1-NN</h3>
+<p>It began as single-nearest-neighbour, on the theory that k-voting lets mediocre matches outvote
+one clearly-best match. Measured properly — leave-one-out across all 116 labelled queries — that
+reasoning was wrong:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>classifier</th><th class="num">exact label</th><th class="num">over-routed</th><th class="num">under-routed</th></tr></thead>
+  <tbody>
+    <tr><td>1-nearest-neighbour</td><td class="num">56.0%</td><td class="num">21</td><td class="num">23</td></tr>
+    <tr><td>weighted k=5 vote</td><td class="num">65.5%</td><td class="num">18</td><td class="num">11</td></tr>
+    <tr><td>weighted k=5 + structural overrides</td><td class="num">64.7%</td><td class="num">14</td><td class="num">15</td></tr>
+  </tbody>
+</table></div>
+<p class="caption">Over-routed = paid for a stronger tier than needed. Under-routed = caught by the
+verifier and escalated. The overrides trade 0.8 points of exact accuracy for four fewer
+over-routes, because an over-route costs money immediately while an under-route is recoverable.</p>
+
+<p>Single-neighbour is fragile here because the reference set is 52% <code>hard</code>, so one
+spurious topical match drags a query straight to the mid tier. Summing similarity over five
+neighbours dilutes that.</p>
+
+<h3>Structural overrides</h3>
+<p>Embedding similarity measures <em>topic</em>, not difficulty. "What's the worst case of
+quicksort" sits beside "explain why naive quicksort degrades to O(n²)" because both are about
+quicksort, though one is recall and the other is analysis. Four rules patch the worst of it:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>condition</th><th>effect</th><th>rationale</th></tr></thead>
+  <tbody>
+    <tr><td>&gt; 25 words, or matches a multi-step keyword (<code>explain why</code>, <code>step-by-step</code>, <code>compare</code>, <code>tradeoff</code>, <code>design</code>…)</td><td>at least <code>medium</code></td><td>length and explicit multi-part structure are real difficulty signals the embedding misses</td></tr>
+    <tr><td>contains code keywords and the vote said <code>easy</code></td><td>raise to <code>medium</code></td><td>code questions have a long tail the embedding under-rates</td></tr>
+    <tr><td>vote said <code>hard</code>, but it's ≤ 12 words, opens with an interrogative, and has no multi-step marker</td><td>cap at <code>medium</code></td><td>short recall questions matched on topic, not difficulty; <code>medium</code> still starts cheap, and the verifier is the safety net</td></tr>
+    <tr><td>no neighbour has positive similarity</td><td><code>medium</code></td><td>a neutral default rather than a coin flip</td></tr>
+  </tbody>
+</table></div>
+
+<div class="note">
+  <span class="lbl">Thread safety, learned the hard way</span>
+  <p>FastAPI runs sync endpoints in a threadpool, and <code>/api/classify</code> fires on every
+  debounced keystroke — so it can land while a chat request is classifying. Two consequences, both
+  load-bearing: the model is pinned to <code>device="cpu"</code> because sentence-transformers
+  otherwise selects Apple's MPS backend, and concurrent encodes from two threads killed the whole
+  process with an <code>IOGPUMetalCommandBuffer</code> assertion. And a single lock wraps both load
+  and encode, so concurrent callers serialise rather than racing one model object.</p>
+</div>
+
+<h2 id="policy"><span class="n">4</span>Expected-cost routing policy</h2>
+<p class="lede"><code>app/routing_policy.py</code> — 114 lines. Turns calibration numbers into a
+difficulty→tier map.</p>
+
+<p>Before this existed, calibration was inert: it measured quality and then only displayed it, while
+every account routed by one hardcoded map. The policy applies two rules per difficulty band.</p>
+
+<h3>Rule 1 — a quality floor</h3>
+<p>A tier may only <em>start</em> a band if its measured quality on that band clears
+<code>QUALITY_THRESHOLD = 0.80</code>. Below that, too many answers are wrong for the verifier to be
+trusted to catch them all. The strongest configured tier is always a legal start, so a request
+always has somewhere to go.</p>
+
+<h3>Rule 2 — lowest expected total cost</h3>
+<p>Among tiers clearing the floor, pick the one minimising the cost of the <em>whole path</em>:
+generation, the judge call if this is the cheapest configured tier, and the failure-weighted cost of
+escalating. Solved back to front, since the last tier is trusted unconditionally:</p>
+
+<div class="formula">
+E<sub>i</sub>(d) = c(t<sub>i</sub>, d) + J·1[i=0] + (1 − Q(t<sub>i</sub>, d)) · E<sub>i+1</sub>(d)
+<br>E<sub>n</sub>(d) = c(t<sub>n</sub>, d)
+<br><br>tier(d) = argmin<sub>i</sub> E<sub>i</sub>(d)&nbsp;&nbsp;&nbsp;over i where Q(t<sub>i</sub>,d) ≥ τ, or i = n
+</div>
+<p class="caption">c = measured generation cost per band, Q = measured quality per band, J = cost of
+one verification, τ = 0.80. Per band, not overall, because a mid model's easy answers can cost 7×
+less than its mean.</p>
+
+<p>The <code>J</code> term is what stops a cascade losing to its own mid tier. On a stack whose mid
+model is very cheap, the cheap tier's verdict costs about what mid's own short answer does, and a
+naive "cheapest first" rule routes into a loss. Pricing the path makes the policy route
+<em>around</em> a cheap tier that cannot pay for its verification, and <em>to</em> one that can.</p>
+
+<p>The map is an output, not a setting. Fed the current stack's measurements it derives
+<code>easy→cheap, medium→cheap, hard→cheap</code>; fed the old 3B stack's it derived
+<code>hard→mid</code>, because that model scored 0.73 on hard.</p>
+
+<h4>Worked example — current stack</h4>
+<div class="table-wrap"><table>
+  <thead><tr><th>band</th><th class="num">start at cheap</th><th class="num">start at mid</th><th class="num">start at frontier</th><th>chosen</th></tr></thead>
+  <tbody>
+    <tr><td>easy</td><td class="num">$0.000093</td><td class="num">$0.000477</td><td class="num">$0.002252</td><td><span class="tier c">cheap</span></td></tr>
+    <tr><td>medium</td><td class="num">$0.000175</td><td class="num">$0.002386</td><td class="num">$0.008738</td><td><span class="tier c">cheap</span></td></tr>
+    <tr><td>hard</td><td class="num">$0.000510</td><td class="num">$0.002325</td><td class="num">$0.008724</td><td><span class="tier c">cheap</span></td></tr>
+  </tbody>
+</table></div>
+<p class="caption">Expected total cost per band including verification (J = $0.000041) and
+failure-weighted escalation. Cheap wins every band on this stack because its quality clears 0.80
+everywhere and it is ~100× cheaper.</p>
+
+<h2 id="verify"><span class="n">5</span>Two-stage verification</h2>
+<p class="lede"><code>app/scorer.py</code> (266 lines) and <code>app/verifier.py</code> (131 lines).</p>
+
+<p>The cheapest tier's answer passes through a learned gate, then — only if the gate is unsure — an
+LLM judge. Later tiers get a free structural check; the last tier gets nothing.</p>
+
+<h3>Stage 1 — the learned scorer (free)</h3>
+<p>This is FrugalGPT's idea (replace the LLM judge with a small learned model) corrected by
+measurement. A logistic regression reads signals the cheap model emits with every answer:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>feature group</th><th>features</th><th class="num">cost</th></tr></thead>
+  <tbody>
+    <tr><td>token confidence</td><td><code>mean_logprob</code>, <code>min_logprob</code>, <code>p10_logprob</code>, <code>frac_uncertain</code>, <code>head_logprob</code></td><td class="num">$0 — metadata on the answer already generated</td></tr>
+    <tr><td>distributional</td><td><code>mean_entropy</code>, <code>max_entropy</code> over the top-5 alternatives per token</td><td class="num">$0</td></tr>
+    <tr><td>shape</td><td><code>log_tokens</code>, <code>truncated</code>, <code>is_easy</code>/<code>is_medium</code>/<code>is_hard</code></td><td class="num">$0</td></tr>
+    <tr><td>consistency <em>(available, not shipped)</em></td><td><code>consist_max</code>, <code>consist_mean</code>, <code>numeric_agree</code> — versus a second sample</td><td class="num">one extra cheap generation</td></tr>
+    <tr><td>self-check <em>(available, not shipped)</em></td><td><code>self_verify</code> — P(YES) read off the logprobs of a one-token "is this correct?"</td><td class="num">one tiny cheap call</td></tr>
+  </tbody>
+</table></div>
+
+<p>The trained model records which features it uses, and the cascade skips any call nothing depends
+on. The shipped scorer uses only the free twelve, so stage 1 makes <strong>no API call at all</strong>.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>P(correct)</th><th>action</th><th class="num">cost</th></tr></thead>
+  <tbody>
+    <tr><td class="num">≥ 0.95</td><td>ship the answer, no judge call</td><td class="num">$0</td></tr>
+    <tr><td class="num">&lt; 0.95</td><td>ask the judge</td><td class="num">~$0.00004</td></tr>
+  </tbody>
+</table></div>
+
+<p>Both thresholds are measured, and deliberately lopsided because the two mistakes are not
+symmetric. <strong>Accept at 0.95</strong> is the highest band in which <em>zero</em> wrong answers
+slipped through held-out cross-validation (0 of 15; at 0.90, two would have).
+<strong>Reject ships disabled</strong> (threshold 0.0): in the low-confidence band most answers the
+scorer doubts are in fact correct — at P &lt; 0.05, half of them — so escalating on the scorer's word
+alone buys a needless paid answer. The judge is better at that call, so it makes it.</p>
+
+<h3>Stage 2 — the LLM judge</h3>
+<p>A small, cheap model — <em>not</em> the tier above — is asked whether the response addresses every
+explicit part of the request and is coherent, and replies with one line: <code>YES</code> or
+<code>NO: &lt;reason&gt;</code>. Measured on 117 graded answers it catches <strong>94%</strong> of
+wrong ones, against roughly half for the scorer. That gap is exactly why the scorer gates the judge
+rather than replacing it.</p>
+
+<p>Two details that cost real money to find. Reasoning models bill hidden thinking tokens as output:
+<code>gpt-oss-20b</code> spent <span class="num">$0.00016</span> per verdict against
+<span class="num">$0.00005</span> nominal until <code>reasoning_effort</code> was set, which cut a
+test verdict from 108 output tokens to 22 with the same answer. And an empty verdict (a truncated
+reply) fails <em>toward</em> escalation rather than silently trusting an unreadable answer.</p>
+
+<h3>Stage 3 — structural check (later tiers)</h3>
+<p>Free, no model call: empty response, or a refusal pattern. Deliberately <em>no</em> minimum-length
+rule — an earlier 20-character threshold flagged a one-word answer like "Neutral" to a
+classification query as suspiciously short and triggered a real, costly escalation for no quality
+reason.</p>
+
+<h3>When the gate is worth running</h3>
+<p>This depends entirely on what a verdict costs relative to the answer it protects. On the current
+stack a $0.00004 judge guards a $0.002 answer, so verification is 2% of the bill and the gate trims
+about 5% of that — real but small. Point the judge at the tier above, as the first stack did, and a
+verdict costs about what the next answer would; there the same code is the difference between a
+cascade that pays for itself and one that ties its own mid tier.</p>
+
+<h2 id="escalate"><span class="n">6</span>Escalation and failure handling</h2>
+<p>Escalation moves one tier up the configured sequence. Several failure modes are handled
+explicitly, each discovered in production:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>condition</th><th>behaviour</th><th>why</th></tr></thead>
+  <tbody>
+    <tr><td>tier rate-limited, unreachable, or has no valid credentials</td><td>skip it, try the next</td><td>a quota or a local model that isn't running shouldn't fail the request; auth is included because a deploy can legitimately leave a tier's key unset</td></tr>
+    <tr><td>the verifier itself is rate-limited</td><td>fail <em>open</em> — trust the answer</td><td>the verifier being unavailable is not evidence the answer is wrong</td></tr>
+    <tr><td>cheap provider returns no logprobs</td><td>fall back to the judge for that call</td><td>the gate needs them; the judge doesn't</td></tr>
+    <tr><td>every tier unavailable</td><td><code>AllTiersUnavailable</code> → 503</td><td>only after exhausting the sequence</td></tr>
+  </tbody>
+</table></div>
+
+<h3>Streaming</h3>
+<p>Streaming and verify-then-escalate are in tension: a tier's answer can't be judged until it is
+complete, but waiting for completion is what streaming exists to avoid. Rather than withhold every
+token until the verdict is in, <code>run_cascade_stream</code> streams
+<strong>optimistically</strong> and emits an <code>escalated</code> event if the check then fails —
+the client drops what it showed and takes the next tier's answer. Escalation ran 26 of 116 in the
+measured run, so the common path streams cleanly and the uncommon path shows the router doing the
+thing it exists to do.</p>
+<p>Events: <code>routing</code> → <code>tier_start</code> → <code>token</code>* →
+(<code>escalated</code>) → <code>done</code> | <code>error</code>. Streamed chunks carry no usage
+block, so cost is priced from token counts estimated at ~4 characters per token.</p>
+
+<h3>Routing modes</h3>
+<p>Per chat and per API request: <code>cascade</code> as described, or <code>direct</code>, which
+skips the cheapest tier and starts one up. Because the paid judge only ever attaches to the cheapest
+configured tier, starting above it disables verification for free. <code>direct</code> is the right
+choice when the cheap tier is slow — a locally-hosted model, say — and latency matters more than
+cost.</p>
+
+<h2 id="tiers"><span class="n">7</span>Tiers and configuration</h2>
+<p class="lede"><code>app/model_config.py</code> — 183 lines, the single source of truth.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>role</th><th>model</th><th class="num">quality</th><th class="num">$/answer</th><th class="num">latency</th><th class="num">measured on</th></tr></thead>
+  <tbody>
+    <tr><td><span class="tier c">cheap</span></td><td class="mono">openrouter/meta-llama/llama-3.1-8b-instruct</td><td class="num">0.89 / 0.95 / 0.81</td><td class="num">$0.000003 / 0.000013 / 0.000025</td><td class="num">6.1s</td><td class="num">76</td></tr>
+    <tr><td><span class="tier j">judge</span></td><td class="mono">groq/openai/gpt-oss-20b</td><td class="num">94% catch</td><td class="num">$0.00004 / verdict</td><td class="num">~1s</td><td class="num">117</td></tr>
+    <tr><td><span class="tier m">mid</span></td><td class="mono">openrouter/google/gemini-3.5-flash</td><td class="num">1.00 / 1.00 / 1.00</td><td class="num">$0.000477 / 0.002386 / 0.002325</td><td class="num">3.3s</td><td class="num">24</td></tr>
+    <tr><td><span class="tier f">frontier</span></td><td class="mono">openrouter/google/gemini-3.5-flash</td><td class="num">1.00 / 1.00 / 1.00</td><td class="num">$0.002252 / 0.008738 / 0.008724</td><td class="num">5.3s</td><td class="num">24</td></tr>
+  </tbody>
+</table></div>
+<p class="caption">Quality and cost are per easy / medium / hard band. Cost is what the provider
+charged, hidden reasoning tokens included. The 1.00 scores are a property of the 116-query eval set,
+not a claim the two paid tiers are equivalent — see §10.</p>
+
+<h3>Three choices worth explaining</h3>
+<p><strong>Mid and frontier are the same model</strong>, separated only by whether it may think. Mid
+runs <code>reasoning_effort=minimal</code>: at its default it spent 720 thinking tokens on a
+two-sentence answer — 94% of a $0.0069 bill — and gave the same answer for $0.0005 without. The
+frontier is the same model with thinking on. That two tiers share a model is the finding, not a
+shortcut: thinking-versus-not is the axis that actually predicted success.</p>
+
+<p><strong>The judge is a different, cheaper model than mid.</strong> This is the single decision that
+makes the cascade pay (§1).</p>
+
+<p><strong>Reasoning effort is per-stack configuration, not a constant.</strong> Values are
+provider-specific: Gemini needs <code>minimal</code> to stop thinking and ignores <code>low</code>;
+Groq's gpt-oss takes <code>low</code>/<code>medium</code>/<code>high</code> and rejects
+<code>minimal</code> outright.</p>
+
+<div class="note warn">
+  <span class="lbl">Consequence of sharing a model</span>
+  <p>Mid and frontier have an identical per-token list price, so cost comparisons must come from
+  calibration — which measures the reasoning tokens — rather than price × tokens. Priced naively the
+  two look identical and the app's "saved vs frontier" counter reads near zero;
+  <code>estimate_frontier_cost</code> therefore prefers the calibrated per-band figure
+  ($0.0087 for a hard answer, against $0.0072 from the naive estimate).</p>
+</div>
+
+<h2 id="calibration"><span class="n">8</span>Calibration</h2>
+<p class="lede"><code>app/calibration.py</code> (157 lines), <code>scripts/calibrate_builtin.py</code>.</p>
+
+<p>Calibration runs objectively-scoreable questions against a model and scores each difficulty band
+separately. Those numbers are the only input to the routing policy, so their shape matters more than
+their precision.</p>
+
+<h3>Stratified, then interleaved</h3>
+<p><strong>Stratified</strong> because a single blended average cannot answer the question routing
+needs — "does this model hold up on <em>hard</em> queries?" — since a model that aces easy and
+collapses on hard still posts a respectable mean.</p>
+<p><strong>Interleaved</strong> because running the bands in blocks put <code>hard</code> last, and a
+provider rate limit partway through wiped out the entire hard bucket — the one band the routing
+decision most depends on — while easy and medium looked perfect. Round-robin degrades every band
+evenly instead of silently losing one.</p>
+
+<h3>Sample sizes are asymmetric on purpose</h3>
+<p>The cheap tier is measured on <strong>all 76</strong> auto-gradable queries; paid tiers get a
+stratified 24. The cheap tier's numbers decide what never reaches a paid model, and it is nearly free
+to measure. The asymmetry was earned: 8 questions per band once put a 3B model at 0.88 on hard where
+76 said 0.73, and a hosted 8B at 1.00 where 120 samples said 0.74. Either would have routed hard
+questions to it on noise.</p>
+
+<h3>Other behaviours</h3>
+<ul>
+  <li>Rate limits are retried once after 20s, then recorded as rate-limited rather than as a broken
+  model — lumping them together made a throttled run look like a bad model string.</li>
+  <li>A built-in tier is measured with the parameters it actually runs with (reasoning effort,
+  max_tokens, local api_base); BYOM models get provider defaults and the caller's key.</li>
+  <li>An empty answer scores as <em>wrong</em>, not as an error. A reasoning model that spends its
+  whole budget thinking and returns nothing has failed to answer.</li>
+  <li>An unreachable tier is priced from list price at typical per-band token counts and flagged
+  <code>unmeasured</code>, rather than aborting the run.</li>
+  <li>Results go to <code>data/builtin_calibration.json</code>, which is used only if its recorded
+  model names still match the configured ones.</li>
+</ul>
+
+<h2 id="byom"><span class="n">9</span>Bring your own models</h2>
+<p>An account can run the router across its own models instead of the built-in tiers. Nine provider
+types are recognised: Groq, Google AI Studio, OpenAI, Anthropic, Mistral, DeepSeek, Together AI,
+OpenRouter, and Ollama (the only one needing no key).</p>
+
+<p>The flow: connect a provider → list its models → calibrate them → pick three per chat session.
+Calibration is stored per <code>(user, model)</code>, not per <code>(user, tier)</code>, so the same
+model keeps its measurements whether it sits as <em>cheap</em> in one session and <em>mid</em> in
+another. The routing map is assembled per session from whichever tiers it was created with.</p>
+
+<h3>Provider keys — two options, both honest</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>mode</th><th>where the key lives</th><th>trade</th></tr></thead>
+  <tbody>
+    <tr><td>per-session <em>(default)</em></td><td>the browser tab, for that page session; sent with each request, never written to disk</td><td>requires no trust in our storage at all; re-enter after a reload</td></tr>
+    <tr><td>stored</td><td>encrypted with Fernet (AES) in the database; the key is derived from <code>ROUTER_SECRET_KEY</code> in the environment, never stored alongside</td><td>convenience; a stolen copy of the database alone does not yield the keys</td></tr>
+  </tbody>
+</table></div>
+
+<p>Two deliberate properties of <code>app/key_vault.py</code>: with no server secret set, storing is
+<strong>refused</strong> rather than silently downgraded to plaintext — a "we encrypted it" claim we
+cannot honour is worse than an error saying storage is unavailable. And on secret rotation, decrypt
+returns <code>None</code> rather than raising, so users are simply asked for the key again.</p>
+
+<p>Only derived numbers — quality, cost, latency — are ever persisted from a calibration run. Never
+the key, never the prompts.</p>
+
+<h2 id="results"><span class="n">10</span>Measured results</h2>
+
+<h3>Cost, 116 queries, three ways</h3>
+<p>Two baselines are reported for each alternative, because neither is right alone. <em>Over the
+cascade's tokens</em> prices the tokens the cascade actually produced at the other model's rates —
+apples-to-apples on length, but a different model writes a different answer, and a reasoning model's
+hidden thinking isn't in those counts at all. <em>From calibration</em> uses that model's own measured
+per-band cost times this run's band mix, which includes its thinking tokens but is a sample.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>strategy</th><th class="num">over cascade tokens</th><th class="num">from calibration</th><th class="num">graded accuracy</th></tr></thead>
+  <tbody>
+    <tr><td>frontier for everything</td><td class="num">$0.10105</td><td class="num">$0.73475</td><td class="num">1.00 (calib.)</td></tr>
+    <tr><td>mid for everything</td><td class="num">$0.35973</td><td class="num">$0.22548</td><td class="num">1.00 (calib.)</td></tr>
+    <tr><td><strong>cascade (actual spend)</strong></td><td class="num" colspan="2"><strong>$0.13214</strong></td><td class="num"><strong>76/76</strong></td></tr>
+  </tbody>
+</table></div>
+<p class="caption">Priced naively, the reasoning frontier came out <em>cheaper than mid</em> — which
+is nonsense, and the reason the calibrated column exists. The project quotes the conservative
+comparison: 41% under mid-only, 82% under frontier.</p>
+
+<p>Where the money went: <strong>$0.006</strong> on 90 answers from the cheap tier plus their judge
+verdicts, <strong>$0.126</strong> on the 26 that escalated — the hardest questions, with the longest
+answers. Every one of those 26 escalations was the judge catching a real error: a wrong modulo, a
+miscounted permutation, a missed fallacy.</p>
+
+<h3>Does the frontier tier earn its slot?</h3>
+<p>Both paid tiers score 1.000 on the 116-query set, which sounds like the frontier is pointless. It
+only means the set cannot see the difference: its <code>hard</code> band was labelled against a 3B
+local model, so it contains things like "write a palindrome check". In a full run the frontier tier
+was <strong>never reached once</strong>.</p>
+
+<p><code>scripts/build_hard_probe.py</code> builds a set that can tell them apart — MATH-500 level 5
+plus 14 BIG-Bench Hard task families, 288 questions, all with ground-truth answers so grading stays
+automatic and free:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>configuration</th><th class="num">accuracy</th><th class="num">$/question</th></tr></thead>
+  <tbody>
+    <tr><td>mid alone (thinking off)</td><td class="num">277/288 = <strong>96.2%</strong></td><td class="num">$0.0038</td></tr>
+    <tr><td>+ thinking frontier on the 11 it failed</td><td class="num">279/288 = <strong>96.9%</strong></td><td class="num">$0.0046</td></tr>
+  </tbody>
+</table></div>
+
+<p><strong>+0.7 points for +21% cost.</strong> Thin, and honest. The shape matters more than the
+average:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>task</th><th class="num">rescued by thinking</th><th>reading</th></tr></thead>
+  <tbody>
+    <tr><td>BBH <code>dyck_languages</code></td><td class="num">1/1</td><td>bracket matching is pure step-by-step bookkeeping</td></tr>
+    <tr><td>MATH-500 level 5</td><td class="num">1/4</td><td>mathematical ability, not thinking budget, is the limit</td></tr>
+    <tr><td>BBH <code>geometric_shapes</code></td><td class="num"><strong>0/6</strong></td><td>reading an SVG path to name a figure is a perception limit; no thinking time fixes it</td></tr>
+  </tbody>
+</table></div>
+
+<p>The deeper reason the frontier looks marginal is that <strong>mid is already at 96% on benchmarks
+built to be hard.</strong> The headroom for any stronger tier is eleven questions. If a larger
+measured gap is wanted, the lever is a weaker, cheaper mid tier — not harder questions.</p>
+
+<h2 id="negative"><span class="n">11</span>What didn't work</h2>
+<p>Four results worth more than the features they replaced.</p>
+
+<h3>The embedding scorer (abandoned)</h3>
+<p>The first FrugalGPT attempt featurised the <em>text</em> of the answer: sentence embeddings of
+query and answer, their elementwise product and difference, plus lengths. Held-out ROC-AUC
+<strong>0.66</strong> — at any threshold it rejected right and wrong answers at nearly the same rate.
+The ablation explained it: embeddings encode <em>topic</em>, not correctness. A right and a wrong
+explanation of TCP versus UDP have cosine similarity 0.86. Replacing the text features with the
+model's own confidence took it to 0.80 on the 3B model and 0.735 on the 8B.</p>
+
+<h3>DeepSeek R1 as frontier (replaced)</h3>
+<p>It rescued <em>none</em> of the failures tested, cost 3× the alternative, and averaged
+<strong>467 seconds</strong> per answer. Latency alone disqualifies it from an interactive router
+regardless of accuracy. It also exposed a real bug: at <code>max_tokens: 16000</code> it spent 13,697
+tokens thinking and returned <em>empty text</em>, which reads downstream as a wrong answer. It had
+already failed 3 of 12 calibration questions that way, masked by scoring empty as wrong. The cap is
+now 32,000 — providers bill tokens <em>used</em>, not tokens allowed.</p>
+
+<h3>Gemini's free tier (routed around)</h3>
+<p>Google AI Studio allows <strong>20 requests per day</strong> per model, which cannot support a
+116-query eval, let alone traffic. The built-in stack reaches the same model through OpenRouter.</p>
+
+<h3>Three grading bugs (the most instructive)</h3>
+<p>Each made a model look worse than it was, and all three were caught by reading answers rather
+than trusting a score:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>the grader wanted</th><th>the model said</th><th>damage</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">(B)</td><td class="mono">(B) heptagon</td><td>scored <strong>2/17</strong> on a task it got 11/17 right</td></tr>
+    <tr><td class="mono">syndrome therefrom</td><td class="mono">syndrome, therefrom</td><td>scored <strong>0/5</strong> on a task it got 5/5 right</td></tr>
+    <tr><td class="mono">hypertext transfer protocol</td><td class="mono">**H**yper**T**ext **T**ransfer **P**rotocol</td><td>marked wrong for its markdown bold</td></tr>
+  </tbody>
+</table></div>
+
+<div class="note bad">
+  <span class="lbl">Why this is in the documentation</span>
+  <p>Fixing the multiple-choice bug alone moved the mid tier from <strong>83.2% to 97.5%</strong> on
+  the BBH set, and retired a "the frontier rescued this" result that was really mid having been
+  mis-graded — which in turn corrected a published claim of "+4 points for +40% cost" down to
+  <strong>+0.7 points for +21%</strong>. An automatic grader measures formatting as readily as
+  correctness. Treat every accuracy figure here as a lower bound.</p>
+</div>
+
+<h2 id="limits"><span class="n">12</span>Limitations</h2>
+<ul>
+  <li><strong>The mid-only baseline is a range, not a number</strong> — $0.225 from calibration,
+  $0.360 from token repricing. The 41% claim uses the lower one.</li>
+  <li><strong>The classifier is the weakest component.</strong> ~65% exact-label accuracy on a k-NN
+  over 116 examples. A learned difficulty model trained on the escalation log would do better, and
+  every misroute is either a wasted cheap call or an overpriced answer.</li>
+  <li><strong><code>hard → cheap</code> is a marginal call.</strong> The 8B calibrated at 0.81 against
+  a 0.80 floor on 37 questions; a 120-sample dataset put it at 0.74. The judge caught every wrong
+  hard answer in the measured run, but a weaker judge or a harder distribution would turn that margin
+  into shipped errors.</li>
+  <li><strong>The cheap tier is slower than mid</strong> — 6.1s against 3.3s. Cheaper is not faster.</li>
+  <li><strong>The scorer is model-specific.</strong> Confidence profiles don't transfer, so a scorer
+  trained for one cheap model is treated as absent for another and the judge runs instead.</li>
+  <li><strong>Paid-tier calibration samples are small</strong> — 24 questions, 8 per band.</li>
+  <li><strong>The frontier is measured on 24 calibration questions and 11 probe questions.</strong>
+  It is the escalation target of last resort, not a tier the policy routes to.</li>
+  <li><strong>Auth is project-grade.</strong> bcrypt passwords, cookie sessions, per-account and
+  per-device prompt caps — but no CSRF token and no rate limit on login attempts.</li>
+  <li><strong>The escalation cost tail is real.</strong> One rate-limit fallback to a frontier tier
+  once cost as much as the other 115 queries combined.</li>
+</ul>
+
+<h2 id="data"><span class="n">13</span>Data model</h2>
+<p>SQLite dialect throughout, 17 tables across two modules. <code>app/db.py</code> holds evaluation
+and request logging; <code>app/chat_db.py</code> holds everything user-facing.</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>table</th><th>holds</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">users</td><td>username, bcrypt hash, created_at</td></tr>
+    <tr><td class="mono">sessions</td><td>cookie tokens with a 30-day expiry</td></tr>
+    <tr><td class="mono">api_keys</td><td>SHA-256 hash and display prefix of issued <code>rtr_…</code> keys</td></tr>
+    <tr><td class="mono">chats</td><td>title, pinned, <code>mode</code> (builtin|byom), <code>routing_mode</code> (cascade|direct)</td></tr>
+    <tr><td class="mono">chat_messages</td><td>role, content, tier, cost, baseline_cost, escalated, latency, difficulty, escalation_reasons</td></tr>
+    <tr><td class="mono">chat_models</td><td>tier → model frozen onto a BYOM chat at creation</td></tr>
+    <tr><td class="mono">providers</td><td>connected provider, api_base, optional encrypted key</td></tr>
+    <tr><td class="mono">provider_models</td><td>models listed under a provider</td></tr>
+    <tr><td class="mono">model_calibrations</td><td>per <code>(user, model)</code>: avg + per-band quality and cost as JSON</td></tr>
+    <tr><td class="mono">calibration_results</td><td>older per-tier calibration, carried forward by migration</td></tr>
+    <tr><td class="mono">model_configs</td><td>saved three-model configurations</td></tr>
+    <tr><td class="mono">usage_log</td><td>every chat and API call: tiers, cost, baseline, latency, api_key_id</td></tr>
+    <tr><td class="mono">demo_usage</td><td>per-device prompt counter for the signed-out demo</td></tr>
+    <tr><td class="mono">cascade_log</td><td>eval harness: query, difficulty, tiers, cost, tokens, and the shipped answer</td></tr>
+    <tr><td class="mono">requests</td><td>raw per-request log</td></tr>
+    <tr><td class="mono">eval_responses</td><td>per-tier answers to the eval set</td></tr>
+    <tr><td class="mono">eval_scores</td><td>their scores, by source (automatic | judge)</td></tr>
+  </tbody>
+</table></div>
+
+<p>Migrations are additive <code>ALTER TABLE … ADD COLUMN</code> guarded by one
+<code>_add_column</code> helper that matches on the duplicate-column <em>message</em> rather than the
+exception class — because <code>sqlite3</code> and libsql raise different classes for it. An
+<code>api_key_id</code> on a <code>usage_log</code> row is what makes that key a "session" in the
+Sessions view.</p>
+
+<h2 id="api"><span class="n">14</span>HTTP surface</h2>
+<p>45 routes. The ones that matter:</p>
+
+<div class="table-wrap"><table>
+  <thead><tr><th>method + path</th><th>purpose</th><th>auth</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">POST /v1/chat/completions</td><td>OpenAI-compatible; adds a <code>_router</code> block with tier, cost, difficulty, escalation</td><td>API key, unless <code>ALLOW_ANON_V1</code></td></tr>
+    <tr><td class="mono">POST /api/v1/route</td><td>pass-through routing across the caller's own models and transient keys</td><td>API key</td></tr>
+    <tr><td class="mono">POST /api/v1/calibrate</td><td>calibrate one of the caller's models</td><td>API key</td></tr>
+    <tr><td class="mono">POST /api/chats/{id}/messages/stream</td><td>SSE: routing, tier_start, token, escalated, done</td><td>cookie</td></tr>
+    <tr><td class="mono">POST /api/chats/{id}/messages</td><td>blocking equivalent</td><td>cookie</td></tr>
+    <tr><td class="mono">POST /api/classify</td><td>classifier only — no model call, no cost</td><td>cookie</td></tr>
+    <tr><td class="mono">POST /api/try</td><td>signed-out demo, multi-turn, capped per device</td><td>device cookie + header</td></tr>
+    <tr><td class="mono">GET /api/try/quota</td><td>remaining demo prompts</td><td>none</td></tr>
+    <tr><td class="mono">GET /health</td><td>status, database backend, <strong>durability</strong>, config warnings, which variable names arrived</td><td>none</td></tr>
+    <tr><td class="mono">GET /api/calibration</td><td>per-model calibration and the derived routing map</td><td>cookie</td></tr>
+    <tr><td class="mono">GET /api/usage, /api/sessions</td><td>spend and per-key session views</td><td>cookie</td></tr>
+  </tbody>
+</table></div>
+<p>Pages: <code>/</code> (landing; redirects signed-in users to <code>/app</code>),
+<code>/app</code>, <code>/try</code>, <code>/models</code>, <code>/sessions</code>,
+<code>/settings</code>, <code>/guide</code>, <code>/demo</code>.</p>
+
+<h2 id="auth"><span class="n">15</span>Auth, keys, and quotas</h2>
+<div class="kv">
+  <dt>passwords</dt><dd>bcrypt with per-password salt</dd>
+  <dt>sessions</dt><dd>httponly cookie, 30-day expiry, <code>Secure</code> when <code>COOKIE_SECURE</code> is set</dd>
+  <dt>API keys</dt><dd><code>rtr_</code> + 43 random characters; stored as SHA-256, shown once at creation</dd>
+  <dt>demo cap</dt><dd>3 prompts per device</dd>
+  <dt>account cap</dt><dd>10 prompts per UTC day, across chat and API</dd>
+</div>
+
+<p>API keys are hashed with SHA-256 rather than bcrypt <em>on purpose</em>: they are high-entropy
+random tokens, not user-chosen secrets. bcrypt's deliberate slowness defends against guessing a weak
+secret, which does not apply to a 43-character random token — the same reasoning Stripe and GitHub
+apply to their own issued tokens.</p>
+
+<p>The demo cap is <strong>per device</strong>, implemented as an id held in both an httponly cookie
+and <code>localStorage</code> (returned as an <code>X-Demo-Device</code> header), so clearing one
+leaves the other. Clearing all site data does reset it; that is the limit of what a browser lets a
+site do without fingerprinting, and the cap exists to bound cost per casual visitor rather than to be
+unbypassable.</p>
+
+<h2 id="persistence"><span class="n">16</span>Persistence</h2>
+<p class="lede"><code>app/dbconn.py</code> — 271 lines. Chooses the backend; the app's SQL is
+identical either way.</p>
+
+<p>Local development and a single VM use a SQLite file. A host with no durable disk points at
+<strong>Turso</strong> (hosted SQLite) by setting two environment variables.</p>
+
+<h3>Embedded replica, not a remote connection</h3>
+<p>Turso is connected as an <em>embedded replica</em>: a local SQLite file kept in sync with the
+remote. Writes go to Turso and are durable there; reads are answered from the local copy. That
+distinction is not cosmetic — measured against the Mumbai region, a remote round trip was
+<strong>~150ms</strong> and a local read ~0.05ms, and one page load makes several queries. 30 message
+fetches took 2ms through the replica. On boot the replica pulls remote state, so a container that is
+wiped comes back with every account and chat intact.</p>
+
+<h3>Two driver gaps, handled</h3>
+<ul>
+  <li>libsql has no <code>sqlite3.Row</code>, so a <code>_Row</code> class reproduces the parts the
+  app uses (lookup by name and index, <code>keys()</code>, <code>in</code>, iteration).</li>
+  <li>It raises a different exception class for duplicate columns, which is why migrations match on
+  the message.</li>
+</ul>
+
+<div class="note bad">
+  <span class="lbl">The bug this file exists to prevent</span>
+  <p><code>dbconn</code> originally read its environment at <em>import</em> time, and
+  <code>chat_db</code> imports it before anything loads <code>.env</code> — so a correctly configured
+  deployment silently wrote to a local file instead. On a container that means accounts vanish the
+  next time the instance is recycled, presenting exactly as "I signed up, logged in fine, and the
+  next day my login stopped working." It now loads its own configuration, logs the backend at
+  startup, warns when writes won't survive, reports all of it on <code>/health</code>, and
+  re-exposes any variable whose <em>name</em> arrived with stray whitespace — because a deploy console
+  will happily let you type a trailing space into a name field.</p>
+</div>
+
+<h2 id="deploy"><span class="n">17</span>Deployment</h2>
+<p>A multi-arch <code>python:3.12-slim</code> image. Three things in the Dockerfile are
+load-bearing:</p>
+<ul>
+  <li><strong>torch from the CPU-only index</strong>, installed before the rest of requirements. The
+  default PyPI torch on Linux is the CUDA build — 2–3GB of NVIDIA libraries a CPU host never uses.</li>
+  <li><strong>The embedding model is baked into the image.</strong> Otherwise it is fetched from
+  Hugging Face on first use, which on a scale-to-zero host means a 90MB download on <em>every</em>
+  cold start, and an outage if HF is unreachable.</li>
+  <li><strong>Listens on <code>$PORT</code></strong>, one worker. The classifier is ~600MB resident
+  and SQLite wants a single writer; concurrency comes from FastAPI's threadpool inside the process.</li>
+</ul>
+<p>Python 3.12 rather than 3.14: prebuilt arm64 wheels for torch and scikit-learn lag the newest
+Python, and a missing wheel means an hour-long source build that usually fails on a small VM. Note
+<code>libsql</code> ships <strong>no Linux arm64 wheel</strong> — x86 hosts install it from a wheel;
+an ARM box would need a Rust build.</p>
+
+<h3>Cold starts</h3>
+<p>Warm, the deployed service answers in <strong>~90ms</strong>. The first request after an idle
+period is slow for one reason:</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>step</th><th class="num">time (fast laptop; a shared vCPU is slower)</th></tr></thead>
+  <tbody>
+    <tr><td><code>import sentence_transformers</code></td><td class="num">4.1s</td></tr>
+    <tr><td><code>import litellm</code></td><td class="num">2.3s</td></tr>
+    <tr><td><code>import torch</code></td><td class="num">1.3s</td></tr>
+    <tr><td>load MiniLM weights</td><td class="num">5.5s</td></tr>
+    <tr><td>encode the reference set</td><td class="num">0.3s</td></tr>
+    <tr><td><strong>total before the first answer</strong></td><td class="num"><strong>~14s</strong></td></tr>
+  </tbody>
+</table></div>
+
+<p>The app warms the classifier <em>before</em> reporting ready when it detects a serverless host.
+Those platforms bill by request and throttle CPU outside one, so a background warmup started at boot
+barely runs until traffic arrives — and then the first visitor waits for the whole load anyway, at
+throttled speed. Doing it inside the startup phase gets full CPU.</p>
+<p>What else helps, in order: turn on startup CPU boost (free); set minimum instances to 1 (removes
+cold starts, but keeps an instance alive around the clock and will exceed a free allowance); replace
+torch with ONNX Runtime for the classifier, where ~11 of those 14 seconds live and which would cut
+resident memory from ~660MB to roughly 200MB. Raising the memory limit does <em>not</em> help — the
+load is CPU-bound.</p>
+
+<h2 id="files"><span class="n">18</span>File map</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>file</th><th class="num">lines</th><th>responsibility</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">app/main.py</td><td class="num">1300</td><td>FastAPI app: routing, auth, chat, providers, demo, API, quotas</td></tr>
+    <tr><td class="mono">app/chat_db.py</td><td class="num">816</td><td>user-facing schema and queries</td></tr>
+    <tr><td class="mono">app/cascade.py</td><td class="num">437</td><td>classify → generate → verify → escalate, blocking and streaming</td></tr>
+    <tr><td class="mono">app/dbconn.py</td><td class="num">271</td><td>SQLite or Turso backend selection, embedded replica, config checks</td></tr>
+    <tr><td class="mono">app/scorer.py</td><td class="num">266</td><td>learned verification gate, shared feature definition</td></tr>
+    <tr><td class="mono">app/model_config.py</td><td class="num">183</td><td>tier definitions, per-tier call params, built-in calibration</td></tr>
+    <tr><td class="mono">app/calibration.py</td><td class="num">157</td><td>stratified per-band measurement of any model</td></tr>
+    <tr><td class="mono">app/classifier.py</td><td class="num">152</td><td>embedding difficulty classifier and overrides</td></tr>
+    <tr><td class="mono">app/db.py</td><td class="num">149</td><td>eval and request logging schema</td></tr>
+    <tr><td class="mono">app/verifier.py</td><td class="num">131</td><td>LLM judge and structural check</td></tr>
+    <tr><td class="mono">app/scoring.py</td><td class="num">118</td><td>automatic graders: exact match, numeric, set, schema, pattern</td></tr>
+    <tr><td class="mono">app/routing_policy.py</td><td class="num">114</td><td>expected-cost tier selection under a quality floor</td></tr>
+    <tr><td class="mono">app/auth.py</td><td class="num">95</td><td>passwords, sessions, API keys</td></tr>
+    <tr><td class="mono">app/key_vault.py</td><td class="num">58</td><td>Fernet encryption for stored provider keys</td></tr>
+    <tr><td class="mono">app/baseline_cost.py</td><td class="num">54</td><td>"what would a stronger tier have cost" estimates</td></tr>
+  </tbody>
+</table></div>
+<p>Front end: <code>chat_app.html</code> (1499 — also serves the demo at <code>/try</code> behind one
+injected flag), <code>guide.html</code> (527), <code>models.html</code> (358),
+<code>static/app.css</code> (355), <code>landing.html</code> (321), <code>demo.html</code> (200),
+<code>sessions.html</code> (198), <code>settings.html</code> (115), <code>static/nav.js</code> (89),
+<code>static/reveal.js</code> (25).</p>
+
+<h2 id="scripts"><span class="n">19</span>Scripts</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>script</th><th>what it does</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">calibrate_builtin.py</td><td>measures the configured tiers, writes <code>builtin_calibration.json</code>; <code>--tiers</code> to redo a subset</td></tr>
+    <tr><td class="mono">run_cascade_eval.py</td><td>runs the eval set through the live router, snapshotting the previous log first</td></tr>
+    <tr><td class="mono">compare_strategies.py</td><td>prices cascade vs mid-only vs frontier-only, both baselines</td></tr>
+    <tr><td class="mono">score_cascade_log.py</td><td>grades what the cascade actually shipped, split by tier and difficulty</td></tr>
+    <tr><td class="mono">build_hard_probe.py</td><td>assembles a hard set from MATH-500 and BIG-Bench Hard</td></tr>
+    <tr><td class="mono">run_hard_probe.py</td><td>runs any models or candidate specs against it; resumable, writes incrementally</td></tr>
+    <tr><td class="mono">build_scorer_data.py</td><td>samples the cheap tier with logprobs to build scorer training data</td></tr>
+    <tr><td class="mono">train_scorer.py</td><td>trains the gate, prints ablations and threshold sweeps, saves thresholds with the model</td></tr>
+    <tr><td class="mono">migrate_to_turso.py</td><td>copies a local database up, parents before children, safe to re-run</td></tr>
+    <tr><td class="mono">make_readme_charts.py</td><td>regenerates the three SVG charts from measured data</td></tr>
+    <tr><td class="mono">harvest_active_learning_candidates.py</td><td>mines the escalation log for queries worth labelling</td></tr>
+    <tr><td class="mono">merge_candidates.py</td><td>folds reviewed candidates into the reference set</td></tr>
+  </tbody>
+</table></div>
+
+<div class="note warn">
+  <span class="lbl">Harness lesson</span>
+  <p><code>run_hard_probe.py</code> writes every answer to a JSONL as it arrives and resumes from it.
+  A 12-worker run once tripped the provider's in-flight spend cap at 221 of 298 questions and lost
+  every paid-for result — about a dollar. Concurrency against a low balance is itself a failure mode.</p>
+</div>
+
+<h2 id="env"><span class="n">20</span>Configuration</h2>
+<div class="table-wrap"><table>
+  <thead><tr><th>variable</th><th>default</th><th>effect</th></tr></thead>
+  <tbody>
+    <tr><td class="mono">OPENROUTER_API_KEY</td><td>—</td><td>cheap, mid and frontier tiers</td></tr>
+    <tr><td class="mono">GROQ_API_KEY</td><td>—</td><td>the judge</td></tr>
+    <tr><td class="mono">ROUTER_SECRET_KEY</td><td>—</td><td>encrypts stored provider keys; unset means storing is refused</td></tr>
+    <tr><td class="mono">CHEAP_MODEL / MID_MODEL / FRONTIER_MODEL</td><td>the measured stack</td><td>any litellm model string</td></tr>
+    <tr><td class="mono">JUDGE_MODEL</td><td><code>groq/openai/gpt-oss-20b</code></td><td>unset falls back to the tier above — which is what made the cascade tie</td></tr>
+    <tr><td class="mono">MID_REASONING_EFFORT</td><td><code>minimal</code></td><td>provider-specific; Gemini needs <code>minimal</code> to stop thinking</td></tr>
+    <tr><td class="mono">FRONTIER_REASONING_EFFORT</td><td><code>high</code></td><td>the frontier exists <em>because</em> it thinks</td></tr>
+    <tr><td class="mono">JUDGE_REASONING_EFFORT</td><td><code>low</code></td><td>a YES/NO verdict needs no deliberation</td></tr>
+    <tr><td class="mono">VERIFIER</td><td><code>auto</code></td><td><code>auto</code> uses the gate when a scorer exists for the current cheap model; <code>judge</code> forces the judge</td></tr>
+    <tr><td class="mono">TURSO_DATABASE_URL / TURSO_AUTH_TOKEN</td><td>—</td><td>both required to leave local SQLite</td></tr>
+    <tr><td class="mono">DAILY_PROMPT_LIMIT / DEMO_PROMPT_LIMIT</td><td>10 / 3</td><td>per account per UTC day; per device</td></tr>
+    <tr><td class="mono">COOKIE_SECURE</td><td>unset</td><td>set on any HTTPS deployment</td></tr>
+    <tr><td class="mono">ALLOW_ANON_V1</td><td>unset</td><td>opens <code>/v1/chat/completions</code> without a key — local evals only</td></tr>
+    <tr><td class="mono">SITE_ADDRESS</td><td>—</td><td>hostname Caddy serves, for VM deployments</td></tr>
+  </tbody>
+</table></div>
+
+<footer>
+  <p>Generated from the ThriftLLM source tree. Every figure in this document comes from a committed
+  measurement script; where two measurements disagree, both are shown. Accuracy numbers are lower
+  bounds — see §11.</p>
+</footer>
+
+</div>
+</main>
+</div>
