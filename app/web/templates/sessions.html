@@ -8,29 +8,33 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
 <style>
-  .new-session-dropdown { right: 0; top: calc(100% + 6px); min-width: 200px; }
+  .new-session-dropdown { right: 0; top: calc(100% + 6px); min-width: 240px; }
 
-  .session-list { display: flex; flex-direction: column; gap: 8px; }
-  .session-card {
-    display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 18px; align-items: center;
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 13px 16px; cursor: pointer;
+  .session-list { display: flex; flex-direction: column; }
+  .session-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) 90px 110px 110px 92px; gap: 16px; align-items: center;
+    padding: 14px 20px; cursor: pointer; border-top: 1px solid var(--border); transition: background 0.1s ease;
   }
-  .session-card:hover { border-color: var(--border-strong); background: var(--surface-2); }
-  .session-card .name { font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
-  .session-card .stat-col { text-align: right; min-width: 70px; }
-  .session-card .stat-col .v { font-size: 13px; }
-  .session-card .stat-col .k { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; margin-top: 1px; }
-  .session-card .created { color: var(--text-muted); font-size: 12px; text-align: right; min-width: 80px; }
-  @media (max-width: 640px) {
-    .session-card { grid-template-columns: 1fr; gap: 6px; text-align: left; }
-    .session-card .stat-col, .session-card .created { text-align: left; }
+  .session-row:hover { background: var(--surface-2); }
+  .session-row.head { cursor: default; border-top: none; padding-top: 4px; padding-bottom: 8px; }
+  .session-row.head:hover { background: none; }
+  .session-row.head span { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600; }
+  .session-row .name { font-weight: 600; font-size: 13.5px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .session-row .name .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .session-icon {
+    width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text-secondary);
   }
-
-  /* A table can't reflow, so on a phone it scrolls inside its own box
-     instead of pushing the page sideways. */
-  .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  @media (max-width: 760px) { .table-wrap table { min-width: 520px; } }
+  .session-icon svg { width: 15px; height: 15px; }
+  .session-row .r { text-align: right; font-family: var(--font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .session-row .r.good { color: var(--good); }
+  .session-row .created { color: var(--text-muted); font-size: 12px; text-align: right; }
+  @media (max-width: 700px) {
+    .session-row { grid-template-columns: 1fr auto; }
+    .session-row .r.hide-sm, .session-row .created, .session-row.head { display: none; }
+  }
+  .back-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+  .back-link:hover { color: var(--text-primary); }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
 </head>
@@ -53,40 +57,54 @@
       <div id="overview-view">
         <div class="page-header animate-in">
           <div>
+            <span class="eyebrow-sm">usage</span>
             <h1>Sessions</h1>
-            <p class="sub">Every chat and API key, each its own session. Click one for the full call log.</p>
+            <p class="sub">Every chat and every API key is a session. Each one tracks what the router
+              spent, and what the strongest tier would have cost for the same answers.</p>
           </div>
           <div class="menu-anchor">
             <button id="new-session-btn">+ New session</button>
             <div class="dropdown-menu new-session-dropdown" id="new-session-dropdown" hidden>
-              <button id="new-chat-session-btn">New chat<span class="desc">Interactive, in the chat UI</span></button>
+              <button id="new-chat-session-btn">New chat<span class="desc">Interactive, in the chat app</span></button>
               <button id="new-api-session-btn">New API session<span class="desc">Issues a key for programmatic use</span></button>
             </div>
           </div>
         </div>
 
+        <div class="tiles animate-in stagger-1" id="overview-tiles">
+          <div class="tile"><div class="k">Sessions</div><div class="v" id="t-sessions">&mdash;</div></div>
+          <div class="tile"><div class="k">Calls routed</div><div class="v" id="t-calls">&mdash;</div></div>
+          <div class="tile"><div class="k">Spent</div><div class="v" id="t-spent">&mdash;</div></div>
+          <div class="tile"><div class="k">Saved</div><div class="v good" id="t-saved">&mdash;</div><div class="d" id="t-saved-pct"></div></div>
+        </div>
+
         <div id="new-key-banner"></div>
 
-        <div class="session-list" id="sessions-list"></div>
+        <div class="card flush animate-in stagger-2">
+          <div class="session-list" id="sessions-list"></div>
+        </div>
       </div>
 
       <div id="detail-view" hidden>
-        <div class="page-header">
+        <a class="back-link" href="/sessions">&larr; All sessions</a>
+        <div class="page-header" style="margin-top:14px;">
           <div>
+            <span class="eyebrow-sm">API session</span>
             <h1 id="detail-title">Session</h1>
             <p class="sub" id="detail-sub"></p>
           </div>
-          <a href="/sessions">&larr; all sessions</a>
         </div>
-        <div class="stat-row card" style="margin-bottom:18px;">
-          <div class="stat"><div class="num" id="detail-calls">-</div><div class="lbl">calls</div></div>
-          <div class="stat"><div class="num" id="detail-cost">-</div><div class="lbl">total cost</div></div>
-          <div class="stat"><div class="num good" id="detail-saved">-</div><div class="lbl">saved</div></div>
+        <div class="tiles">
+          <div class="tile"><div class="k">Calls</div><div class="v" id="detail-calls">-</div></div>
+          <div class="tile"><div class="k">Spent</div><div class="v" id="detail-cost">-</div></div>
+          <div class="tile"><div class="k">Saved</div><div class="v good" id="detail-saved">-</div></div>
         </div>
-        <div class="table-wrap"><table id="detail-table">
-          <thead><tr><th>Time</th><th>Difficulty</th><th>Tier</th><th>Cost</th><th>Saved</th><th></th></tr></thead>
-          <tbody></tbody>
-        </table></div>
+        <div class="card flush">
+          <div class="table-wrap"><table id="detail-table">
+            <thead><tr><th style="padding-left:20px;">Time</th><th>Band</th><th>Answered by</th><th class="num">Cost</th><th class="num">Saved</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
       </div>
 
     </div>
@@ -112,24 +130,50 @@
   const params = new URLSearchParams(window.location.search);
   const apiSessionId = params.get("api");
 
+  const ICONS = {
+    chat: '<svg viewBox="0 0 16 16" fill="none"><path d="M2 3.5h12v7H6.5L3 13.5V10.5H2v-7Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>',
+    api: '<svg viewBox="0 0 16 16" fill="none"><path d="M5.5 4 2 8l3.5 4M10.5 4 14 8l-3.5 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  };
+
   async function loadOverview() {
     const sessions = await api("/api/sessions");
     const listEl = document.getElementById("sessions-list");
-    listEl.innerHTML = sessions.map(s => `
-      <div class="session-card" data-type="${s.type}" data-id="${s.id}">
-        <div class="name">
-          <span class="badge ${s.type === "chat" ? "chat-type" : "api-type"}">${s.type}</span>
-          ${esc(s.name)}
-          ${s.pinned ? ' <span class="badge pinned">pinned</span>' : ""}${s.revoked ? ' <span class="badge revoked">revoked</span>' : ""}
-        </div>
-        <div class="stat-col"><div class="v mono">${s.n_calls}</div><div class="k">calls</div></div>
-        <div class="stat-col"><div class="v mono">${fmt(s.total_cost)}</div><div class="k">cost</div></div>
-        <div class="stat-col"><div class="v mono" style="color:var(--good)">${fmt(s.cost_saved)}</div><div class="k">saved</div></div>
-        <div class="created">${s.created_at.slice(0, 10)}</div>
-      </div>
-    `).join("") || '<div class="empty-state">No sessions yet -- start a chat or create an API session.</div>';
 
-    listEl.querySelectorAll(".session-card[data-type]").forEach(row => {
+    const spent = sessions.reduce((a, s) => a + (s.total_cost || 0), 0);
+    const saved = sessions.reduce((a, s) => a + (s.cost_saved || 0), 0);
+    document.getElementById("t-sessions").textContent = sessions.length;
+    document.getElementById("t-calls").textContent = sessions.reduce((a, s) => a + (s.n_calls || 0), 0);
+    document.getElementById("t-spent").textContent = "$" + spent.toFixed(4);
+    document.getElementById("t-saved").textContent = "$" + saved.toFixed(4);
+    document.getElementById("t-saved-pct").textContent =
+      spent + saved > 0 ? `${((saved / (spent + saved)) * 100).toFixed(0)}% under the strongest tier` : "";
+
+    if (!sessions.length) {
+      listEl.innerHTML = `<div class="empty-state">
+        <div class="es-icon">${ICONS.chat}</div>
+        <b>No sessions yet</b>Start a chat, or create an API session to route requests from your own code.
+        <div class="es-actions"><a class="btn" href="/app">Start a chat</a><button class="ghost" id="es-api">New API session</button></div>
+      </div>`;
+      document.getElementById("es-api").onclick = createApiSession;
+      return;
+    }
+
+    listEl.innerHTML = `
+      <div class="session-row head" style="padding-top:14px;"><span>Session</span><span class="r">Calls</span><span class="r">Spent</span><span class="r">Saved</span><span class="created">Created</span></div>
+      ${sessions.map(s => `
+      <div class="session-row" data-type="${s.type}" data-id="${s.id}">
+        <div class="name">
+          <span class="session-icon">${s.type === "chat" ? ICONS.chat : ICONS.api}</span>
+          <span class="t">${esc(s.name)}</span>
+          ${s.pinned ? '<span class="badge pinned">pinned</span>' : ""}${s.revoked ? '<span class="badge revoked">revoked</span>' : ""}
+        </div>
+        <div class="r hide-sm">${s.n_calls}</div>
+        <div class="r hide-sm">${fmt(s.total_cost)}</div>
+        <div class="r good">${fmt(s.cost_saved)}</div>
+        <div class="created">${s.created_at.slice(0, 10)}</div>
+      </div>`).join("")}`;
+
+    listEl.querySelectorAll(".session-row[data-type]").forEach(row => {
       row.onclick = () => {
         if (row.dataset.type === "chat") window.location.href = `/app?chat=${row.dataset.id}`;
         else window.location.href = `/sessions?api=${row.dataset.id}`;
@@ -152,14 +196,14 @@
 
     document.querySelector("#detail-table tbody").innerHTML = data.calls.map(c => `
       <tr>
-        <td class="mono" style="color:var(--text-muted)">${c.timestamp.slice(0, 19).replace("T", " ")}</td>
-        <td style="color:var(--text-muted)">${esc(c.difficulty || "-")}</td>
+        <td class="mono" style="color:var(--text-muted); padding-left:20px;">${c.timestamp.slice(0, 19).replace("T", " ")}</td>
+        <td>${c.difficulty ? `<span class="diff ${esc(c.difficulty)}">${esc(c.difficulty)}</span>` : "-"}</td>
         <td><span class="badge ${c.final_tier}">${esc(c.final_tier || "-")}</span></td>
-        <td class="mono">${fmt(c.cost)}</td>
-        <td class="mono" style="color:var(--good)">${fmt(Math.max(0, (c.baseline_cost ?? 0) - (c.cost ?? 0)))}</td>
+        <td class="num">${fmt(c.cost)}</td>
+        <td class="num" style="color:var(--good)">${fmt(Math.max(0, (c.baseline_cost ?? 0) - (c.cost ?? 0)))}</td>
         <td>${c.escalated ? '<span class="badge escalated">escalated</span>' : ""}</td>
       </tr>
-    `).join("") || '<tr><td colspan="6"><div class="empty-state">No calls yet with this key.</div></td></tr>';
+    `).join("") || '<tr><td colspan="6"><div class="empty-state"><b>No calls yet</b>Requests made with this key show up here.</div></td></tr>';
   }
 
   // --- new session menu ---
@@ -175,15 +219,19 @@
     window.location.href = `/app?chat=${id}`;
   };
 
-  document.getElementById("new-api-session-btn").onclick = async () => {
+  async function createApiSession() {
     const data = await api("/api/keys", { method: "POST", body: JSON.stringify({ name: null }) });
     const banner = document.getElementById("new-key-banner");
-    banner.innerHTML = `<div class="success-box">New API session key (shown once -- copy it now):
-      <span class="key mono">${esc(data.key)}</span>
-      Use it as <span class="mono">Authorization: Bearer ${esc(data.key_prefix)}...</span> against <span class="mono">/api/v1/route</span>.
-      Configure your models first at <a href="/settings">Settings</a> if you haven't.</div>`;
+    banner.innerHTML = `<div class="success-box"><b>New API session.</b> Copy the key now; it is shown only once.
+      <span class="key mono"><span>${esc(data.key)}</span><button class="ghost sm" id="copy-key">Copy</button></span>
+      Send it as <span class="mono">Authorization: Bearer ${esc(data.key_prefix)}...</span> to <span class="mono">/api/v1/route</span>,
+      with models you've calibrated under <a href="/models">Models</a>.</div>`;
+    document.getElementById("copy-key").onclick = async (e) => {
+      try { await navigator.clipboard.writeText(data.key); e.target.textContent = "Copied"; } catch { e.target.textContent = "Select and copy"; }
+    };
     loadOverview();
-  };
+  }
+  document.getElementById("new-api-session-btn").onclick = createApiSession;
 
   (async function init() {
     await initNav("sessions");

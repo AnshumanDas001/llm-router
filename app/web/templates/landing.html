@@ -4,116 +4,188 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ThriftLLM — route every prompt to the cheapest model that can handle it</title>
-<meta name="description" content="ThriftLLM classifies each prompt, sends it to the cheapest model tier that can handle it, verifies the answer, and escalates only when the check fails.">
+<meta name="description" content="ThriftLLM classifies each prompt, sends it to the cheapest model tier calibrated to handle it, verifies the answer, and escalates only when the check fails.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
 <style>
-  /* In-page nav links glide to their section rather than jumping; the
-     offset keeps the section title clear of the sticky header. */
   html { scroll-behavior: smooth; }
-  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
-  section[id] { scroll-margin-top: 84px; }
+  section[id] { scroll-margin-top: 80px; }
   body { overflow-x: hidden; }
   .page { position: relative; z-index: 1; }
-  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+  @media (max-width: 640px) { .wrap { padding: 0 18px; } }
 
   /* --- top bar --- */
   .top {
-    position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px);
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
-    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 20; backdrop-filter: blur(14px);
+    background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid var(--border);
   }
-  .top .wrap { display: flex; align-items: center; gap: 18px; height: 58px; }
-  .logo { font-weight: 700; font-size: 15px; letter-spacing: -0.02em; text-decoration: none; color: var(--text-primary); }
-  .logo .dot { color: var(--accent); }
-  .top nav { margin-left: auto; display: flex; align-items: center; gap: 20px; }
-  .top nav a { color: var(--text-secondary); text-decoration: none; font-size: 13px; }
-  .top nav a:hover { color: var(--text-primary); }
-  @media (max-width: 700px) { .top nav .hide-sm { display: none; } }
+  .top .wrap { display: flex; align-items: center; gap: 18px; height: 62px; }
+  .logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15.5px; letter-spacing: -0.02em; color: var(--text-primary); }
+  .logo .dot { color: var(--accent-ink); }
+  .top nav { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .top nav a.lnk { color: var(--text-secondary); font-size: 13px; padding: 7px 10px; border-radius: 8px; }
+  .top nav a.lnk:hover { color: var(--text-primary); background: var(--surface-2); }
+  @media (max-width: 760px) { .top nav .hide-sm { display: none; } }
 
   /* --- hero --- */
-  .hero { padding: 92px 0 64px; text-align: center; }
+  .hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 56px; align-items: center; padding: 84px 0 56px; }
+  @media (max-width: 960px) { .hero { grid-template-columns: minmax(0, 1fr); gap: 40px; padding-top: 56px; } }
   .eyebrow {
-    display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px; font-family: "IBM Plex Mono", monospace;
-    color: var(--text-secondary); border: 1px solid var(--border); background: var(--surface-1);
-    border-radius: 20px; padding: 5px 13px; margin-bottom: 26px;
+    display: inline-flex; align-items: center; gap: 8px; font-size: 11.5px; font-family: var(--font-mono);
+    color: var(--text-secondary); border: 1px solid var(--border-strong); background: var(--surface-1);
+    border-radius: 999px; padding: 5px 13px; margin-bottom: 24px;
   }
   h1 {
-    font-size: clamp(34px, 6vw, 58px); line-height: 1.05; letter-spacing: -0.035em; font-weight: 700;
-    margin: 0 0 20px; text-wrap: balance;
+    font-size: clamp(38px, 5.6vw, 64px); line-height: 1.02; letter-spacing: -0.045em; font-weight: 700;
+    margin: 0 0 22px; text-wrap: balance;
   }
-  h1 .muted { color: var(--text-muted); }
-  .lede { font-size: clamp(15px, 2vw, 17.5px); color: var(--text-secondary); max-width: 60ch; margin: 0 auto 34px; line-height: 1.6; }
-
-  .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
-  .cta {
-    display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; text-decoration: none;
-    border-radius: 12px; padding: 13px 20px; border: 1px solid var(--border-strong); min-width: 208px;
-    text-align: left; transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  h1 .grad {
+    background: linear-gradient(100deg, #9cc1ff 0%, #b49bff 45%, #5fe0ae 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
   }
-  .cta:hover { transform: translateY(-2px); border-color: var(--accent); }
-  .cta .label { font-size: 14px; font-weight: 650; color: var(--text-primary); }
-  .cta .sub { font-size: 11.5px; color: var(--text-muted); font-family: "IBM Plex Mono", monospace; }
-  .cta.primary { background: var(--accent); border-color: var(--accent); }
-  .cta.primary .label { color: #001018; }
-  .cta.primary .sub { color: rgba(0, 16, 24, 0.7); }
-  .cta.primary:hover { background: #4d95ea; }
-  .cta.ghost { background: var(--surface-1); }
+  .lede { font-size: clamp(15.5px, 1.6vw, 17.5px); color: var(--text-secondary); max-width: 54ch; margin: 0 0 30px; line-height: 1.65; }
+  .cta-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .cta-note { font-size: 12px; color: var(--text-muted); margin-top: 14px; font-family: var(--font-mono); }
 
-  /* --- headline metrics --- */
-  .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 56px; }
-  @media (max-width: 640px) { .metrics { grid-template-columns: 1fr; } }
-  .metric { background: var(--surface-1); padding: 22px 18px; text-align: left; }
-  .metric .n { font-size: 30px; font-weight: 700; font-family: "IBM Plex Mono", monospace; letter-spacing: -0.03em; }
+  /* live routing panel */
+  .live {
+    position: relative; border-radius: 18px; padding: 1px;
+    background: linear-gradient(140deg, rgba(75,142,255,0.45), rgba(122,92,255,0.25) 40%, rgba(35,196,138,0.35));
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  }
+  .live-inner { background: var(--surface-1); border-radius: 17px; padding: 20px; }
+  .live-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .live-head .t { font-size: 12px; color: var(--text-muted); display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); }
+  .live-prompt {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 13px 14px;
+    font-size: 14px; line-height: 1.5; min-height: 70px; color: var(--text-primary); transition: opacity 0.3s ease;
+  }
+  .live-steps { display: flex; align-items: center; gap: 8px; margin: 14px 0; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+  .live-steps .ms { font-family: var(--font-mono); }
+  .lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .lane {
+    border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; background: var(--surface-2);
+    transition: border-color 0.35s ease, box-shadow 0.35s ease, opacity 0.35s ease, transform 0.35s ease; opacity: 0.55;
+  }
+  .lane .m { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); margin-top: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lane .q { font-family: var(--font-mono); font-size: 12px; margin-top: 6px; color: var(--text-secondary); }
+  .lane.on { opacity: 1; transform: translateY(-2px); }
+  .lane.cheap.on { border-color: rgba(75,142,255,0.7); box-shadow: 0 0 0 3px var(--cheap-soft); }
+  .lane.mid.on { border-color: rgba(242,121,61,0.7); box-shadow: 0 0 0 3px var(--mid-soft); }
+  .lane.frontier.on { border-color: rgba(35,196,138,0.7); box-shadow: 0 0 0 3px var(--frontier-soft); }
+  .live-foot { margin-top: 14px; display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
+  .live-foot b { color: var(--text-primary); font-family: var(--font-mono); font-weight: 600; }
+  @media (max-width: 560px) {
+    .live-inner { padding: 14px; }
+    .lane { padding: 9px; }
+    .lane .m { display: none; }
+    .lane .q { font-size: 11px; }
+    .live-steps span:last-child { display: none; }
+    .metric .n { font-size: 26px; }
+    .final-inner { padding: 32px 22px; }
+  }
+  .live-dots { display: flex; gap: 5px; }
+  .live-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--surface-3); transition: background 0.3s ease; cursor: pointer; }
+  .live-dots i.on { background: var(--accent); }
+
+  /* --- metrics --- */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+  @media (max-width: 860px) { .metrics { grid-template-columns: 1fr 1fr; } }
+  .metric { background: var(--surface-1); padding: 22px 20px; }
+  .metric .n { font-size: 32px; font-weight: 600; font-family: var(--font-mono); letter-spacing: -0.04em; }
   .metric .n.good { color: var(--good); }
-  .metric .k { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
+  .metric .n small { font-size: 15px; color: var(--text-muted); letter-spacing: -0.01em; }
+  .metric .k { font-size: 12.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
 
-  /* --- numbered sections, px0-style --- */
-  section.block { padding: 72px 0; border-top: 1px solid var(--border); }
-  .block-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
-  .block-num { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--accent); font-weight: 600; }
-  .block-head h2 { font-size: clamp(21px, 3vw, 27px); margin: 0; font-weight: 650; letter-spacing: -0.02em; }
-  .block-sub { color: var(--text-secondary); font-size: 14.5px; line-height: 1.65; max-width: 68ch; margin: 0 0 26px; }
-  .block-sub + .block-sub { margin-top: -14px; }
+  /* --- sections --- */
+  section.block { padding: 96px 0 0; }
+  .block-head { max-width: 720px; margin-bottom: 30px; }
+  .kicker { font-family: var(--font-mono); font-size: 12px; color: var(--accent-ink); margin-bottom: 12px; display: block; }
+  .block-head h2 { font-size: clamp(26px, 3.4vw, 38px); margin: 0 0 14px; font-weight: 650; letter-spacing: -0.035em; line-height: 1.12; }
+  .block-head p { color: var(--text-secondary); font-size: 15.5px; line-height: 1.7; margin: 0; }
+  .block-head p + p { margin-top: 12px; }
 
-  figure { margin: 26px 0 0; }
-  figure img { width: 100%; height: auto; display: block; }
-  figcaption { color: var(--text-muted); font-size: 12px; margin-top: 10px; line-height: 1.6; }
+  /* routing matrix */
+  .matrix td, .matrix th { text-align: center; }
+  .matrix td:first-child, .matrix th:first-child { text-align: left; padding-left: 22px; }
+  .matrix td:last-child, .matrix th:last-child { padding-right: 22px; }
+  .matrix .cell { font-family: var(--font-mono); font-size: 13.5px; padding: 5px 10px; border-radius: 8px; display: inline-block; min-width: 64px; }
+  .matrix .cell.below { color: var(--warning); }
+  .matrix .cell.start { background: var(--good-soft); color: var(--good); box-shadow: 0 0 0 1px rgba(47, 198, 122, 0.4) inset; font-weight: 600; }
+  .matrix .cell.na { color: var(--text-muted); }
+  .matrix tr.expert td { background: rgba(255, 122, 168, 0.04); }
+  .matrix-note { display: flex; gap: 18px; flex-wrap: wrap; padding: 14px 22px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+  .matrix-note .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin-top: 24px; }
-  .feat { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 17px; }
-  .feat h3 { font-size: 13.5px; margin: 0 0 6px; font-weight: 650; }
-  .feat p { font-size: 12.5px; color: var(--text-muted); margin: 0; line-height: 1.6; }
-  .feat .tag { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--accent); }
-
-  .flow { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; margin-top: 24px; }
-  .step { flex: 1 1 170px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 15px; }
-  .step .i { font-family: "IBM Plex Mono", monospace; font-size: 10.5px; color: var(--text-muted); }
-  .step h4 { font-size: 13px; margin: 5px 0 5px; font-weight: 650; }
-  .step p { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.55; }
-
-  pre.code {
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 15px 17px;
-    overflow-x: auto; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; line-height: 1.65;
-    color: var(--text-secondary); margin: 22px 0 0;
+  /* flow */
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; counter-reset: step; }
+  @media (max-width: 960px) { .flow { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .flow { grid-template-columns: 1fr; } }
+  .fstep { position: relative; background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 18px 16px; }
+  .fstep .i { font-family: var(--font-mono); font-size: 11px; color: var(--accent-ink); }
+  .fstep h4 { font-size: 14.5px; margin: 8px 0 6px; font-weight: 650; }
+  .fstep p { font-size: 12.5px; color: var(--text-muted); margin: 0; line-height: 1.6; }
+  .fstep .cost { margin-top: 12px; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-secondary); }
+  @media (min-width: 961px) {
+    .fstep:not(:last-child)::after {
+      content: ""; position: absolute; right: -9px; top: 50%; width: 8px; height: 8px; z-index: 2;
+      border-top: 1.5px solid var(--border-strong); border-right: 1.5px solid var(--border-strong); transform: translateY(-50%) rotate(45deg);
+    }
   }
-  pre.code .c { color: var(--text-muted); }
-  pre.code .k { color: var(--series-cheap); }
 
-  footer { border-top: 1px solid var(--border); padding: 34px 0 48px; color: var(--text-muted); font-size: 12.5px; }
-  footer .wrap { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
-  footer a { color: var(--text-secondary); text-decoration: none; }
+  details.more { margin-top: 14px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; }
+  details.more summary { cursor: pointer; padding: 15px 18px; font-weight: 600; font-size: 14px; list-style: none; display: flex; align-items: center; gap: 10px; }
+  details.more summary::-webkit-details-marker { display: none; }
+  details.more summary::before { content: "+"; font-family: var(--font-mono); color: var(--accent-ink); width: 14px; }
+  details.more[open] summary::before { content: "\2212"; }
+  details.more .body { padding: 0 18px 18px 42px; color: var(--text-secondary); font-size: 13.5px; line-height: 1.7; }
+  details.more .body p { margin: 0 0 10px; }
+  details.more table { margin-top: 6px; font-size: 12.5px; }
+
+  /* results */
+  .results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  @media (max-width: 900px) { .results { grid-template-columns: 1fr; } }
+  .res { background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; }
+  .res.win { border-color: rgba(35, 196, 138, 0.45); background: linear-gradient(180deg, rgba(35,196,138,0.07), var(--surface-1) 60%); }
+  .res .tag { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .res h3 { font-size: 16px; margin: 6px 0 4px; letter-spacing: -0.01em; }
+  .res .sub { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; margin: 0 0 16px; }
+  .bars { display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
+  .bar-row { display: grid; grid-template-columns: 74px 1fr 64px; gap: 10px; align-items: center; font-size: 12px; }
+  .bar-row .track { height: 9px; background: var(--surface-3); border-radius: 6px; overflow: hidden; }
+  .bar-row .track i { display: block; height: 100%; border-radius: 6px; }
+  .bar-row .v { text-align: right; font-family: var(--font-mono); }
+  .res .verdict { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; }
+
+  figure { margin: 0; }
+  figure img { width: 100%; height: auto; display: block; }
+  .fig-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px; padding: 22px; }
+  figcaption { color: var(--text-muted); font-size: 12px; margin-top: 12px; line-height: 1.6; }
+
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 960px) { .cards { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+  .feat { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+  .feat .ic { width: 32px; height: 32px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+  .feat .ic svg { width: 16px; height: 16px; }
+  .feat h3 { font-size: 14px; margin: 0 0 6px; font-weight: 650; }
+  .feat p { font-size: 12.5px; color: var(--text-muted); margin: 0; line-height: 1.6; }
+
+  .final {
+    margin: 104px 0 0; border-radius: 22px; padding: 1px;
+    background: linear-gradient(120deg, rgba(75,142,255,0.5), rgba(122,92,255,0.3), rgba(35,196,138,0.45));
+  }
+  .final-inner { border-radius: 21px; background: radial-gradient(ellipse at top left, rgba(75,142,255,0.12), transparent 60%), var(--surface-1); padding: 48px 40px; display: flex; align-items: center; justify-content: space-between; gap: 28px; flex-wrap: wrap; }
+  .final h2 { font-size: clamp(24px, 3vw, 32px); letter-spacing: -0.03em; margin: 0 0 8px; }
+  .final p { color: var(--text-secondary); margin: 0; font-size: 15px; max-width: 52ch; line-height: 1.6; }
+
+  footer { border-top: 1px solid var(--border); margin-top: 96px; padding: 30px 0 44px; color: var(--text-muted); font-size: 12.5px; }
+  footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+  footer a { color: var(--text-secondary); }
   footer a:hover { color: var(--text-primary); }
   footer .spacer { margin-left: auto; }
-
-  .callout-band {
-    margin-top: 26px; padding: 20px 22px; border: 1px solid var(--border);
-    border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface-1);
-  }
-  .callout-band h4 { margin: 0 0 10px; font-size: 14.5px; font-weight: 650; }
-  .callout-band p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.65; color: var(--text-secondary); }
-  .callout-band p:last-child { margin-bottom: 0; }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
 </head>
@@ -129,195 +201,319 @@
 <div class="page">
   <div class="top">
     <div class="wrap">
-      <a href="/" class="logo">Thrift<span class="dot">LLM</span></a>
+      <a href="/" class="logo"><span class="brand-mark"></span><span>Thrift<span class="dot">LLM</span></span></a>
       <nav>
-        <a href="#how" class="hide-sm">How it works</a>
-        <a href="#numbers" class="hide-sm">Numbers</a>
-        <a href="/guide" class="hide-sm">Docs</a>
-        <a href="/app">Sign in</a>
+        <a href="#routing" class="lnk hide-sm">How it routes</a>
+        <a href="#frontier" class="lnk hide-sm">Results</a>
+        <a href="/demo" class="lnk hide-sm">Explorer</a>
+        <a href="/guide" class="lnk hide-sm">Docs</a>
+        <a href="/app" class="btn ghost sm">Sign in</a>
       </nav>
     </div>
   </div>
 
   <div class="wrap">
     <header class="hero">
-      <div class="eyebrow animate-in"><span class="live-dot"></span> classify · route · verify · escalate</div>
-      <h1 class="animate-in stagger-1">Most of your LLM spend<br><span class="muted">buys nothing.</span></h1>
-      <p class="lede animate-in stagger-2">
-        Plenty of prompts don't need your most expensive model &mdash; but you pay for it anyway.
-        ThriftLLM reads each prompt, sends it to the cheapest model that can handle it, checks the
-        answer, and moves up a tier only when that check fails.
-      </p>
-      <div class="cta-row animate-in stagger-3">
-        <a class="cta primary" href="/try">
-          <span class="label">Try the demo</span>
-          <span class="sub">3 prompts · no signup</span>
-        </a>
-        <a class="cta ghost" href="/app">
-          <span class="label">Try it out</span>
-          <span class="sub">full app · free account</span>
-        </a>
+      <div>
+        <div class="eyebrow animate-in"><span class="live-dot"></span> classify · route · verify · escalate</div>
+        <h1 class="animate-in stagger-1">Most of your LLM spend <span class="grad">buys nothing.</span></h1>
+        <p class="lede animate-in stagger-2">
+          Plenty of prompts don't need your most expensive model, but you pay for it anyway.
+          ThriftLLM reads each prompt, starts it on the cheapest model calibrated to handle it,
+          checks the answer, and moves up a tier only when the check fails. Competition-grade
+          maths goes straight to a model that thinks.
+        </p>
+        <div class="cta-row animate-in stagger-3">
+          <a class="btn lg" href="/try">Try the demo &rarr;</a>
+          <a class="btn ghost lg" href="/demo">Explore the routing</a>
+        </div>
+        <div class="cta-note animate-in stagger-4">3 prompts free, no signup &middot; 10 a day with an account</div>
       </div>
 
-      <div class="metrics animate-in stagger-4">
-        <div class="metric">
-          <div class="n good">41%</div>
-          <div class="k">cheaper than sending every query to the mid-tier model &mdash; and 82% under the frontier &mdash; over 116 routed queries, every graded answer correct</div>
-        </div>
-        <div class="metric">
-          <div class="n">2-stage</div>
-          <div class="k">fallback verification. An ML confidence gate clears high-certainty cheap answers at zero cost &mdash; 0 of 15 wrong, held out &mdash; and a $0.00004 LLM judge adjudicates the rest, catching 94% of the bad ones</div>
-        </div>
-        <div class="metric">
-          <div class="n">~7ms</div>
-          <div class="k">to classify a prompt, before any model is called. No LLM in the routing decision</div>
+      <div class="live animate-in stagger-2" aria-label="Live routing examples">
+        <div class="live-inner">
+          <div class="live-head">
+            <span class="t"><span class="live-dot"></span>live from the router</span>
+            <div class="live-dots" id="live-dots"></div>
+          </div>
+          <div class="live-prompt" id="live-prompt">&nbsp;</div>
+          <div class="live-steps">
+            <span>classified</span><span id="live-band"><span class="diff easy">&hellip;</span></span>
+            <span>in <span class="ms" id="live-ms">&ndash;</span></span>
+            <span>&rarr; starts at the cheapest tier that clears 80%</span>
+          </div>
+          <div class="lanes" id="lanes">
+            <div class="lane cheap" data-tier="cheap"><span class="badge cheap">cheap</span><div class="m" data-m>&nbsp;</div><div class="q" data-q>&nbsp;</div></div>
+            <div class="lane mid" data-tier="mid"><span class="badge mid">mid</span><div class="m" data-m>&nbsp;</div><div class="q" data-q>&nbsp;</div></div>
+            <div class="lane frontier" data-tier="frontier"><span class="badge frontier">frontier</span><div class="m" data-m>&nbsp;</div><div class="q" data-q>&nbsp;</div></div>
+          </div>
+          <div class="live-foot">
+            <span>calibrated cost per answer <b id="live-cost">&ndash;</b></span>
+            <span>vs frontier for everything <b id="live-base">&ndash;</b></span>
+          </div>
         </div>
       </div>
     </header>
-  </div>
 
-  <div class="wrap">
-    <section class="block reveal" id="problem">
-      <div class="block-head"><span class="block-num">01</span><h2>The cheap model is fine, until it isn't</h2></div>
-      <p class="block-sub">
-        Calibrated on the eval set, an 8B model is right about nine times in ten &mdash; and you can't
-        tell which answer is the tenth from the outside. That gap is the entire opportunity: one
-        model forces you to pay 100&times; more for "what is 2+2", or ship the wrong answer one time
-        in ten on the questions that actually matter. Measured on 263 questions from MATH-500 and
-        BIG-Bench Hard, the mid tier reaches 95.8% &mdash; so the cheap tier's tenth answer is most
-        of the game, and catching it is what the verifier is for. The rest is competition maths,
-        where mid drops to 7 in 10 and the router starts at the frontier instead.
-      </p>
-      <figure>
-        <img src="/static/charts/quality-by-difficulty.svg" alt="Answer quality by difficulty. The cheap tier scores 0.89 on easy, 0.95 on medium, 0.81 on hard and 0 on expert. Mid scores 1.0 on the first three and 0.70 on expert (AIME), below the 0.80 threshold." loading="lazy">
-        <figcaption>Measured, not illustrative. The dashed line is the 0.80 threshold a model has to clear on a difficulty band before ThriftLLM will start questions there.</figcaption>
-      </figure>
+    <div class="metrics animate-in stagger-4">
+      <div class="metric"><div class="n good">41%</div><div class="k">cheaper than sending everything to the mid tier, over 116 routed queries, every graded answer correct</div></div>
+      <div class="metric"><div class="n good">82%</div><div class="k">cheaper than sending everything to the frontier on the same queries</div></div>
+      <div class="metric"><div class="n">9<small>/10</small></div><div class="k">AIME 2025 problems right with the thinking frontier behind mid. Mid alone gets 7</div></div>
+      <div class="metric"><div class="n">~7<small>ms</small></div><div class="k">to decide where a prompt goes. No model call in the routing decision</div></div>
+    </div>
+
+    <section class="block reveal" id="routing">
+      <div class="block-head">
+        <span class="kicker">01 &middot; how it routes</span>
+        <h2>Four difficulty bands. Three tiers. Every start is measured.</h2>
+        <p>Each prompt is matched against 176 labelled questions with sentence embeddings, which places
+          it in a band. Each tier has a calibrated score on every band, and a band starts at the cheapest
+          tier that clears 80%. This table is the router's live configuration, not an illustration.</p>
+      </div>
+      <div class="card flush">
+        <div class="table-wrap"><table class="matrix" id="matrix"><thead></thead><tbody><tr><td colspan="5"><div class="empty-state">Loading the routing map&hellip;</div></td></tr></tbody></table></div>
+        <div class="matrix-note">
+          <span><span class="sw" style="background:var(--good-soft); box-shadow:0 0 0 1px rgba(47,198,122,0.5) inset"></span>where the band starts</span>
+          <span><span class="sw" style="background:var(--warning)"></span>below the 80% floor</span>
+          <span>easy / medium / hard: the 116-question eval set &middot; expert: AIME 2025 &middot; n/m: not measured on a fair sample</span>
+        </div>
+      </div>
+
+      <div style="height:14px"></div>
+      <div class="flow">
+        <div class="fstep"><span class="i">01</span><h4>Classify</h4><p>Embedding match against labelled questions. An expert gate catches competition maths first.</p><div class="cost">~7ms &middot; $0</div></div>
+        <div class="fstep"><span class="i">02</span><h4>Route</h4><p>Start at the cheapest tier whose calibrated score on that band clears 80%.</p><div class="cost">derived, not hardcoded</div></div>
+        <div class="fstep"><span class="i">03</span><h4>Score</h4><p>A learned gate reads the cheap model's own token confidence and estimates P(correct).</p><div class="cost">free metadata</div></div>
+        <div class="fstep"><span class="i">04</span><h4>Verify</h4><p>Confident answers ship. The rest get a verdict from a small judge model.</p><div class="cost">$0.00004 a verdict</div></div>
+        <div class="fstep"><span class="i">05</span><h4>Escalate</h4><p>Only on a failed check. 26 of 116 queries escalated; 90 were answered where they started.</p><div class="cost">22% of traffic</div></div>
+      </div>
+
+      <details class="more">
+        <summary>Why a learned scorer <em>and</em> an LLM judge</summary>
+        <div class="body">
+          <p>FrugalGPT replaces the LLM judge with a small learned model. We built that, then measured it
+            against the judge on the same answers: the judge catches <strong>94%</strong> of wrong cheap
+            answers, the scorer about <strong>half</strong>. So the scorer never replaces the judge; it
+            decides when the judge is needed. Its accept threshold sits at the highest band where
+            <strong>zero</strong> wrong answers slipped through held-out testing (0 of 15 at P &ge; 0.95).</p>
+          <p>What that saves depends on what a verdict costs relative to the answer it protects. Here the
+            judge is 2% of a mid-tier answer, so the gate trims a few percent. With the judge on the tier
+            above, where a verdict costs about what the next answer would, the same code decides whether a
+            cascade pays for itself at all.</p>
+        </div>
+      </details>
     </section>
 
-    <section class="block reveal" id="how">
-      <div class="block-head"><span class="block-num">02</span><h2>How a prompt moves through it</h2></div>
-      <p class="block-sub">
-        The routing decision costs nothing: difficulty is classified with sentence embeddings before
-        any model is called. Only the cheapest tier's answer gets a real judge call &mdash; from a
-        small model, not the expensive one &mdash; and later tiers fail rarely enough that judging
-        them cost more than it saved.
-      </p>
-      <div class="flow">
-        <div class="step"><div class="i">01</div><h4>Classify</h4><p>Embedding match against a labelled set decides easy, medium or hard. ~7ms, no model call.</p></div>
-        <div class="step"><div class="i">02</div><h4>Route</h4><p>Each difficulty starts at the cheapest tier whose calibrated score clears 0.80 on it. The map is derived, not hardcoded.</p></div>
-        <div class="step"><div class="i">03</div><h4>Score</h4><p>A learned scorer reads the cheap model's own token confidence &mdash; free, it's metadata on the answer already generated &mdash; and outputs P(correct).</p></div>
-        <div class="step"><div class="i">04</div><h4>Verify</h4><p>Above the confidence threshold the answer ships as-is. Everything else pays $0.00004 for a verdict from a small judge model.</p></div>
-        <div class="step"><div class="i">05</div><h4>Escalate</h4><p>Only when the check fails. 26 of 116 queries escalated; the other 90 were answered where they started.</p></div>
+    <section class="block reveal" id="frontier">
+      <div class="block-head">
+        <span class="kicker">02 &middot; does the frontier earn its slot?</span>
+        <h2>Same model, thinking off and on. It took three attempts to find where that matters.</h2>
+        <p>Mid and frontier are both Gemini 3.5 Flash; only the frontier is allowed to think. On every
+          everyday question they score the same, so for a long time the router never reached the
+          frontier at all. These are the sets we tried, in order.</p>
       </div>
-      <div class="callout-band">
-        <h4>Why a scorer <em>and</em> a judge</h4>
-        <p>
-          FrugalGPT's idea is to replace the LLM judge with a small learned model. We built that, then
-          measured it against the judge on the same answers: the judge catches <strong>94%</strong> of
-          wrong cheap answers, the scorer about <strong>half</strong>. So the scorer never replaces the
-          judge &mdash; it decides when the judge is <em>needed</em>. The accept threshold is set at the
-          highest band where <strong>zero</strong> wrong answers slipped through in held-out testing
-          (0 of 15 at P&nbsp;&ge;&nbsp;0.95); below it, the judge rules.
-        </p>
-        <p>
-          What that saves depends entirely on what a verdict costs relative to the answer it protects.
-          Here the judge is 2% of a mid-tier answer, so the gate trims a few percent of verifications.
-          Point the judge at the tier above instead &mdash; where a verdict costs about what the next
-          answer would &mdash; and the same code is the difference between a cascade that pays for
-          itself and one that ties its own mid tier. We measured both.
-        </p>
+      <div class="results">
+        <div class="res">
+          <span class="tag">attempt 1 &middot; 263 questions</span>
+          <h3>MATH-500 + BIG-Bench Hard</h3>
+          <p class="sub">Benchmarks built to be hard. Mid writes its working out in the answer, which is all BBH rewards.</p>
+          <div class="bars">
+            <div class="bar-row"><span class="badge mid">mid</span><span class="track"><i style="width:95.8%; background:var(--series-mid)"></i></span><span class="v">95.8%</span></div>
+            <div class="bar-row"><span class="badge frontier">+ think</span><span class="track"><i style="width:96.6%; background:var(--series-frontier)"></i></span><span class="v">96.6%</span></div>
+          </div>
+          <div class="verdict">+0.8 points for +23% cost. Thinking fixed 2 of mid's 11 misses.</div>
+        </div>
+        <div class="res">
+          <span class="tag">attempt 2 &middot; 25 generated puzzles</span>
+          <h3>Puzzles that need search</h3>
+          <p class="sub">Countdown, knights and knaves, logic grids, shortest paths. Each brute-forced to one answer.</p>
+          <div class="bars">
+            <div class="bar-row"><span class="badge mid">mid</span><span class="track"><i style="width:100%; background:var(--series-mid)"></i></span><span class="v">25/25</span></div>
+            <div class="bar-row"><span class="badge cheap">cheap</span><span class="track"><i style="width:0%"></i></span><span class="v">&ndash;</span></div>
+          </div>
+          <div class="verdict">With thinking off, mid still searches, just out loud. Nothing to separate.</div>
+        </div>
+        <div class="res win">
+          <span class="tag">attempt 3 &middot; AIME 2025</span>
+          <h3>Competition maths</h3>
+          <p class="sub">Mid's misses were real wrong answers (88 for 81, 73 for 60). Thinking spent 13&ndash;17k tokens fixing two.</p>
+          <div class="bars">
+            <div class="bar-row"><span class="badge cheap">cheap</span><span class="track"><i style="width:0%"></i></span><span class="v">0/10</span></div>
+            <div class="bar-row"><span class="badge mid">mid</span><span class="track"><i style="width:70%; background:var(--series-mid)"></i></span><span class="v">7/10</span></div>
+            <div class="bar-row"><span class="badge frontier">+ think</span><span class="track"><i style="width:90%; background:var(--series-frontier)"></i></span><span class="v">9/10</span></div>
+          </div>
+          <div class="verdict"><strong>Mid falls under the floor.</strong> Expert questions now start at the frontier, on ten problems' worth of evidence.</div>
+        </div>
       </div>
-      <figure>
-        <img src="/static/charts/cost-vs-quality.svg" alt="Cost against quality per tier. Cheap costs $0.00002 at 6.1s, mid costs $0.00192 at 2.7s, the reasoning frontier costs $0.00619 and takes 103s." loading="lazy">
-      </figure>
+
+      <details class="more">
+        <summary>Four grading bugs, and why every number here is a lower bound</summary>
+        <div class="body">
+          <p>Each made a model look worse than it was, and each was caught by reading answers rather than trusting the score.</p>
+          <div class="table-wrap"><table>
+            <thead><tr><th>the grader wanted</th><th>the model said</th><th>damage</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">(B)</td><td class="mono">(B) heptagon</td><td>scored 2/17 on a task it got 11/17 right</td></tr>
+              <tr><td class="mono">syndrome therefrom</td><td class="mono">syndrome, therefrom</td><td>scored 0/5 on a task it got 5/5 right</td></tr>
+              <tr><td class="mono">hypertext transfer protocol</td><td class="mono">**H**yper**T**ext ...</td><td>marked wrong for its bold</td></tr>
+              <tr><td class="mono">a Countdown expression</td><td class="mono">(25 * 7) + 75 + 2 + 1</td><td>0/6 on a task it got 6/6: stripping <code>*</code> as markdown deleted the multiplication</td></tr>
+            </tbody>
+          </table></div>
+          <p style="margin-top:12px;">The fourth nearly recorded "mid fails every Countdown puzzle" as the result that justified a frontier band.</p>
+        </div>
+      </details>
     </section>
 
     <section class="block reveal" id="numbers">
-      <div class="block-head"><span class="block-num">03</span><h2>What it actually saved</h2></div>
-      <p class="block-sub">
-        Every number on this page comes out of the project's own eval runs and regenerates with the
-        data &mdash; there are no illustrative figures here. Including the uncomfortable history: the
-        first stack tried <em>tied</em> its own mid-tier model exactly, because the judge was the mid
-        model and verification cost what it saved. Two changes &mdash; a cheap tier that clears the
-        bar on more questions, and a judge 50&times; cheaper than a mid answer &mdash; turned that
-        tie into 41% off with every graded answer correct. The README has the arithmetic.
-      </p>
-      <figure>
-        <img src="/static/charts/cascade-savings.svg" alt="Cascade cost of $0.13214 versus $0.73475 frontier-only and $0.22548 mid-only, across 116 routed queries." loading="lazy">
-      </figure>
-
-      <div class="callout-band">
-        <h4>What a harder benchmark showed &mdash; including where we were wrong</h4>
-        <p>
-          The original 116-query set graded &ldquo;hard&rdquo; against a 3B local model, so both paid
-          tiers scored 1.00 and it could not see any difference between them. <strong>263
-          questions</strong> from MATH-500 level&nbsp;5 and 14 BIG-Bench Hard task families put the
-          mid tier at <strong>95.8%</strong>, and the thinking frontier added just
-          <strong>+0.8 points for +23% cost</strong>. Generated logic puzzles were no better:
-          mid solved <strong>25 of 25</strong>, because with thinking off it still reasons in its
-          answer. <strong>AIME 2025</strong> separated them: mid got <strong>7 of 10</strong>, and
-          thinking fixed 2 of its 3 misses. That is now its own difficulty band, and it is the one
-          band where the router starts at the frontier.
-        </p>
-        <p>
-          Getting there meant finding four bugs in our own grader, each of which made a model look
-          worse than it was &mdash; the worst scored a model <strong>2/17</strong> on a task it had
-          actually got 11/17 right, because it answered &ldquo;(B) heptagon&rdquo; where the key said
-          &ldquo;(B)&rdquo;. Fixing it moved the mid tier from 83.2% to 97.5% and retired a
-          &ldquo;the frontier rescued this&rdquo; result that was really a mis-grade. Every accuracy
-          number here is a lower bound, and all three bugs were caught by reading answers rather than
-          trusting the score.
-        </p>
+      <div class="block-head">
+        <span class="kicker">03 &middot; what it saved</span>
+        <h2>41% under the mid tier, and it took two stacks to get there.</h2>
+        <p>The first stack tied its own mid-tier model exactly: the judge <em>was</em> the mid model, so
+          verification cost what it saved. Two changes turned the tie into a saving: a cheap tier that clears
+          the bar on more questions, and a judge 50&times; cheaper than a mid answer.</p>
+      </div>
+      <div class="fig-card">
+        <figure>
+          <img src="/static/charts/cascade-savings.svg" alt="Cascade cost of $0.13214 versus $0.73475 frontier-only and $0.22548 mid-only, across 116 routed queries.">
+          <figcaption>Measured on 116 routed queries; regenerated from the eval database, not drawn by hand.
+            The run predates the expert band.</figcaption>
+        </figure>
       </div>
     </section>
 
     <section class="block reveal" id="byom">
-      <div class="block-head"><span class="block-num">04</span><h2>Bring your own models</h2></div>
-      <p class="block-sub">
-        Connect a provider, list its models, and calibrate them. Calibration runs a stratified set of
-        objectively-scoreable questions and scores each difficulty band separately &mdash; those
-        scores <em>are</em> the routing map. Change the models and the map re-derives itself.
-      </p>
-      <div class="cards">
-        <div class="feat"><span class="tag">per model</span><h3>Calibrate once</h3><p>Measurements belong to the model, not the slot. Use the same model as cheap in one session and mid in another without re-measuring.</p></div>
-        <div class="feat"><span class="tag">your choice</span><h3>Keys stay yours</h3><p>By default a provider key lives in your browser for the session and is never written to disk. Opt in and it's encrypted at rest instead.</p></div>
-        <div class="feat"><span class="tag">per session</span><h3>Pinned models</h3><p>A chat freezes the three models it was created with, so its history stays coherent when you reconfigure later.</p></div>
-        <div class="feat"><span class="tag">OpenAI-shaped</span><h3>One endpoint</h3><p>POST your messages and a tier&rarr;model map. You get a normal completion back, plus what it routed to and what it saved.</p></div>
+      <div class="block-head">
+        <span class="kicker">04 &middot; bring your own models</span>
+        <h2>Your providers, your keys, a routing map derived from your numbers.</h2>
+        <p>Connect a provider, list its models, calibrate each on 24 graded questions. Those scores are the
+          routing map. Change the models and it re-derives itself.</p>
       </div>
-      <pre class="code"><span class="c"># route a request through your own models</span>
+      <div class="cards">
+        <div class="feat"><div class="ic"><svg viewBox="0 0 16 16" fill="none"><path d="M3 8.5 6.5 12 13 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div><h3>Calibrate once</h3><p>Scores belong to the model, not the slot. Use it as cheap in one session and mid in another.</p></div>
+        <div class="feat"><div class="ic"><svg viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" stroke-width="1.3"/></svg></div><h3>Keys stay yours</h3><p>A provider key lives in your browser for the session, or encrypted at rest if you opt in.</p></div>
+        <div class="feat"><div class="ic"><svg viewBox="0 0 16 16" fill="none"><path d="M8 2.2 13.5 5 8 7.8 2.5 5 8 2.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M2.5 8.2 8 11l5.5-2.8M2.5 11.3 8 14.1l5.5-2.8" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div><h3>Pinned per session</h3><p>A chat keeps the models it was created with, so its history stays coherent.</p></div>
+        <div class="feat"><div class="ic"><svg viewBox="0 0 16 16" fill="none"><path d="M5.5 4 2 8l3.5 4M10.5 4 14 8l-3.5 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></div><h3>OpenAI-shaped</h3><p>One endpoint. A normal completion back, plus where it routed and what it saved.</p></div>
+      </div>
+      <div class="code-block" style="margin-top:12px;"><pre><span class="c"># route a request through your own models</span>
 curl -X POST https://your-host/api/v1/route \
   -H <span class="k">"Authorization: Bearer rtr_your_key"</span> \
   -d '{
     "messages": [{"role": "user", "content": "What is 2+2?"}],
-    "models": {"cheap": "groq/openai/gpt-oss-20b", "frontier": "openai/gpt-4o"}
-  }'</pre>
+    "models": {"cheap": <span class="s">"groq/openai/gpt-oss-20b"</span>, "frontier": <span class="s">"openai/gpt-5"</span>}
+  }'</pre></div>
     </section>
 
-    <section class="block reveal">
-      <div class="block-head"><span class="block-num">05</span><h2>See it route something</h2></div>
-      <p class="block-sub">
-        The demo gives you three prompts and shows which tier each one landed on, what it cost, and
-        whether it had to escalate. No account needed.
-      </p>
-      <div class="cta-row" style="justify-content:flex-start; margin-top:22px;">
-        <a class="cta primary" href="/try"><span class="label">Try the demo</span><span class="sub">3 prompts · no signup</span></a>
-        <a class="cta ghost" href="/app"><span class="label">Try it out</span><span class="sub">full app · free account</span></a>
+    <div class="final reveal">
+      <div class="final-inner">
+        <div>
+          <h2>See it route something.</h2>
+          <p>Three prompts, no account. Each answer shows which tier it landed on, what it cost, and whether it had to escalate.</p>
+        </div>
+        <div class="cta-row">
+          <a class="btn lg" href="/try">Try the demo &rarr;</a>
+          <a class="btn ghost lg" href="/app">Create an account</a>
+        </div>
       </div>
-    </section>
+    </div>
   </div>
 
   <footer>
     <div class="wrap">
-      <span>ThriftLLM</span>
+      <span class="logo" style="font-size:13px;"><span class="brand-mark" style="width:18px;height:18px;border-radius:6px;"></span>ThriftLLM</span>
       <a href="/guide">Docs</a>
-      <a href="/demo">Single-shot demo</a>
+      <a href="/demo">Routing explorer</a>
       <a href="https://github.com/AnshumanDas001/llm-router" target="_blank" rel="noopener">GitHub &#8599;</a>
       <span class="spacer"></span>
-      <span>Every figure measured on a 116-query eval set.</span>
+      <span>Measured on 116 everyday questions, 263 benchmark questions and 10 AIME problems.</span>
     </div>
   </footer>
 </div>
 
 <script src="/static/reveal.js"></script>
+<script>
+  const TIERS = ["cheap", "mid", "frontier"];
+  const EXAMPLES = [
+    "What is the capital of Australia?",
+    "Write a SQL query to find the second-highest salary in an employees table.",
+    "Explain the CAP theorem and give a real-world system that chooses AP over CP.",
+    "Let $S$ be the set of positive integers $n < 2000$ such that $n^2 + 3n + 7$ is divisible by $13$. Find the remainder when the sum of the elements of $S$ is divided by $1000$.",
+  ];
+  let routing = null;
+  const classified = [];
+
+  function pct(v) { return v == null ? "n/m" : (v * 100).toFixed(0) + "%"; }
+  function money(v) { return v == null ? "–" : "$" + (v < 0.001 ? v.toPrecision(2) : v.toFixed(4)); }
+  function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+  function renderMatrix() {
+    const head = `<tr><th>Band</th>${TIERS.map(t => `<th><span class="badge ${t}">${t}</span><div class="mono hint" style="text-transform:none; letter-spacing:0; margin-top:4px;">${esc((routing.models[t] || "").split("/").pop())}${t === "mid" ? " &middot; no thinking" : t === "frontier" ? " &middot; thinking" : ""}</div></th>`).join("")}<th>Starts at</th></tr>`;
+    document.querySelector("#matrix thead").innerHTML = head;
+    document.querySelector("#matrix tbody").innerHTML = routing.bands.map(b => {
+      const start = routing.map[b];
+      return `<tr class="${b}">
+        <td><span class="diff ${b}">${b}</span></td>
+        ${TIERS.map(t => {
+          const v = (routing.quality[t] || {})[b];
+          const cls = t === start ? "start" : v == null ? "na" : v < routing.threshold ? "below" : "";
+          return `<td><span class="cell ${cls}">${pct(v)}</span></td>`;
+        }).join("")}
+        <td><span class="badge ${start}">${start}</span></td>
+      </tr>`;
+    }).join("");
+  }
+
+  function showExample(i) {
+    const ex = classified[i];
+    if (!ex) return;
+    document.querySelectorAll("#live-dots i").forEach((d, k) => d.classList.toggle("on", k === i));
+    const p = document.getElementById("live-prompt");
+    p.style.opacity = 0;
+    setTimeout(() => {
+      p.textContent = ex.text;
+      p.style.opacity = 1;
+      document.getElementById("live-band").innerHTML = `<span class="diff ${ex.band}">${ex.band}</span>`;
+      document.getElementById("live-ms").textContent = `${ex.ms}ms`;
+      document.querySelectorAll("#lanes .lane").forEach(l => {
+        const t = l.dataset.tier;
+        l.classList.toggle("on", t === ex.tier);
+        l.querySelector("[data-q]").textContent = `${pct((routing.quality[t] || {})[ex.band])} on ${ex.band}`;
+      });
+      document.getElementById("live-cost").textContent = money((routing.cost[ex.tier] || {})[ex.band]);
+      document.getElementById("live-base").textContent = money((routing.cost.frontier || {})[ex.band]);
+    }, 220);
+  }
+
+  (async function init() {
+    try {
+      routing = await (await fetch("/api/routing")).json();
+    } catch { return; }
+    renderMatrix();
+    document.querySelectorAll("#lanes .lane").forEach(l => {
+      l.querySelector("[data-m]").textContent = (routing.models[l.dataset.tier] || "").split("/").pop();
+    });
+    const dots = document.getElementById("live-dots");
+    let current = 0, timer = null;
+    for (const [i, text] of EXAMPLES.entries()) {
+      const t0 = performance.now();
+      try {
+        const r = await (await fetch("/api/try/classify", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ content: text }),
+        })).json();
+        classified[i] = { text, band: r.difficulty, tier: r.tier, ms: Math.max(1, Math.round(performance.now() - t0)) };
+      } catch { continue; }
+      const d = document.createElement("i");
+      d.onclick = () => { current = i; showExample(i); restart(); };
+      dots.appendChild(d);
+      if (i === 0) showExample(0);
+    }
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function restart() {
+      clearInterval(timer);
+      if (reduced) return;
+      timer = setInterval(() => { current = (current + 1) % classified.length; showExample(current); }, 3600);
+    }
+    restart();
+  })();
+</script>
 </body>
 </html>

@@ -14,6 +14,15 @@ exactly, and the reason why is the most useful thing in this README (see
 
 <img src="app/web/static/charts/cascade-savings.svg" alt="Cascade cost versus frontier-only and mid-only over 116 queries: $0.13214 against $0.73475 frontier-only and $0.22548 mid-only" width="720">
 
+<img src="docs/images/landing.jpg" alt="ThriftLLM landing page: the hero, and a live panel classifying an AIME-style problem as expert and starting it at the frontier tier" width="720">
+
+| Chat: the routing map, with the predicted tier lit as you type | Models: calibration per difficulty band, amber below the 0.80 floor |
+|---|---|
+| <img src="docs/images/chat.jpg" alt="Chat home showing which bands start at each tier, with the frontier tier highlighted for a competition-maths prompt" width="360"> | <img src="docs/images/models.jpg" alt="Models page with per-band calibration scores as bars" width="360"> |
+
+Try `/demo` locally for the routing explorer: type any prompt and see its band, the tier
+it starts at, and the calibrated numbers behind the decision, with no model call.
+
 ---
 
 ## Why a cascade, and not just "use the cheap model"
@@ -500,7 +509,7 @@ Then:
 | Sessions & spend | http://localhost:8000/sessions |
 | API guide | http://localhost:8000/guide |
 | The chat app, no login, 3 prompts per device | http://localhost:8000/try |
-| Single-shot routing demo, no login | http://localhost:8000/demo |
+| Routing explorer: where a prompt would go and why, no model call | http://localhost:8000/demo |
 | Terminal demo | `./venv/bin/python -m scripts.ops.demo_cli` |
 
 ## Using it from code
@@ -532,6 +541,14 @@ curl -X POST http://localhost:8000/api/v1/route \
     "latency_ms": 842.0
   }
 }
+```
+
+The built-in routing map is public, with the calibration behind it:
+
+```bash
+curl http://localhost:8000/api/routing
+# {"map": {"easy": "cheap", "medium": "cheap", "hard": "cheap", "expert": "frontier"},
+#  "quality": {"mid": {"expert": 0.7, ...}, ...}, "threshold": 0.8, ...}
 ```
 
 Calibrate a model once before routing to it:

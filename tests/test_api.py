@@ -34,6 +34,13 @@ def test_static_and_health(client):
     assert health["database"] == "sqlite"
 
 
+def test_routing_map_is_public(client):
+    r = client.get("/api/routing").json()
+    assert r["map"]["expert"] == "frontier"
+    assert r["bands"] == ["easy", "medium", "hard", "expert"]
+    assert r["threshold"] == 0.8
+
+
 def test_openai_endpoint_needs_a_key(client):
     r = client.post("/v1/chat/completions", json={"messages": [{"role": "user", "content": "hi"}]})
     assert r.status_code == 401

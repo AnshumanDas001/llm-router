@@ -4,7 +4,7 @@ import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.common import KNOWN_PROVIDERS, now, resolve_provider_key
+from app.api.common import KNOWN_PROVIDERS, builtin_routing, now, resolve_provider_key
 from app.api.schemas import AddModelRequest, CalibrateModelRequest, CreateProviderRequest
 from app.auth import get_current_user
 from app.evaluation.calibration import DEFAULT_MAX_QUERIES, calibrate_model
@@ -168,7 +168,7 @@ def calibrate_one_model(user_id: int, raw_model_name: str, supplied_key: str | N
 def api_tiers(user=Depends(get_current_user)):
     """The models behind our own built-in tiers, so the chat UI can show real
     names. A BYOM session's own models come from the chat itself."""
-    return {"builtin": DEFAULT_TIER_MODELS}
+    return {"builtin": DEFAULT_TIER_MODELS, "routing": builtin_routing()}
 
 
 @router.get("/api/calibration")

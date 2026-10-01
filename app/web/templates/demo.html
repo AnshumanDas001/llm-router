@@ -3,198 +3,217 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ThriftLLM &mdash; Demo</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<title>ThriftLLM &mdash; Routing explorer</title>
+<meta name="description" content="Type a prompt and see where ThriftLLM would route it, and the calibrated numbers behind the decision. No model is called.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/static/app.css">
 <style>
-  :root {
-    --bg: #0d0d0d;
-    --surface: #161616;
-    --border: #2a2a2a;
-    --text: #e8e8e6;
-    --muted: #8a8a86;
-    --cheap: #4caf50;
-    --mid: #29b6f6;
-    --frontier: #ffb300;
-    --escalate: #ef5350;
+  body { min-height: 100vh; }
+  .page { position: relative; z-index: 1; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+  .top { border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 10; }
+  .top .wrap { display: flex; align-items: center; gap: 18px; height: 60px; }
+  .logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; letter-spacing: -0.02em; color: var(--text-primary); }
+  .logo .dot { color: var(--accent-ink); }
+  .top nav { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+  header.intro { padding: 48px 0 26px; }
+  header.intro h1 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -0.03em; margin: 8px 0 10px; line-height: 1.1; }
+  header.intro p { color: var(--text-secondary); font-size: 15px; max-width: 62ch; margin: 0; line-height: 1.6; }
+
+  .explorer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 860px) { .explorer { grid-template-columns: 1fr; } }
+  .prompt-box textarea { width: 100%; min-height: 150px; resize: vertical; font-size: 14.5px; line-height: 1.55; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .example {
+    font-size: 12px; color: var(--text-secondary); background: var(--surface-2); border: 1px solid var(--border);
+    padding: 5px 11px; border-radius: 999px; cursor: pointer; box-shadow: none; font-weight: 500;
   }
-  * { box-sizing: border-box; }
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    max-width: 760px;
-    margin: 0 auto;
-    padding: 32px 20px 60px;
-  }
-  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
-  .sub { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
-  form { display: flex; gap: 8px; margin-bottom: 24px; }
-  input[type=text] {
-    flex: 1; background: var(--surface); border: 1px solid var(--border);
-    color: var(--text); padding: 10px 12px; border-radius: 6px; font-size: 14px;
-    font-family: inherit;
-  }
-  input[type=text]:focus { outline: none; border-color: var(--mid); }
-  button {
-    background: var(--mid); color: #001018; border: none; padding: 10px 18px;
-    border-radius: 6px; font-weight: 600; cursor: pointer; font-family: inherit;
-    font-size: 14px;
-  }
-  button:disabled { opacity: 0.5; cursor: default; }
-  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 28px; }
-  .example-chip {
-    font-size: 12px; color: var(--muted); background: var(--surface);
-    border: 1px solid var(--border); padding: 4px 10px; border-radius: 12px;
-    cursor: pointer;
-  }
-  .example-chip:hover { color: var(--text); border-color: var(--mid); }
-  .answer {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-    padding: 16px; margin-bottom: 12px; font-size: 14px;
-    line-height: 1.5; min-height: 24px; font-family: -apple-system, "Segoe UI", sans-serif;
-  }
-  .answer p { margin: 0 0 10px; }
-  .answer p:last-child { margin-bottom: 0; }
-  .answer ul, .answer ol { margin: 0 0 10px; padding-left: 22px; }
-  .answer li { margin-bottom: 3px; }
-  .answer code {
-    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    font-size: 0.88em; background: var(--border); padding: 2px 5px; border-radius: 4px;
-  }
-  .answer pre { margin: 0 0 10px; border-radius: 8px; overflow-x: auto; max-width: 100%; }
-  .answer pre code {
-    display: block; padding: 12px 14px; background: #0a0a0a !important;
-    border-radius: 8px; font-size: 0.85em; line-height: 1.5;
-  }
-  .answer table {
-    border-collapse: collapse; margin: 0 0 10px; font-size: 0.9em; display: block;
-    overflow-x: auto; max-width: 100%;
-  }
-  .answer th, .answer td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
-  .answer th { background: var(--border); font-weight: 600; }
-  .router-line {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px;
-  }
-  .badge {
-    padding: 2px 9px; border-radius: 10px; font-weight: 600; font-size: 12px;
-  }
-  .badge.cheap { background: rgba(76,175,80,0.15); color: var(--cheap); }
-  .badge.mid { background: rgba(41,182,246,0.15); color: var(--mid); }
-  .badge.frontier { background: rgba(255,179,0,0.15); color: var(--frontier); }
-  .meta { color: var(--muted); }
-  .escalation {
-    margin-top: 8px; font-size: 12.5px; color: var(--escalate);
-  }
-  .escalation .reason { color: var(--muted); margin-left: 14px; }
-  .chain { color: var(--text); font-weight: 600; }
-  .placeholder { color: var(--muted); font-style: italic; }
-  .loading { color: var(--muted); }
+  .example:hover { color: var(--text-primary); border-color: var(--border-strong); background: var(--surface-3); }
+  .example .diff { margin-left: 6px; font-size: 10px; padding: 0 5px; }
+
+  .verdict { min-height: 220px; }
+  .verdict .idle { color: var(--text-muted); font-size: 13px; padding: 30px 0; text-align: center; }
+  .v-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; }
+  .v-line .arrow { color: var(--text-muted); }
+  .v-why { margin: 14px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.65; }
+  .v-rows { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .v-row { display: grid; grid-template-columns: 90px 1fr 70px; align-items: center; gap: 10px; font-size: 12.5px; }
+  .v-row .track { height: 8px; border-radius: 6px; background: var(--surface-3); position: relative; overflow: visible; }
+  .v-row .track i { display: block; height: 100%; border-radius: 6px; }
+  .v-row .track .floor { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--warning); left: 80%; border-radius: 2px; }
+  .v-row .val { text-align: right; font-family: var(--font-mono); }
+  .v-row.start .val { color: var(--text-primary); font-weight: 600; }
+  .v-cta { margin-top: 18px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .matrix-card { margin-top: 18px; }
+  .matrix td, .matrix th { text-align: center; }
+  .matrix td:first-child, .matrix th:first-child { text-align: left; padding-left: 20px; }
+  .matrix .cell { font-family: var(--font-mono); font-size: 13px; padding: 4px 10px; border-radius: 8px; display: inline-block; min-width: 58px; }
+  .matrix .cell.below { color: var(--warning); }
+  .matrix .cell.start { background: var(--good-soft); color: var(--good); box-shadow: 0 0 0 1px rgba(47, 198, 122, 0.4) inset; font-weight: 600; }
+  .matrix .cell.na { color: var(--text-muted); }
+  .matrix tr.hl td { background: rgba(255, 255, 255, 0.025); }
+  .foot { color: var(--text-muted); font-size: 12px; padding: 32px 0 48px; }
 </style>
+<script>document.documentElement.classList.add("js-motion");</script>
 </head>
 <body>
-  <h1>ThriftLLM — live demo</h1>
-  <p class="sub">Type a query and watch it get classified, routed, and (if needed) escalated in real time.</p>
+<div class="ambient" aria-hidden="true"><div class="grid"></div><div class="orb a"></div><div class="orb b"></div></div>
 
-  <form id="form">
-    <input type="text" id="query" placeholder="Ask anything..." autocomplete="off" autofocus>
-    <button type="submit" id="submit">Send</button>
-  </form>
+<div class="page">
+  <div class="top">
+    <div class="wrap">
+      <a href="/" class="logo"><span class="brand-mark"></span><span>Thrift<span class="dot">LLM</span></span></a>
+      <nav>
+        <a class="btn subtle sm" href="/guide">Docs</a>
+        <a class="btn ghost sm" href="/try">Try the chat</a>
+      </nav>
+    </div>
+  </div>
 
-  <div class="examples" id="examples"></div>
+  <div class="wrap">
+    <header class="intro animate-in">
+      <span class="eyebrow-sm" style="font-family:var(--font-mono); font-size:11px; color:var(--accent-ink);">routing explorer &middot; no model is called</span>
+      <h1>Where would your prompt go?</h1>
+      <p>Type anything. The same classifier the router runs places it in a difficulty band, and the
+        calibrated scores below decide which tier answers first. This page only classifies, so it's
+        free and instant. <a href="/try">The demo chat</a> runs real answers.</p>
+    </header>
 
-  <div class="answer" id="answer"><span class="placeholder">Response will appear here.</span></div>
-  <div class="router-line" id="router-line"></div>
+    <div class="explorer animate-in stagger-1">
+      <div class="card prompt-box">
+        <div class="card-head" style="margin-bottom:12px;"><div><h3>Prompt</h3></div><span class="hint" id="timing"></span></div>
+        <textarea id="prompt" placeholder="e.g. Find the remainder when 3^2025 is divided by 1000" autofocus></textarea>
+        <div class="examples" id="examples"></div>
+      </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
-  <script>
-    marked.setOptions({ breaks: true });
-    function renderMarkdown(text) { return DOMPurify.sanitize(marked.parse(text)); }
-    function highlightCodeBlocks(container) {
-      container.querySelectorAll("pre code").forEach(block => {
-        try { hljs.highlightElement(block); } catch { /* unsupported language */ }
-      });
+      <div class="card verdict" id="verdict">
+        <div class="card-head" style="margin-bottom:12px;"><div><h3>Routing decision</h3></div></div>
+        <div class="idle" id="idle">Start typing, or pick an example.</div>
+        <div id="result" hidden>
+          <div class="v-line"><span>Classified</span><span id="r-band"></span><span class="arrow">&rarr;</span><span>starts at</span><span id="r-tier"></span></div>
+          <p class="v-why" id="r-why"></p>
+          <div class="v-rows" id="r-rows"></div>
+          <div class="v-cta"><a class="btn sm" id="r-try" href="/try">Ask it in the demo chat &rarr;</a></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card flush matrix-card animate-in stagger-2">
+      <div class="card-head">
+        <div>
+          <h2>The whole map</h2>
+          <p>Calibrated quality of each tier on each band. A band starts at the cheapest tier that
+            clears <span class="mono">0.80</span> (green). Anything it gets wrong is checked and
+            escalated.</p>
+        </div>
+      </div>
+      <div class="table-wrap"><table class="matrix" id="matrix"><thead></thead><tbody></tbody></table></div>
+    </div>
+
+    <p class="foot">Quality is measured: easy, medium and hard on the 116-question eval set, expert on AIME 2025.
+      The frontier's expert score is blank because it was only measured on the problems mid got wrong.
+      <a href="/guide">How routing works &rarr;</a></p>
+  </div>
+</div>
+
+<script>
+  const TIERS = ["cheap", "mid", "frontier"];
+  const EXAMPLES = [
+    "What is the capital of Australia?",
+    "Write a SQL query for the second-highest salary in an employees table",
+    "Explain the CAP theorem with a real-world AP system",
+    "Let $S$ be the set of positive integers $n < 2000$ such that $n^2 + 3n + 7$ is divisible by $13$. Find the remainder when the sum of the elements of $S$ is divided by $1000$.",
+  ];
+  let routing = null;
+  let timer = null;
+
+  function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+  function pct(v) { return v == null ? "—" : (v * 100).toFixed(0) + "%"; }
+  function model(t) { return (routing.models[t] || "").split("/").pop(); }
+
+  function renderMatrix(activeBand) {
+    const head = `<tr><th>Band</th>${TIERS.map(t => `<th><span class="badge ${t}">${t}</span></th>`).join("")}<th>Starts at</th></tr>`;
+    document.querySelector("#matrix thead").innerHTML = head;
+    document.querySelector("#matrix tbody").innerHTML = routing.bands.map(b => {
+      const start = routing.map[b];
+      return `<tr class="${b === activeBand ? "hl" : ""}">
+        <td><span class="diff ${b}">${b}</span></td>
+        ${TIERS.map(t => {
+          const v = (routing.quality[t] || {})[b];
+          const cls = t === start ? "start" : v == null ? "na" : v < routing.threshold ? "below" : "";
+          return `<td><span class="cell ${cls}" ${v == null ? 'title="not measured on a fair sample"' : ""}>${v == null ? "n/m" : pct(v)}</span></td>`;
+        }).join("")}
+        <td><span class="badge ${start}">${start}</span></td>
+      </tr>`;
+    }).join("");
+  }
+
+  function explain(band, tier) {
+    const q = t => (routing.quality[t] || {})[band];
+    const cleared = TIERS.filter(t => q(t) != null && q(t) >= routing.threshold);
+    if (tier === "frontier" && !cleared.includes("cheap") && !cleared.includes("mid")) {
+      return `No cheaper tier clears the 80% floor on ${band} questions${q("mid") != null ? ` (mid scores ${pct(q("mid"))})` : ""}, so the strongest tier answers first. A thinking answer costs more, but a wrong one from mid would ship: mid's answers only get a structural check.`;
     }
+    if (tier === "cheap") {
+      return `The cheap tier scores ${pct(q("cheap"))} on ${band} questions, over the 80% floor, so it answers first. A learned gate and a small judge check the answer; if it fails, mid takes over.`;
+    }
+    return `${tier} is the cheapest tier whose calibrated score on ${band} questions clears the 80% floor, once the cost of checking and escalating is priced in.`;
+  }
 
-    const EXAMPLES = [
-      "What is the capital of Australia?",
-      "Explain the CAP theorem and give a real-world example.",
-      "Classify: 'The battery life is terrible but the screen is gorgeous.'",
-      "What is the 100th digit of 1/7?",
-    ];
+  function renderVerdict(band, tier) {
+    document.getElementById("idle").hidden = true;
+    document.getElementById("result").hidden = false;
+    document.getElementById("r-band").innerHTML = `<span class="diff ${band}">${band}</span>`;
+    document.getElementById("r-tier").innerHTML = `<span class="badge ${tier}">${tier}</span> <span class="mono hint">${esc(model(tier))}</span>`;
+    document.getElementById("r-why").textContent = explain(band, tier);
+    document.getElementById("r-rows").innerHTML = TIERS.map(t => {
+      const v = (routing.quality[t] || {})[band];
+      const color = `var(--series-${t})`;
+      return `<div class="v-row ${t === tier ? "start" : ""}">
+        <span class="badge ${t}">${t}</span>
+        <span class="track">${v == null ? "" : `<i style="width:${Math.max(2, v * 100)}%; background:${color}; opacity:${t === tier ? 1 : 0.55}"></i>`}<span class="floor" title="0.80 floor"></span></span>
+        <span class="val">${v == null ? "n/m" : pct(v)}</span>
+      </div>`;
+    }).join("");
+    renderMatrix(band);
+  }
 
-    const examplesEl = document.getElementById("examples");
-    EXAMPLES.forEach(ex => {
-      const chip = document.createElement("span");
-      chip.className = "example-chip";
-      chip.textContent = ex.length > 40 ? ex.slice(0, 40) + "…" : ex;
-      chip.title = ex;
-      chip.onclick = () => { document.getElementById("query").value = ex; submitQuery(ex); };
-      examplesEl.appendChild(chip);
+  async function classify(text) {
+    const t0 = performance.now();
+    const resp = await fetch("/api/try/classify", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text }),
     });
+    if (!resp.ok) return;
+    const { tier, difficulty } = await resp.json();
+    document.getElementById("timing").textContent = `classified in ${Math.round(performance.now() - t0)}ms`;
+    renderVerdict(difficulty, tier);
+  }
 
-    const form = document.getElementById("form");
-    const input = document.getElementById("query");
-    const submitBtn = document.getElementById("submit");
-    const answerEl = document.getElementById("answer");
-    const routerLineEl = document.getElementById("router-line");
+  const promptEl = document.getElementById("prompt");
+  promptEl.addEventListener("input", () => {
+    clearTimeout(timer);
+    const text = promptEl.value.trim();
+    if (!text) return;
+    timer = setTimeout(() => classify(text), 300);
+  });
 
-    form.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const q = input.value.trim();
-      if (q) submitQuery(q);
+  (async function init() {
+    routing = await (await fetch("/api/routing")).json();
+    renderMatrix(null);
+    const ex = document.getElementById("examples");
+    EXAMPLES.forEach(e => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "example";
+      b.textContent = e.length > 46 ? e.slice(0, 44) + "…" : e;
+      b.title = e;
+      b.onclick = () => { promptEl.value = e; classify(e); };
+      ex.appendChild(b);
     });
-
-    async function submitQuery(query) {
-      submitBtn.disabled = true;
-      answerEl.innerHTML = '<span class="loading">Routing…</span>';
-      routerLineEl.innerHTML = "";
-      const start = performance.now();
-
-      try {
-        const resp = await fetch("/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: [{ role: "user", content: query }] }),
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.detail || "request failed");
-
-        answerEl.innerHTML = renderMarkdown(data.choices[0].message.content);
-        highlightCodeBlocks(answerEl);
-        renderRouterLine(data._router, performance.now() - start);
-      } catch (err) {
-        answerEl.innerHTML = `<span style="color:var(--escalate)">Error: ${escapeHtml(String(err.message || err))}</span>`;
-      } finally {
-        submitBtn.disabled = false;
-      }
-    }
-
-    function renderRouterLine(router, wallMs) {
-      const badge = `<span class="badge ${router.final_tier}">${router.final_tier}</span>`;
-      const meta = `<span class="meta">classified ${router.difficulty} · $${router.cost.toFixed(5)} · ${router.latency_ms.toFixed(0)}ms (wall ${wallMs.toFixed(0)}ms)</span>`;
-      let html = `Routed to: ${badge} ${meta}`;
-
-      if (router.escalated) {
-        const tierOrder = ["cheap", "mid", "frontier"];
-        const start = tierOrder.indexOf(router.initial_tier);
-        const end = tierOrder.indexOf(router.final_tier);
-        const chain = tierOrder.slice(start, end + 1).join(" → ");
-        html += `<div class="escalation">⤴ Escalated <span class="chain">(${chain})</span>`;
-        for (const reason of router.escalation_reasons) {
-          html += `<div class="reason">- ${escapeHtml(reason)}</div>`;
-        }
-        html += `</div>`;
-      }
-      routerLineEl.innerHTML = html;
-    }
-
-    function escapeHtml(s) {
-      const div = document.createElement("div");
-      div.textContent = s;
-      return div.innerHTML;
-    }
-  </script>
+  })();
+</script>
 </body>
 </html>

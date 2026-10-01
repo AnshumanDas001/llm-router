@@ -8,11 +8,16 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
 <style>
-
-  /* A table can't reflow, so on a phone it scrolls inside its own box
-     instead of pushing the page sideways. */
-  .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  @media (max-width: 760px) { .table-wrap table { min-width: 520px; } }
+  .key-form { display: flex; gap: 8px; flex-wrap: wrap; padding: 16px 20px; border-top: 1px solid var(--border); }
+  .key-form input { flex: 1; min-width: 180px; }
+  .quota-bar { height: 6px; border-radius: 4px; background: var(--surface-3); overflow: hidden; margin-top: 10px; }
+  .quota-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+  .account-row { display: flex; align-items: center; gap: 12px; }
+  .account-row .avatar {
+    width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(135deg, var(--series-cheap), #7a5cff);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff;
+  }
+  .side-stack { display: flex; flex-direction: column; gap: 12px; }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
 </head>
@@ -35,25 +40,59 @@
 
       <div class="page-header animate-in">
         <div>
+          <span class="eyebrow-sm">account</span>
           <h1>Settings</h1>
-          <p class="sub">Account-level API keys for programmatic routing.</p>
+          <p class="sub">API keys for routing from your own code, and what your account is allowed
+            to spend each day.</p>
         </div>
       </div>
 
-      <section class="reveal" style="margin-bottom:0;">
-        <p class="section-sub">For programmatic access to <code>/api/v1/route</code>. These identify
-          your account &mdash; they are not your model provider keys, which live under
-          <a href="/models">Models &amp; calibration</a>. Each key is its own session (see
-          <a href="/sessions">Sessions</a>).</p>
-        <div class="card reveal">
-          <div id="new-key-banner"></div>
-          <div class="table-wrap"><table id="keys-table"><thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody></tbody></table></div>
-          <div style="margin-top:12px; display:flex; gap:8px;">
-            <input type="text" id="new-key-name" placeholder="key name (optional)">
-            <button id="create-key-btn">+ New API key</button>
+      <div class="grid-2 animate-in stagger-1">
+        <div class="side-stack">
+          <div class="card flush">
+            <div class="card-head">
+              <div>
+                <h2>API keys</h2>
+                <p>These identify your account to <code>/api/v1/route</code> and
+                  <code>/v1/chat/completions</code>. They are not provider keys, which live under
+                  <a href="/models">Models</a>. Each key is its own <a href="/sessions">session</a>.</p>
+              </div>
+            </div>
+            <div id="new-key-banner" style="padding:0 20px;"></div>
+            <div class="table-wrap"><table id="keys-table"><thead><tr><th style="padding-left:20px;">Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead><tbody></tbody></table></div>
+            <div class="key-form">
+              <input type="text" id="new-key-name" placeholder="Name this key (optional)">
+              <button id="create-key-btn">Create key</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><div><h3>Route a request</h3><p>OpenAI-shaped in and out, with what the router decided under <code>_router</code>.</p></div></div>
+            <div class="code-block"><pre><span class="c"># the built-in stack, OpenAI-compatible</span>
+curl -X POST <span class="s" id="host-url">https://your-host</span>/v1/chat/completions \
+  -H <span class="k">"Authorization: Bearer rtr_..."</span> \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "What is 2+2?"}]}'</pre></div>
+            <p class="hint" style="margin:10px 0 0;">Route across your own models with <code>/api/v1/route</code>. See the <a href="/guide#quickstart">quickstart</a>.</p>
           </div>
         </div>
-      </section>
+
+        <div class="side-stack">
+          <div class="card">
+            <div class="account-row">
+              <div class="avatar" id="acct-avatar">?</div>
+              <div><div style="font-weight:650;" id="acct-name">&hellip;</div><div class="hint">Signed in</div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head" style="margin-bottom:6px;"><div><h3>Daily allowance</h3><p>Prompts on the built-in models, across chat and API. Resets at 00:00 UTC.</p></div></div>
+            <div class="tile" style="border:none; padding:0; box-shadow:none; background:none;">
+              <div class="v" id="quota-left">&mdash;</div><div class="d" id="quota-detail"></div>
+            </div>
+            <div class="quota-bar"><i id="quota-fill" style="width:0"></i></div>
+          </div>
+        </div>
+      </div>
 
     </div>
   </main>
@@ -79,15 +118,15 @@
     const tbody = document.querySelector("#keys-table tbody");
     tbody.innerHTML = keys.map(k => `
       <tr>
-        <td>${esc(k.name)}</td>
-        <td class="mono">${esc(k.key_prefix)}...</td>
+        <td style="padding-left:20px; font-weight:550;">${esc(k.name)}</td>
+        <td class="mono" style="color:var(--text-secondary)">${esc(k.key_prefix)}&hellip;</td>
         <td style="color:var(--text-muted)">${k.created_at.slice(0, 10)}</td>
         <td style="color:var(--text-muted)">${k.last_used_at ? k.last_used_at.slice(0, 10) : "never"}</td>
-        <td>${k.revoked
+        <td style="text-align:right; padding-right:20px;">${k.revoked
           ? '<span class="badge revoked">revoked</span>'
-          : `<button class="ghost" data-revoke="${k.id}">revoke</button>`}</td>
+          : `<button class="subtle sm" data-revoke="${k.id}">Revoke</button>`}</td>
       </tr>
-    `).join("") || '<tr><td colspan="5"><div class="empty-state">No keys yet.</div></td></tr>';
+    `).join("") || '<tr><td colspan="5"><div class="empty-state"><b>No keys yet</b>Create one below to call the router from code.</div></td></tr>';
 
     tbody.querySelectorAll("[data-revoke]").forEach(btn => {
       btn.onclick = async () => {
@@ -101,14 +140,35 @@
     const name = document.getElementById("new-key-name").value.trim() || null;
     const data = await api("/api/keys", { method: "POST", body: JSON.stringify({ name }) });
     const banner = document.getElementById("new-key-banner");
-    banner.innerHTML = `<div class="success-box">Your new API key (shown once &mdash; copy it now):<span class="key mono">${esc(data.key)}</span></div>`;
+    banner.innerHTML = `<div class="success-box"><b>Key created.</b> Copy it now; it is shown only once.
+      <span class="key mono"><span>${esc(data.key)}</span><button class="ghost sm" id="copy-key">Copy</button></span></div>`;
+    document.getElementById("copy-key").onclick = async (e) => {
+      try { await navigator.clipboard.writeText(data.key); e.target.textContent = "Copied"; } catch { e.target.textContent = "Select and copy"; }
+    };
     document.getElementById("new-key-name").value = "";
     loadKeys();
   };
 
+  async function loadAccount() {
+    document.getElementById("host-url").textContent = window.location.origin;
+    try {
+      const me = await api("/auth/me");
+      document.getElementById("acct-name").textContent = me.username;
+      document.getElementById("acct-avatar").textContent = (me.username[0] || "?").toUpperCase();
+      const stats = await api("/api/chat-stats");
+      if (stats.daily) {
+        const left = Math.max(0, stats.daily.limit - stats.daily.used);
+        document.getElementById("quota-left").textContent = `${left} left`;
+        document.getElementById("quota-detail").textContent = `${stats.daily.used} of ${stats.daily.limit} prompts used today`;
+        document.getElementById("quota-fill").style.width = `${(stats.daily.used / stats.daily.limit) * 100}%`;
+      }
+    } catch { /* decoration only */ }
+  }
+
   (async function init() {
     await initNav("settings");
     loadKeys();
+    loadAccount();
   })();
 </script>
 </body>

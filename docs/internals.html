@@ -834,7 +834,8 @@ Sessions view.</p>
     <tr><td class="mono">POST /api/v1/calibrate</td><td>calibrate one of the caller's models</td><td>API key</td></tr>
     <tr><td class="mono">POST /api/chats/{id}/messages/stream</td><td>SSE: routing, tier_start, token, escalated, done</td><td>cookie</td></tr>
     <tr><td class="mono">POST /api/chats/{id}/messages</td><td>blocking equivalent</td><td>cookie</td></tr>
-    <tr><td class="mono">POST /api/classify</td><td>classifier only — no model call, no cost</td><td>cookie</td></tr>
+    <tr><td class="mono">POST /api/classify</td><td>classifier only — no model call, no cost; with a <code>chat_id</code>, predicts with that chat's map and mode</td><td>cookie</td></tr>
+    <tr><td class="mono">GET /api/routing</td><td>the built-in routing map: band → starting tier, with the calibrated quality and cost behind it. Feeds the landing page and the explorer</td><td>none</td></tr>
     <tr><td class="mono">POST /api/try</td><td>signed-out demo, multi-turn, capped per device</td><td>device cookie + header</td></tr>
     <tr><td class="mono">GET /api/try/quota</td><td>remaining demo prompts</td><td>none</td></tr>
     <tr><td class="mono">GET /health</td><td>status, database backend, <strong>durability</strong>, config warnings, which variable names arrived</td><td>none</td></tr>
@@ -844,7 +845,17 @@ Sessions view.</p>
 </table></div>
 <p>Pages: <code>/</code> (landing; redirects signed-in users to <code>/app</code>),
 <code>/app</code>, <code>/try</code>, <code>/models</code>, <code>/sessions</code>,
-<code>/settings</code>, <code>/guide</code>, <code>/demo</code>.</p>
+<code>/settings</code>, <code>/guide</code>, and <code>/demo</code>, the routing explorer: type a prompt and see its
+band, its starting tier and the numbers behind the decision, without calling a model. It used to post to
+<code>/v1/chat/completions</code>, which needs an API key on any public deploy, so it failed for visitors.</p>
+
+<h3>Front end</h3>
+<p>Every page shares <code>app/web/static/app.css</code>: one palette, IBM Plex, and one colour per tier
+used everywhere (blue cheap, orange mid, green frontier), with difficulty bands as outlined chips so they
+never read as tiers. Components: buttons in primary / ghost / subtle and small / large sizes, form fields
+with focus rings, stat tiles, score bars that turn amber below the 0.80 floor, a routing-map card, empty
+states, and code blocks with copy buttons. The chat renders LaTeX with KaTeX, which competition-maths
+answers need, after lifting maths out of the markdown so underscores aren't read as italics.</p>
 
 <h2 id="auth"><span class="n">15</span>Auth, keys, and quotas</h2>
 <div class="kv">
@@ -955,7 +966,7 @@ load is CPU-bound.</p>
     <tr><td class="mono">app/api/chats.py</td><td class="num">272</td><td>chats and the send path, blocking and streamed; live tier prediction</td></tr>
     <tr><td class="mono">app/api/common.py</td><td class="num">221</td><td>quotas, routing map per session, baselines, provider keys, response shape</td></tr>
     <tr><td class="mono">app/api/models.py</td><td class="num">179</td><td>BYOM providers, models, calibration</td></tr>
-    <tr><td class="mono">app/api/demo.py</td><td class="num">116</td><td>signed-out demo, capped per device</td></tr>
+    <tr><td class="mono">app/api/demo.py</td><td class="num">124</td><td>signed-out demo, capped per device; public routing map</td></tr>
     <tr><td class="mono">app/api/v1.py</td><td class="num">106</td><td>OpenAI-compatible endpoint, BYOM route and calibrate</td></tr>
     <tr><td class="mono">app/api/{account,usage,pages,schemas}.py</td><td class="num">292</td><td>auth and API keys, spend dashboards, HTML pages, request bodies</td></tr>
     <tr><td class="mono">app/routing/cascade.py</td><td class="num">449</td><td>classify → generate → verify → escalate, blocking and streaming</td></tr>
@@ -972,10 +983,10 @@ load is CPU-bound.</p>
     <tr><td class="mono">app/storage/key_vault.py</td><td class="num">58</td><td>Fernet encryption for stored provider keys</td></tr>
   </tbody>
 </table></div>
-<p>Front end, in <code>app/web/</code>: <code>templates/chat_app.html</code> (1501 — also serves the demo
-at <code>/try</code> behind one injected flag), <code>guide.html</code> (528), <code>models.html</code>
-(359), <code>landing.html</code> (323), <code>demo.html</code> (200), <code>sessions.html</code> (198),
-<code>settings.html</code> (115), and <code>static/</code>: <code>app.css</code> (355),
+<p>Front end, in <code>app/web/</code>: <code>templates/chat_app.html</code> (1594 — also serves the demo
+at <code>/try</code> behind one injected flag), <code>landing.html</code> (519), <code>guide.html</code>
+(508), <code>models.html</code> (396), <code>sessions.html</code> (246), <code>demo.html</code> (219, the
+routing explorer), <code>settings.html</code> (175), and <code>static/</code>: <code>app.css</code> (577),
 <code>nav.js</code> (89), <code>reveal.js</code> (25), <code>charts/</code>.</p>
 <p>Data, in <code>data/</code>: <code>eval/</code> (the labelled sets and judge scores),
 <code>probe/</code> (probe question sets and every answer from every run, one JSONL each),

@@ -8,43 +8,47 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
 <style>
-  .hint { color: var(--text-muted); font-size: 11.5px; }
-  .provider-card { margin-bottom: 8px; }
-  .provider-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-  .provider-name { font-weight: 650; font-size: 13.5px; }
-  .provider-head .provider-delete { margin-left: auto; padding: 4px 10px; font-size: 11.5px; }
-  .provider-models { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .provider-list { display: flex; flex-direction: column; gap: 10px; }
+  .provider-card { padding: 16px; }
+  .provider-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .provider-logo {
+    width: 30px; height: 30px; border-radius: 9px; background: var(--surface-3); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; color: var(--text-secondary);
+    text-transform: uppercase; flex-shrink: 0;
+  }
+  .provider-name { font-weight: 650; font-size: 14px; }
+  .provider-meta { font-size: 11.5px; color: var(--text-muted); }
+  .provider-head .provider-delete { margin-left: auto; }
+  .provider-models { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
   .model-chip {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
-    padding: 3px 4px 3px 8px; font-size: 11.5px; color: var(--text-secondary);
+    background: var(--bg); border: 1px solid var(--border); border-radius: 7px;
+    padding: 3px 4px 3px 9px; font-size: 11.5px; color: var(--text-secondary);
     display: inline-flex; align-items: center; gap: 4px;
   }
   .chip-remove {
-    background: none; border: none; color: var(--text-muted); cursor: pointer;
-    font-size: 14px; line-height: 1; padding: 0 3px; border-radius: 3px;
+    background: none; border: none; color: var(--text-muted); cursor: pointer; box-shadow: none;
+    font-size: 14px; line-height: 1; padding: 0 4px; border-radius: 4px;
   }
-  .chip-remove:hover { background: var(--surface-3); color: var(--critical); }
-  .provider-add-model { display: flex; gap: 6px; margin-top: 10px; }
-  .provider-add-model input { flex: 1; }
+  .chip-remove:hover { background: var(--critical-soft); color: var(--critical); }
+  .provider-add-model { display: flex; gap: 6px; margin-top: 12px; }
+  .provider-add-model input { flex: 1; min-width: 0; font-size: 12.5px; padding: 7px 10px; }
 
-  .add-provider-title { font-weight: 650; font-size: 13.5px; margin-bottom: 12px; }
-  .provider-form { display: flex; flex-direction: column; gap: 11px; max-width: 520px; }
-  .provider-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-secondary); }
-  .provider-form input, .provider-form select, .provider-form textarea {
-    background: var(--surface-2); border: 1px solid var(--border); color: var(--text-primary);
-    padding: 8px 10px; border-radius: var(--radius-sm); font-family: inherit; font-size: 13px;
-  }
-  .provider-form textarea { font-family: "IBM Plex Mono", monospace; font-size: 12px; resize: vertical; }
-  .provider-form .checkbox-row { flex-direction: row; align-items: flex-start; gap: 8px; }
-  .provider-form .checkbox-row input { width: auto; margin-top: 2px; }
-  .provider-form .checkbox-row .hint { display: block; }
-  .models-title { font-size: 13px; font-weight: 650; margin: 22px 0 4px; }
+  .provider-form { display: flex; flex-direction: column; gap: 14px; }
+  .provider-form input, .provider-form select, .provider-form textarea { width: 100%; }
+  .provider-form textarea { font-family: var(--font-mono); font-size: 12px; resize: vertical; }
+  .checkbox-row { display: flex; align-items: flex-start; gap: 10px; font-size: 12.5px; color: var(--text-secondary); cursor: pointer; }
+  .checkbox-row input { margin-top: 2px; }
+  .checkbox-row > span { min-width: 0; overflow-wrap: anywhere; }
+  .checkbox-row .hint { display: block; margin-top: 2px; }
+  .form-actions { display: flex; align-items: center; gap: 12px; }
 
-
-  /* A table can't reflow, so on a phone it scrolls inside its own box
-     instead of pushing the page sideways. */
-  .table-wrap { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  @media (max-width: 760px) { .table-wrap table { min-width: 520px; } }
+  .model-name { font-family: var(--font-mono); font-size: 12.5px; color: var(--text-primary); }
+  .model-provider { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+  .calibrating { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 12.5px; }
+  .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--surface-3); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-muted); padding: 12px 20px 16px; border-top: 1px solid var(--border); }
+  .legend .score { font-size: 11px; }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
 </head>
@@ -67,66 +71,89 @@
 
       <div class="page-header animate-in">
         <div>
+          <span class="eyebrow-sm">bring your own models</span>
           <h1>Models &amp; calibration</h1>
-          <p class="sub">Connect your providers, list their models, and calibrate each one. A
-            calibrated model can be picked for any tier of any chat session.</p>
+          <p class="sub">Route across your own providers. Calibration measures each model on four
+            difficulty bands, and those scores decide where every question starts.</p>
         </div>
       </div>
 
-        <section class="reveal" style="margin-bottom:0;">
-          <p class="section-sub">Connect a provider, list the models you want to use from it, then
-            calibrate each one. Calibration is per <em>model</em>, so a model you measure once can be
-            slotted as cheap in one session and mid in another without re-measuring.</p>
+      <div class="steps animate-in stagger-1">
+        <div class="step-card" id="step-connect"><span class="n">1</span><div><b>Connect a provider</b><span>Its key stays in your browser unless you choose to save it encrypted.</span></div></div>
+        <div class="step-card" id="step-calibrate"><span class="n">2</span><div><b>Calibrate each model</b><span>24 graded questions: 6 each of easy, medium, hard and expert.</span></div></div>
+        <div class="step-card" id="step-session"><span class="n">3</span><div><b>Start a session</b><span>Pick a model per tier from <a href="/app">New chat &rarr; My models</a>.</span></div></div>
+      </div>
 
-          <div id="provider-list"></div>
-
-          <div class="card reveal" style="margin-top:12px;">
-            <div class="add-provider-title">Connect a provider</div>
-            <div class="provider-form">
-              <label>Provider
-                <select id="new-provider-type"></select>
-              </label>
-              <label>Name
-                <input type="text" id="new-provider-name" placeholder="e.g. My Groq">
-              </label>
-              <label>Models <span class="hint">one per line, litellm format</span>
-                <textarea id="new-provider-models" rows="3"
-                  placeholder="groq/openai/gpt-oss-20b&#10;groq/llama-3.1-8b-instant"></textarea>
-              </label>
-              <label id="api-base-label" hidden>API base
-                <input type="text" id="new-provider-api-base" placeholder="http://localhost:11434">
-              </label>
-              <label id="api-key-label">API key
-                <input type="password" id="new-provider-key" placeholder="provider API key">
-              </label>
-              <label class="checkbox-row" id="store-key-row">
-                <input type="checkbox" id="new-provider-store">
-                <span>
-                  Save this key (encrypted) so I don't re-enter it
-                  <span class="hint" id="store-key-hint"></span>
-                </span>
-              </label>
-              <div>
-                <button id="add-provider-btn">Connect provider</button>
-                <span id="provider-status" class="hint"></span>
-              </div>
+      <section class="reveal">
+        <div class="card flush">
+          <div class="card-head">
+            <div>
+              <h2>Calibrated models</h2>
+              <p>A model needs calibrating before a session can use it. A band starts at the cheapest
+                model in the session that scores at least 80% on it.</p>
             </div>
           </div>
-
-          <h3 class="models-title">Connected models</h3>
-          <p class="section-sub">A model must be calibrated before you can start a session with it.</p>
-          <div class="card reveal">
-            <div id="calibrate-warnings"></div>
-            <div class="table-wrap"><table id="models-table">
-              <thead><tr>
-                <th>Model</th><th>Provider</th><th>Easy</th><th>Medium</th><th>Hard</th><th>Expert</th>
-                <th>Avg cost</th><th>Avg latency</th><th></th>
-              </tr></thead>
-              <tbody></tbody>
-            </table></div>
-            <div id="calibrate-status" class="hint" style="margin-top:10px;"></div>
+          <div id="calibrate-warnings" style="padding:0 20px;"></div>
+          <div class="table-wrap" style="margin-top:8px;"><table id="models-table">
+            <thead><tr>
+              <th style="padding-left:20px;">Model</th>
+              <th><span class="diff easy">easy</span></th><th><span class="diff medium">medium</span></th>
+              <th><span class="diff hard">hard</span></th><th><span class="diff expert">expert</span></th>
+              <th class="num">Avg cost</th><th class="num">Latency</th><th></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table></div>
+          <div class="legend">
+            <span class="score"><span class="bar"><i style="width:90%"></i></span>clears the 80% floor</span>
+            <span class="score below"><span class="bar"><i style="width:55%"></i></span>below it: that band skips this model</span>
+            <span>Expert questions are AIME problems; on a thinking model they are most of the ~$1 calibration bill.</span>
           </div>
+          <div id="calibrate-status" class="hint" style="padding:0 20px 16px;"></div>
+        </div>
+      </section>
+
+      <div class="grid-2 reveal">
+        <section style="margin:0;">
+          <div class="card-head" style="margin-bottom:12px;">
+            <div><h2>Providers</h2><p>Each connection holds a key and the models you use from it.</p></div>
+          </div>
+          <div id="provider-list" class="provider-list"></div>
         </section>
+
+        <div class="card">
+          <div class="card-head"><div><h3>Connect a provider</h3><p>Any provider litellm supports. Model names use litellm's <code>provider/model</code> form.</p></div></div>
+          <div class="provider-form">
+            <div class="field-row">
+              <label class="field">Provider
+                <select id="new-provider-type"></select>
+              </label>
+              <label class="field">Name
+                <input type="text" id="new-provider-name" placeholder="e.g. My Groq">
+              </label>
+            </div>
+            <label class="field">Models <span class="hint">one per line</span>
+              <textarea id="new-provider-models" rows="3"
+                placeholder="groq/openai/gpt-oss-20b&#10;groq/llama-3.1-8b-instant"></textarea>
+            </label>
+            <label class="field" id="api-base-label" hidden>API base
+              <input type="text" id="new-provider-api-base" placeholder="http://localhost:11434">
+            </label>
+            <label class="field" id="api-key-label">API key
+              <input type="password" id="new-provider-key" placeholder="provider API key">
+            </label>
+            <label class="checkbox-row" id="store-key-row">
+              <input type="checkbox" id="new-provider-store">
+              <span>Save this key, encrypted, so I don't re-enter it
+                <span class="hint" id="store-key-hint"></span>
+              </span>
+            </label>
+            <div class="form-actions">
+              <button id="add-provider-btn">Connect provider</button>
+              <span id="provider-status" class="hint"></span>
+            </div>
+          </div>
+        </div>
+      </div>
 
     </div>
   </main>
@@ -185,18 +212,21 @@
     const providers = await api("/api/providers");
     const el = document.getElementById("provider-list");
     if (!providers.length) {
-      el.innerHTML = '<div class="empty-state">No providers connected yet.</div>';
+      el.innerHTML = `<div class="card empty-state">
+        <div class="es-icon"><svg viewBox="0 0 16 16" fill="none"><path d="M8 2.2 13.5 5 8 7.8 2.5 5 8 2.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><path d="M2.5 8.2 8 11l5.5-2.8M2.5 11.3 8 14.1l5.5-2.8" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+        <b>No providers yet</b>Connect one with the form to list its models here.</div>`;
       return;
     }
     el.innerHTML = providers.map(p => `
       <div class="card provider-card">
         <div class="provider-head">
-          <span class="provider-name">${esc(p.name)}</span>
-          <span class="badge api-type">${esc(p.provider)}</span>
-          ${p.has_stored_key
-            ? '<span class="badge byom" title="key stored encrypted">key saved</span>'
-            : '<span class="hint">key entered per session</span>'}
-          <button class="ghost provider-delete" data-provider="${p.id}">Remove</button>
+          <span class="provider-logo">${esc(p.provider.slice(0, 2))}</span>
+          <div>
+            <div class="provider-name">${esc(p.name)}</div>
+            <div class="provider-meta"><span class="mono">${esc(p.provider)}</span> &middot;
+              ${p.has_stored_key ? "key saved, encrypted" : "key entered per session"}</div>
+          </div>
+          <button class="subtle sm provider-delete" data-provider="${p.id}">Remove</button>
         </div>
         <div class="provider-models">
           ${p.models.length
@@ -208,7 +238,7 @@
         </div>
         <div class="provider-add-model">
           <input type="text" placeholder="add a model (litellm format)" data-model-input="${p.id}">
-          <button class="ghost" data-add-model="${p.id}">Add</button>
+          <button class="ghost sm" data-add-model="${p.id}">Add</button>
         </div>
       </div>
     `).join("");
@@ -277,36 +307,40 @@
   // so mark it rather than leaving the reader to compare numbers by eye.
   const QUALITY_THRESHOLD = 0.80;
   function scoreCell(v) {
-    if (v == null) return '<td class="mono" style="color:var(--text-muted)">&mdash;</td>';
-    return `<td class="mono"${v < QUALITY_THRESHOLD ? ' style="color:var(--warning)"' : ""}>${pct(v)}</td>`;
+    if (v == null) return '<td><span class="score none">&mdash;</span></td>';
+    const cls = v < QUALITY_THRESHOLD ? "score below" : "score";
+    return `<td><span class="${cls}"><span class="bar"><i style="width:${Math.max(3, v * 100)}%"></i></span>${pct(v)}</span></td>`;
   }
 
   async function loadConnectedModels() {
     const models = await api("/api/my-models");
     const tbody = document.querySelector("#models-table tbody");
     if (!models.length) {
-      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">Connect a provider above to list models.</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><b>No models yet</b>Models you list under a provider appear here, ready to calibrate.</div></td></tr>';
       return;
     }
     tbody.innerHTML = models.map(m => {
       const q = m.quality_by_difficulty || {};
       return `
         <tr>
-          <td class="mono">${esc(m.model_name)}</td>
-          <td style="color:var(--text-muted)">${esc(m.provider_name)}
-              <span class="badge api-type">${esc(m.provider)}</span></td>
+          <td style="padding-left:20px;"><div class="model-name">${esc(m.model_name)}</div>
+              <div class="model-provider">${esc(m.provider_name)}</div></td>
           ${scoreCell(q.easy)}
           ${scoreCell(q.medium)}
           ${scoreCell(q.hard)}
           ${scoreCell(q.expert)}
-          <td class="mono">${m.avg_cost == null ? "&mdash;" : fmt(m.avg_cost)}</td>
-          <td class="mono">${m.avg_latency_ms == null ? "&mdash;" : m.avg_latency_ms.toFixed(0) + "ms"}</td>
-          <td><button class="ghost" data-calibrate="${esc(m.model_name)}"
+          <td class="num">${m.avg_cost == null ? "&mdash;" : fmt(m.avg_cost)}</td>
+          <td class="num">${m.avg_latency_ms == null ? "&mdash;" : (m.avg_latency_ms / 1000).toFixed(1) + "s"}</td>
+          <td style="text-align:right; padding-right:20px;"><button class="${m.calibrated ? "ghost" : ""} sm" data-calibrate="${esc(m.model_name)}"
                 data-needs-key="${m.has_stored_key ? "0" : "1"}">
               ${m.calibrated ? "Re-calibrate" : "Calibrate"}</button></td>
         </tr>
       `;
     }).join("");
+
+    // Progress strip: which of the three steps are done.
+    document.getElementById("step-connect").classList.toggle("done", models.length > 0);
+    document.getElementById("step-calibrate").classList.toggle("done", models.some(m => m.calibrated));
 
     tbody.querySelectorAll("[data-calibrate]").forEach(btn => {
       btn.onclick = () => calibrateModel(btn.dataset.calibrate, btn.dataset.needsKey === "1", btn);
@@ -325,7 +359,9 @@
     }
 
     btn.disabled = true;
-    status.textContent = `Calibrating ${modelName} -- this runs ~24 live queries and can take a minute or two...`;
+    const label = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span> Calibrating';
+    status.innerHTML = `<span class="calibrating">Running 24 graded questions against <span class="mono">${esc(modelName)}</span>. This takes a minute or two.</span>`;
     try {
       const data = await api("/api/calibrate-model", {
         method: "POST", body: JSON.stringify({ model_name: modelName, api_key: apiKey }),
@@ -340,6 +376,7 @@
       warnBox.innerHTML = `<div class="warning-box">${esc(err.message)}</div>`;
     } finally {
       btn.disabled = false;
+      btn.innerHTML = label;
     }
   }
 

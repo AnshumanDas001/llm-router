@@ -10,6 +10,7 @@ from app.api.common import (
     COOKIE_SECURE,
     DAILY_PROMPT_LIMIT,
     baseline_cost,
+    builtin_routing,
     check_routing_mode,
     log_result,
     now,
@@ -70,7 +71,14 @@ def api_try_classify(req: ClassifyRequest):
 
 @router.get("/api/try/tiers")
 def api_try_tiers():
-    return {"builtin": DEFAULT_TIER_MODELS}
+    return {"builtin": DEFAULT_TIER_MODELS, "routing": builtin_routing()}
+
+
+@router.get("/api/routing")
+def api_routing():
+    """Public: the built-in routing map and the calibration behind it. No
+    model call -- the landing page and the routing explorer draw from it."""
+    return builtin_routing()
 
 
 @router.post("/api/try")

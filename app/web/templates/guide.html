@@ -3,47 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Docs</title>
+<title>ThriftLLM &mdash; Docs</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<link rel="stylesheet" href="/static/app.css">
 <style>
-  :root {
-    --bg: #141413; --surface-1: #1a1a19; --surface-2: #232322; --surface-3: #2b2b29;
-    --border: rgba(255,255,255,0.10); --border-strong: rgba(255,255,255,0.18);
-    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
-    --series-cheap: #3987e5; --series-mid: #d95926; --series-frontier: #199e70;
-    --accent: var(--series-cheap); --good: #0ca30c; --warning: #fab219; --critical: #e66767;
-  }
   * { box-sizing: border-box; }
-  body {
-    background: var(--bg); color: var(--text-primary); margin: 0;
-    font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif; font-size: 14.5px;
-  }
+  body { font-size: 14.5px; }
   .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
-  a { color: var(--accent); }
-  code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 0.88em; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+
   [hidden] { display: none !important; }
 
   /* --- top bar --- */
   #topbar {
-    height: 54px; border-bottom: 1px solid var(--border); display: flex; align-items: center;
-    padding: 0 20px; gap: 16px; position: sticky; top: 0; background: var(--bg); z-index: 20;
+    height: 58px; border-bottom: 1px solid var(--border); display: flex; align-items: center;
+    padding: 0 22px; gap: 14px; position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px);
   }
-  #topbar .brand { font-weight: 650; font-size: 14.5px; text-decoration: none; color: var(--text-primary); }
-  #topbar .brand .dot { color: var(--series-cheap); }
+  #topbar .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; letter-spacing: -0.02em; color: var(--text-primary); }
+  #topbar .brand .dot { color: var(--accent-ink); }
+  #topbar .brand .docs-tag { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); font-weight: 500; padding-left: 10px; border-left: 1px solid var(--border-strong); }
   #topbar-spacer { flex: 1; }
-  #search-box {
-    background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
-    padding: 6px 10px; color: var(--text-secondary); font-size: 12.5px; width: 220px;
-    font-family: inherit;
-  }
-  #search-box:focus { outline: none; border-color: var(--accent); color: var(--text-primary); }
-  #topbar a.launch {
-    background: var(--accent); color: #001018; padding: 7px 14px; border-radius: 6px;
-    font-weight: 600; font-size: 12.5px; text-decoration: none;
-  }
-  #topbar a.gh { color: var(--text-muted); font-size: 12.5px; text-decoration: none; }
+  #search-box { padding: 7px 11px; font-size: 12.5px; width: 240px; background: var(--surface-1); }
+  #topbar a.gh { color: var(--text-muted); font-size: 12.5px; }
+  #topbar a.gh:hover { color: var(--text-primary); }
+  @media (max-width: 800px) { #topbar a.gh, #topbar .btn.subtle, #topbar .docs-tag { display: none; } }
 
   /* --- three-pane layout --- */
   #layout { display: flex; max-width: 1320px; margin: 0 auto; }
@@ -61,13 +46,13 @@
     text-decoration: none; font-size: 13px; margin-bottom: 1px;
   }
   .toc-link:hover { background: var(--surface-2); color: var(--text-primary); }
-  .toc-link.active { background: var(--surface-2); color: var(--text-primary); font-weight: 600; }
+  .toc-link.active { background: var(--surface-2); color: var(--text-primary); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
 
   main { flex: 1; min-width: 0; padding: 32px 40px 100px; max-width: 760px; }
-  main h1 { font-size: 26px; margin: 0 0 6px; font-weight: 650; letter-spacing: -0.01em; }
+  main h1 { font-size: 32px; margin: 0 0 8px; font-weight: 700; letter-spacing: -0.03em; }
   main .lead { color: var(--text-secondary); font-size: 15px; margin: 0 0 32px; line-height: 1.6; }
   main section { margin-bottom: 48px; scroll-margin-top: 70px; }
-  main h2 { font-size: 19px; margin: 0 0 12px; font-weight: 650; padding-top: 8px; border-top: 1px solid var(--border); }
+  main h2 { font-size: 21px; margin: 0 0 12px; font-weight: 650; letter-spacing: -0.02em; padding-top: 28px; border-top: 1px solid var(--border); }
   main section:first-of-type h2 { border-top: none; padding-top: 0; }
   main h3 { font-size: 15px; margin: 22px 0 8px; font-weight: 650; }
   main p { line-height: 1.65; color: var(--text-secondary); margin: 0 0 14px; }
@@ -92,27 +77,21 @@
   @media (max-width: 800px) { #toc-sidebar { display: none; } main { padding: 24px 20px; max-width: 100%; } #search-box { display: none; } }
 
   /* --- callouts --- */
-  .callout {
-    border-radius: 8px; padding: 12px 14px; margin: 16px 0; font-size: 13px; line-height: 1.6;
-    border: 1px solid; display: flex; gap: 10px;
-  }
-  .callout.note { background: rgba(57,135,229,0.08); border-color: rgba(57,135,229,0.35); }
-  .callout.warn { background: rgba(250,178,25,0.08); border-color: rgba(250,178,25,0.35); }
-  .callout .icon { flex-shrink: 0; font-weight: 700; }
-  .callout.note .icon { color: var(--series-cheap); }
-  .callout.warn .icon { color: var(--warning); }
-  .callout p { margin: 0; color: var(--text-secondary); }
+  .callout { margin: 16px 0; }
 
   /* --- badges --- */
-  .badge { padding: 2px 8px; border-radius: 9px; font-weight: 600; font-size: 10.5px; }
-  .badge.get { background: rgba(25,158,112,0.18); color: #2bc98f; }
-  .badge.post { background: rgba(57,135,229,0.16); color: var(--series-cheap); }
-  .badge.delete { background: rgba(230,103,103,0.16); color: var(--critical); }
+  .badge.get { background: var(--frontier-soft); color: #5fe0ae; font-family: var(--font-mono); }
+  .badge.post { background: var(--cheap-soft); color: #8fb8ff; font-family: var(--font-mono); }
+  .badge.delete { background: var(--critical-soft); color: var(--critical); font-family: var(--font-mono); }
   .endpoint-title { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
   .endpoint-title code { font-size: 0.95em; background: none; padding: 0; }
 
   /* --- tabbed code blocks --- */
-  .code-block { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 14px 0; background: #0a0a0a; }
+  .code-block { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 14px 0; background: #08090b; }
+  .code-block pre { border: none; border-radius: 0; background: none; }
+  .code-tabs .copy-btn { position: static; box-shadow: none; }
+  .code-tab { box-shadow: none; border-radius: 0; }
+  .code-tab:hover { background: none; color: var(--text-primary); }
   .code-tabs { display: flex; background: var(--surface-2); border-bottom: 1px solid var(--border); }
   .code-tab {
     background: none; border: none; color: var(--text-muted); padding: 8px 14px; font-size: 12px;
@@ -150,11 +129,12 @@
 <body>
 
 <div id="topbar">
-  <a href="/" class="brand">Thrift<span class="dot">LLM</span></a>
+  <a href="/" class="brand"><span class="brand-mark"></span><span>Thrift<span class="dot">LLM</span></span><span class="docs-tag">docs</span></a>
   <div id="topbar-spacer"></div>
   <input type="text" id="search-box" placeholder="Filter docs...">
   <a href="https://github.com/AnshumanDas001/llm-router" target="_blank" class="gh">GitHub &#8599;</a>
-  <a href="/app" class="launch">Launch app</a>
+  <a href="/demo" class="btn subtle sm">Explorer</a>
+  <a href="/app" class="btn sm">Launch app</a>
 </div>
 
 <div id="layout">
@@ -260,10 +240,10 @@ console.log(data._router);</code></pre></div>
       <div class="table-wrap"><table>
         <thead><tr><th>Tier</th><th>Role</th><th>Our default</th></tr></thead>
         <tbody>
-          <tr><td><span class="badge get">cheap</span></td><td>Starts most traffic. Calibrated 0.89 / 0.95 / 0.81 on easy / medium / hard, 0 on expert</td><td class="mono">openrouter/meta-llama/llama-3.1-8b-instruct</td></tr>
-          <tr><td><span class="badge post">judge</span></td><td>Verifies cheap answers. Not a tier &mdash; a separate small model, ~$0.00004 a verdict</td><td class="mono">groq/openai/gpt-oss-20b</td></tr>
-          <tr><td><span class="badge post">mid</span></td><td>Where failed cheap answers escalate. Thinking <strong>off</strong>; ~$0.002 an answer, 3s. 7/10 on AIME 2025</td><td class="mono">openrouter/google/gemini-3.5-flash</td></tr>
-          <tr><td><span class="badge delete">frontier</span></td><td>Starts expert questions (competition maths), and catches what escalates past mid. The same model with thinking <strong>on</strong>: fixed 2 of mid's 3 AIME misses, at ~$0.19 an answer</td><td class="mono">openrouter/google/gemini-3.5-flash</td></tr>
+          <tr><td><span class="badge cheap">cheap</span></td><td>Starts most traffic. Calibrated 0.89 / 0.95 / 0.81 on easy / medium / hard, 0 on expert</td><td class="mono">openrouter/meta-llama/llama-3.1-8b-instruct</td></tr>
+          <tr><td><span class="badge">judge</span></td><td>Verifies cheap answers. Not a tier &mdash; a separate small model, ~$0.00004 a verdict</td><td class="mono">groq/openai/gpt-oss-20b</td></tr>
+          <tr><td><span class="badge mid">mid</span></td><td>Where failed cheap answers escalate. Thinking <strong>off</strong>; ~$0.002 an answer, 3s. 7/10 on AIME 2025</td><td class="mono">openrouter/google/gemini-3.5-flash</td></tr>
+          <tr><td><span class="badge frontier">frontier</span></td><td>Starts expert questions (competition maths), and catches what escalates past mid. The same model with thinking <strong>on</strong>: fixed 2 of mid's 3 AIME misses, at ~$0.19 an answer</td><td class="mono">openrouter/google/gemini-3.5-flash</td></tr>
         </tbody>
       </table></div>
       <p>You don't need all three configured &mdash; the cascade works over whichever subset you provide.</p>

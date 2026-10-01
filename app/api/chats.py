@@ -152,6 +152,9 @@ def api_get_chat(chat_id: int, user=Depends(get_current_user)):
         "mode": chat["mode"],
         "routing_mode": chat["routing_mode"],
         "byom_tiers": chat_db.get_chat_models(chat_id) if chat["mode"] == "byom" else {},
+        # which tier each difficulty band starts at, for this chat's models
+        "routing_map": tier_map_for(
+            user["id"], chat_db.get_chat_models(chat_id) if chat["mode"] == "byom" else None),
         "byom_needs_key": needs_key,
         "messages": [
             {

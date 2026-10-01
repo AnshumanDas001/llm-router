@@ -12,7 +12,8 @@ from app.config import BUILTIN_CALIBRATION
 from app.pricing import estimate_cost_for_model, estimate_frontier_cost
 from app.routing import scorer
 from app.routing.cascade import DEFAULT_TIER_MODELS, judge_for, learned_verifier_on
-from app.routing.policy import TIER_ORDER, derive_tier_map
+from app.evaluation.datasets import DIFFICULTIES
+from app.routing.policy import QUALITY_THRESHOLD, TIER_ORDER, derive_tier_map
 from app.storage import chat_db, key_vault
 from app.storage.eval_log import log_cascade
 
@@ -166,6 +167,20 @@ def tier_map_for(user_id: int, tier_models: dict | None) -> dict:
         if any(v is None for v in cost.values()):
             cost = None
     return derive_tier_map(quality, tiers, cost, judge_cost_estimate(tiers, tier_models))
+
+
+def builtin_routing() -> dict:
+    """The built-in stack's routing decision, for the UI to show rather
+    than describe: which tier each band starts at, and the calibrated
+    quality that put it there."""
+    return {
+        "models": DEFAULT_TIER_MODELS,
+        "map": tier_map_for(0, None),
+        "bands": list(DIFFICULTIES),
+        "quality": {t: BUILTIN_CALIBRATION[t]["quality"] for t in TIER_ORDER if t in BUILTIN_CALIBRATION},
+        "cost": {t: BUILTIN_CALIBRATION[t]["cost"] for t in TIER_ORDER if t in BUILTIN_CALIBRATION},
+        "threshold": QUALITY_THRESHOLD,
+    }
 
 
 # --- after an answer ---------------------------------------------------------

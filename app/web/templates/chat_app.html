@@ -7,23 +7,40 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 <link rel="stylesheet" href="/static/app.css">
 <style>
-  /* --- auth screen --- */
-  #auth-screen { height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; }
-  .auth-box { width: 340px; position: relative; z-index: 1; padding: 26px; }
-  .auth-brand {
-    display: block; font-weight: 700; font-size: 16px; letter-spacing: -0.02em;
-    text-decoration: none; color: var(--text-primary); margin-bottom: 20px;
+  /* --- auth screen: what you get on the left, the form on the right --- */
+  #auth-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; padding: 32px 20px; }
+  .auth-wrap {
+    position: relative; z-index: 1; width: 100%; max-width: 920px;
+    display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 56px; align-items: center;
   }
-  .auth-brand .dot { color: var(--accent); }
-  .auth-box h1 { font-size: 16px; margin: 0 0 4px; }
-  .auth-box .sub { color: var(--text-muted); font-size: 12.5px; margin: 0 0 20px; }
-  .auth-box input { width: 100%; margin-bottom: 10px; }
-  .auth-box button { width: 100%; margin-top: 4px; }
-  .auth-toggle { text-align: center; margin-top: 14px; font-size: 12.5px; color: var(--text-muted); }
-  .auth-toggle a { cursor: pointer; text-decoration: none; }
-  .auth-error { color: var(--critical); font-size: 12px; margin-bottom: 8px; min-height: 14px; }
+  @media (max-width: 820px) { .auth-wrap { grid-template-columns: 1fr; gap: 28px; } .auth-pitch .ap-points { display: none; } }
+  .auth-brand {
+    display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; letter-spacing: -0.02em;
+    text-decoration: none; color: var(--text-primary); margin-bottom: 26px;
+  }
+  .auth-brand .dot { color: var(--accent-ink); }
+  .auth-pitch h2 { font-size: clamp(26px, 3.4vw, 36px); line-height: 1.12; letter-spacing: -0.03em; margin: 0 0 14px; font-weight: 700; }
+  .auth-pitch h2 .muted { color: var(--text-muted); }
+  .auth-pitch > p { color: var(--text-secondary); font-size: 14.5px; line-height: 1.65; margin: 0 0 24px; max-width: 46ch; }
+  .ap-points { display: flex; flex-direction: column; gap: 12px; }
+  .ap-point { display: flex; gap: 12px; align-items: flex-start; }
+  .ap-point .ap-n { font-family: var(--font-mono); font-size: 15px; font-weight: 600; min-width: 64px; color: var(--text-primary); }
+  .ap-point .ap-n.good { color: var(--good); }
+  .ap-point span { font-size: 13px; color: var(--text-muted); line-height: 1.55; }
+  .auth-box { position: relative; z-index: 1; padding: 30px 28px; box-shadow: var(--shadow-2); }
+  .auth-box h1 { font-size: 19px; margin: 0 0 4px; letter-spacing: -0.015em; }
+  .auth-box .sub { color: var(--text-muted); font-size: 13px; margin: 0 0 22px; }
+  .auth-box label { display: block; font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-bottom: 6px; }
+  .auth-box input { width: 100%; margin-bottom: 14px; padding: 11px 13px; }
+  .auth-box button { width: 100%; margin-top: 4px; padding: 11px; font-size: 14px; }
+  .auth-toggle { text-align: center; margin-top: 18px; font-size: 13px; color: var(--text-muted); }
+  .auth-toggle a { cursor: pointer; font-weight: 600; }
+  .auth-error { color: var(--critical); font-size: 12.5px; margin-bottom: 10px; min-height: 0; }
+  .auth-error:empty { display: none; }
+  .auth-alt { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); text-align: center; font-size: 12.5px; color: var(--text-muted); }
 
   /* --- chat-list, nested inside the shared nav sidebar --- */
   #new-chat-menu { margin: 2px 14px 12px; display: block; }
@@ -163,6 +180,7 @@
   .header-stats { display: flex; align-items: center; gap: 14px; font-size: 11.5px; color: var(--text-muted); flex-shrink: 0; }
   .header-stats .hs-item b { color: var(--text-secondary); font-weight: 600; font-family: "IBM Plex Mono", monospace; }
   .header-stats .hs-sep { opacity: 0.4; }
+  .header-stats .hs-item[hidden] + .hs-sep { display: none; }
   .mode-pill {
     display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border);
     background: var(--surface-1); border-radius: 16px; padding: 4px 11px; color: var(--text-secondary);
@@ -188,7 +206,7 @@
   .msg.user { display: flex; justify-content: flex-end; }
   .msg.user .bubble {
     max-width: 75%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.55;
-    background: var(--accent); color: #001018; white-space: pre-wrap;
+    background: var(--accent-btn); color: #fff; white-space: pre-wrap; border-bottom-right-radius: 5px;
   }
   .msg.assistant { position: relative; }
   .msg.assistant .bubble { font-size: 14.5px; line-height: 1.65; color: var(--text-primary); }
@@ -258,15 +276,16 @@
     box-shadow: 0 0 0 3px rgba(12, 163, 12, 0.18);
   }
   .chat-hero h1 {
-    font-size: 28px; font-weight: 600; margin: 0; letter-spacing: -0.015em;
-    color: var(--text-primary); text-wrap: balance; line-height: 1.3;
+    font-size: 32px; font-weight: 650; margin: 0; letter-spacing: -0.03em;
+    color: var(--text-primary); text-wrap: balance; line-height: 1.2;
   }
   .chat-hero h1 .hero-question { display: block; color: var(--text-muted); font-weight: 500; }
   .chat-hero .sub { color: var(--text-muted); font-size: 13.5px; margin: 10px 0 4px; }
-  .active-tiers { color: var(--text-muted); font-size: 11.5px; margin: 0 0 22px; font-family: "IBM Plex Mono", monospace; }
-  .active-tiers .tier-name { color: var(--text-secondary); }
-  .active-tiers .tier-name.predicted { color: var(--accent); font-weight: 600; }
-  .active-tiers .tier-sep { opacity: 0.45; }
+  .hero-route { margin: 22px 0 18px; text-align: left; }
+  .hero-route-label {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+    font-weight: 600; margin-bottom: 8px;
+  }
 
   .hero-composer-mount { margin-bottom: 26px; }
   .hero-composer-mount .composer-inner { padding: 16px 14px 12px; border-radius: 16px; }
@@ -284,8 +303,9 @@
   @media (max-width: 640px) { .suggestion-grid { grid-template-columns: 1fr; } }
   .suggestion-card {
     background: var(--surface-1); border: 1px solid var(--border); color: var(--text-secondary);
-    padding: 11px 13px; border-radius: 10px; font-size: 12.5px; cursor: pointer; text-align: left;
-    font-family: inherit; display: flex; flex-direction: column; gap: 8px; line-height: 1.4;
+    padding: 12px 14px; border-radius: 12px; font-size: 13px; cursor: pointer; text-align: left; box-shadow: none;
+    font-family: inherit; display: flex; flex-direction: column; align-items: stretch; gap: 10px; line-height: 1.45;
+    white-space: normal; font-weight: 500;
   }
   .suggestion-card:hover { background: var(--surface-2); border-color: var(--border-strong); color: var(--text-primary); }
   .suggestion-card .sc-meta { display: flex; justify-content: flex-end; }
@@ -324,21 +344,25 @@
   #composer-unit { max-width: 720px; margin: 0 auto; }
   .composer-inner {
     display: flex; flex-direction: column; gap: 6px;
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
-    padding: 12px 12px 10px;
+    background: var(--surface-1); border: 1px solid var(--border-strong); border-radius: 16px;
+    padding: 13px 13px 10px; box-shadow: var(--shadow-2); transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
-  .composer-inner:focus-within { border-color: var(--border-strong); }
+  .composer-inner:focus-within { border-color: rgba(75, 142, 255, 0.55); box-shadow: var(--shadow-2), 0 0 0 3px rgba(75, 142, 255, 0.15); }
   #composer-input {
     width: 100%; resize: none; border: none; background: none; color: var(--text-primary);
     font-family: inherit; font-size: 14px; line-height: 1.55; padding: 0; max-height: 220px;
     outline: none; min-height: 22px;
   }
   #composer-input::placeholder { color: var(--text-muted); }
+  /* the composer box draws the border and focus ring, not the textarea */
+  #composer-input, #composer-input:focus {
+    border: none; box-shadow: none; background: transparent; border-radius: 0; padding: 0;
+  }
   .composer-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .composer-toolbar-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .ct-hint { font-size: 11px; color: var(--text-muted); }
   #composer-send {
-    padding: 0; width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+    padding: 0; width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center; font-size: 14px;
   }
 
@@ -370,16 +394,31 @@
     <div class="orb b"></div>
     <div class="orb c"></div>
   </div>
-  <div class="card auth-box animate-in">
-    <a href="/" class="auth-brand">Thrift<span class="dot">LLM</span></a>
-    <h1 id="auth-title">Log in</h1>
-    <p class="sub">Route every prompt to the cheapest model that can handle it.</p>
-    <div class="auth-error" id="auth-error"></div>
-    <input type="text" id="auth-username" placeholder="Username" autocomplete="username">
-    <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
-    <button id="auth-submit">Log in</button>
-    <div class="auth-toggle">
-      <span id="auth-toggle-text">No account? <a id="auth-toggle-link">Sign up</a></span>
+  <div class="auth-wrap">
+    <div class="auth-pitch animate-in">
+      <a href="/" class="auth-brand"><span class="brand-mark"></span><span>Thrift<span class="dot">LLM</span></span></a>
+      <h2>Every prompt, on the cheapest model <span class="muted">that can answer it.</span></h2>
+      <p>Each message is classified before any model runs, answered by the cheapest tier calibrated to
+        handle it, checked, and escalated only when the check fails.</p>
+      <div class="ap-points">
+        <div class="ap-point"><span class="ap-n good">-41%</span><span>cost against sending everything to the mid tier, with every graded answer correct</span></div>
+        <div class="ap-point"><span class="ap-n">9/10</span><span>on AIME 2025 with the thinking frontier behind mid, which alone gets 7. Competition maths starts at the frontier</span></div>
+        <div class="ap-point"><span class="ap-n">~7ms</span><span>to decide where a prompt goes. No model call in the routing decision</span></div>
+      </div>
+    </div>
+    <div class="card auth-box animate-in stagger-1">
+      <h1 id="auth-title">Log in</h1>
+      <p class="sub">10 prompts a day on the built-in models, or route across your own.</p>
+      <div class="auth-error" id="auth-error"></div>
+      <label for="auth-username">Username</label>
+      <input type="text" id="auth-username" placeholder="you" autocomplete="username">
+      <label for="auth-password">Password</label>
+      <input type="password" id="auth-password" placeholder="at least 6 characters" autocomplete="current-password">
+      <button id="auth-submit">Log in</button>
+      <div class="auth-toggle">
+        <span id="auth-toggle-text">No account? <a id="auth-toggle-link">Sign up</a></span>
+      </div>
+      <div class="auth-alt">Just looking? <a href="/try">Try 3 prompts without an account &rarr;</a></div>
     </div>
   </div>
 </div>
@@ -469,12 +508,40 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 <script src="/static/nav.js"></script>
 <script>
   marked.setOptions({ breaks: true });
 
+  // Maths is lifted out before markdown runs -- otherwise marked reads the
+  // underscores in "17_b" as italics and eats the backslashes -- then typeset
+  // with KaTeX and put back. Competition-maths answers (the expert band) are
+  // mostly LaTeX, and unrendered they read as noise.
+  const MATH_RE = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?![\s$])[^$\n]+?(?<![\s\\])\$)/g;
+
+  function renderMath(src) {
+    const display = src.startsWith("$$") || src.startsWith("\\[");
+    const body = src.startsWith("$$") ? src.slice(2, -2)
+      : src.startsWith("$") ? src.slice(1, -1) : src.slice(2, -2);
+    try {
+      return katex.renderToString(body, { displayMode: display, throwOnError: true });
+    } catch {
+      return escapeHtml(src);
+    }
+  }
+
   function renderMarkdown(text) {
-    return DOMPurify.sanitize(marked.parse(text));
+    if (typeof katex === "undefined") return DOMPurify.sanitize(marked.parse(text));
+    const stash = [];
+    const safe = text.replace(MATH_RE, m => { stash.push(m); return `@@MATH${stash.length - 1}@@`; });
+    const html = DOMPurify.sanitize(marked.parse(safe));
+    return html.replace(/@@MATH(\d+)@@/g, (_, i) => renderMath(stash[+i]));
+  }
+
+  // "73000ms" reads worse than "73.0s".
+  function fmtMs(ms) {
+    if (ms == null) return "\u2014";
+    return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
   }
 
   // Applied to the DOM after insertion rather than via marked's `highlight`
@@ -513,6 +580,8 @@
   let currentChatMode = "builtin";
   let currentRoutingMode = "cascade";
   let currentByomTiers = {};
+  let builtinRoutingMap = null;   // band -> starting tier, from calibration
+  let currentRoutingMap = null;   // the open chat's own map
   let builtinTierModels = {};
   // BYOM provider keys, held only in this tab's memory for this page
   // session -- sent with each message to a BYOM chat, never persisted
@@ -624,6 +693,7 @@
     try {
       const tiers = await api("/api/tiers");
       builtinTierModels = tiers.builtin;
+      builtinRoutingMap = tiers.routing ? tiers.routing.map : null;
     } catch { /* non-critical -- hero just won't show model names */ }
     renderHeaderStats();
     renderRouterStatus();
@@ -641,7 +711,7 @@
     document.getElementById("new-chat-menu").hidden = true;
     document.getElementById("chat-list").hidden = true;
     document.getElementById("app-nav-top-mount").innerHTML = `
-      <div class="brand"><span class="brand-name">Thrift<span class="dot">LLM</span></span><span class="brand-version">demo</span></div>
+      <a class="brand" href="/"><span class="brand-mark"></span><span class="brand-name">Thrift<span class="dot">LLM</span></span><span class="brand-version">demo</span></a>
       <div class="card demo-card" id="demo-card">
         <div class="rs-title"><span class="rs-dot"></span>Free demo<span class="rs-pct" id="demo-left"></span></div>
         <div class="rs-bar"><div class="rs-bar-fill" id="demo-bar"></div></div>
@@ -654,6 +724,7 @@
     try {
       const tiers = await api("/api/try/tiers");
       builtinTierModels = tiers.builtin;
+      builtinRoutingMap = tiers.routing ? tiers.routing.map : null;
     } catch { /* hero just won't show model names */ }
     try {
       const q = await api("/api/try/quota");
@@ -699,7 +770,7 @@
       const stats = await api("/api/chat-stats");
       const card = document.getElementById("router-status");
       const has = stats.n_messages > 0;
-      document.getElementById("rs-latency").textContent = has ? Math.round(stats.avg_latency_ms) + "ms" : "\u2014";
+      document.getElementById("rs-latency").textContent = has ? fmtMs(stats.avg_latency_ms) : "\u2014";
       document.getElementById("rs-saved").textContent = has ? "$" + stats.cost_saved.toFixed(4) : "\u2014";
       document.getElementById("rs-pct").textContent = has ? "-" + stats.pct_saved.toFixed(0) + "% cost" : "";
       document.getElementById("rs-bar-fill").style.width = (has ? Math.min(100, stats.pct_saved) : 0) + "%";
@@ -748,7 +819,7 @@
       <p class="sub">${DEMO
         ? `Every message is classified up front, then routed to the cheapest tier that can handle it. You have ${demoQuota.remaining} of ${demoQuota.limit} demo prompts on this device.`
         : "Every message is classified up front, then routed to the cheapest tier that can handle it."}</p>
-      <p class="active-tiers" id="active-tiers-line"></p>
+      <div class="hero-route" id="active-tiers-line"></div>
     `;
     renderActiveTiersLine(wrap.querySelector("#active-tiers-line"));
 
@@ -813,13 +884,31 @@
     return model.split("/").pop();
   }
 
+  // The routing map as three tier cards: each tier, its model, and the
+  // difficulty bands that start there. The predicted tier for whatever is
+  // being typed lights up (see schedulePredict).
   function renderActiveTiersLine(target) {
     const tiers = currentChatMode === "byom" ? currentByomTiers : builtinTierModels;
-    const order = ["cheap", "mid", "frontier"];
-    const parts = order.filter(t => tiers[t]).map(t =>
-      `<span class="tier-name" data-tier="${t}" title="${escapeHtml(tiers[t])}">${escapeHtml(shortModelName(tiers[t]))}</span>`
-    );
-    target.innerHTML = "Active tiers: " + (parts.join('<span class="tier-sep"> / </span>') || "none configured");
+    const map = (currentChatId && currentRoutingMap) ? currentRoutingMap : builtinRoutingMap;
+    const order = ["cheap", "mid", "frontier"].filter(t => tiers[t]);
+    const startsAt = {};
+    Object.entries(map || {}).forEach(([band, tier]) => {
+      // direct mode skips the cheapest tier, so its bands start one up
+      let t = tier;
+      if (currentRoutingMode === "direct" && order.length > 1 && t === order[0]) t = order[1];
+      (startsAt[t] = startsAt[t] || []).push(band);
+    });
+    if (!order.length) { target.innerHTML = '<p class="hint">No tiers configured.</p>'; return; }
+    target.innerHTML = `
+      <div class="hero-route-label">Where questions start</div>
+      <div class="route-map">${order.map(t => `
+        <div class="route-tier ${t} tier-name" data-tier="${t}">
+          <div class="rt-head"><span class="badge ${t}">${t}</span></div>
+          <div class="rt-model" title="${escapeHtml(tiers[t])}">${escapeHtml(shortModelName(tiers[t]))}</div>
+          <div class="rt-bands">${(startsAt[t] || []).map(b => `<span class="diff ${b}">${b}</span>`).join("")
+            || '<span class="none">escalations only</span>'}</div>
+        </div>`).join("")}
+      </div>`;
   }
 
   // --- routing mode (per chat) ---
@@ -832,6 +921,8 @@
     modePill.classList.toggle("direct", currentRoutingMode === "direct");
     modeMenu.querySelectorAll("[data-routing]").forEach(b =>
       b.classList.toggle("active-item", b.dataset.routing === currentRoutingMode));
+    const routeEl = document.getElementById("active-tiers-line");
+    if (routeEl) renderActiveTiersLine(routeEl);
   }
 
   modePill.onclick = (e) => { e.stopPropagation(); modeMenu.hidden = !modeMenu.hidden; };
@@ -1140,6 +1231,7 @@
     currentRoutingMode = chat.routing_mode || "cascade";
     renderRoutingMode();
     currentByomTiers = chat.byom_tiers || {};
+    currentRoutingMap = chat.routing_map || null;
     currentByomNeedsKey = chat.byom_needs_key || [];
     document.getElementById("chat-title").innerHTML =
       escapeHtml(chat.title) + (chat.mode === "byom" ? ' <span class="badge byom">BYOM</span>' : "");
@@ -1162,7 +1254,7 @@
     const tiersEl = document.getElementById("hs-tiers");
 
     if (latencyMs != null) {
-      latencyEl.innerHTML = `Latency <b>${Math.round(latencyMs)}ms</b>`;
+      latencyEl.innerHTML = `Latency <b>${fmtMs(latencyMs)}</b>`;
       latencyEl.hidden = false;
     } else {
       latencyEl.hidden = true;
@@ -1265,7 +1357,8 @@
       const meta = document.createElement("div");
       meta.className = "msg-meta";
       let html = `<span class="badge ${m.tier}">${m.tier}</span>`;
-      html += `<span class="mono">$${(m.cost ?? 0).toFixed(5)} &middot; ${(m.latency_ms ?? 0).toFixed(0)}ms</span>`;
+      if (m.difficulty) html += `<span class="diff ${escapeHtml(m.difficulty)}">${escapeHtml(m.difficulty)}</span>`;
+      html += `<span class="mono">$${(m.cost ?? 0).toFixed(5)} &middot; ${fmtMs(m.latency_ms ?? 0)}</span>`;
       if (m.escalated) html += `<span class="badge escalated">escalated</span>`;
       meta.innerHTML = html;
       wrap.appendChild(meta);
