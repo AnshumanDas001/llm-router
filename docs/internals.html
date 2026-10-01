@@ -225,7 +225,7 @@
 cheapest model that can plausibly handle it, check the answer, and escalate only when the check
 fails. This document describes every mechanism, the measurements behind each decision, and the
 things that were tried and abandoned.</p>
-<p class="meta">4,301 lines of Python · 3,687 lines of templates · 1,974 lines of eval tooling · 17 tables · 45 endpoints</p>
+<p class="meta">4,601 lines of Python · 4,348 lines of templates and styles · 2,454 lines of eval tooling · 31 tests · 17 tables · 46 endpoints</p>
 
 <h2 id="thesis"><span class="n">1</span>The problem, and the one that matters</h2>
 <p>Most traffic to a language model does not need the most expensive model available. The naive
@@ -402,7 +402,7 @@ naive "cheapest first" rule routes into a loss. Pricing the path makes the polic
 <em>around</em> a cheap tier that cannot pay for its verification, and <em>to</em> one that can.</p>
 
 <p>The map is an output, not a setting. Fed the current stack's measurements it derives
-<code>easy→cheap, medium→cheap, hard→cheap</code>; fed the old 3B stack's it derived
+<code>easy→cheap, medium→cheap, hard→cheap, expert→frontier</code>; fed the old 3B stack's it derived
 <code>hard→mid</code>, because that model scored 0.73 on hard.</p>
 
 <h4>Worked example — current stack</h4>
@@ -412,11 +412,14 @@ naive "cheapest first" rule routes into a loss. Pricing the path makes the polic
     <tr><td>easy</td><td class="num">$0.000093</td><td class="num">$0.000477</td><td class="num">$0.002252</td><td><span class="tier c">cheap</span></td></tr>
     <tr><td>medium</td><td class="num">$0.000175</td><td class="num">$0.002386</td><td class="num">$0.008738</td><td><span class="tier c">cheap</span></td></tr>
     <tr><td>hard</td><td class="num">$0.000510</td><td class="num">$0.002325</td><td class="num">$0.008724</td><td><span class="tier c">cheap</span></td></tr>
+    <tr><td>expert</td><td class="num">$0.077653</td><td class="num">$0.077425</td><td class="num">$0.193861</td><td><span class="tier f">frontier</span></td></tr>
   </tbody>
 </table></div>
 <p class="caption">Expected total cost per band including verification (J = $0.000041) and
-failure-weighted escalation. Cheap wins every band on this stack because its quality clears 0.80
-everywhere and it is ~100× cheaper.</p>
+failure-weighted escalation. Cheap wins the three everyday bands: its quality clears 0.80 on each and
+it is ~100× cheaper. On expert, starting lower looks cheaper on paper, but neither cheap (0.00) nor mid
+(0.70) clears the floor, so the frontier starts. The arithmetic assumes failures get caught, and mid's
+answers only get a structural check; the floor is what stops its wrong 30% from shipping.</p>
 
 <h2 id="verify"><span class="n">5</span>Two-stage verification</h2>
 <p class="lede"><code>app/routing/scorer.py</code> (267 lines) and <code>app/routing/verifier.py</code> (131 lines).</p>
@@ -506,8 +509,11 @@ the client drops what it showed and takes the next tier's answer. Escalation ran
 measured run, so the common path streams cleanly and the uncommon path shows the router doing the
 thing it exists to do.</p>
 <p>Events: <code>routing</code> → <code>tier_start</code> → <code>token</code>* →
-(<code>escalated</code>) → <code>done</code> | <code>error</code>. Streamed chunks carry no usage
-block, so cost is priced from token counts estimated at ~4 characters per token.</p>
+(<code>escalated</code>) → <code>done</code> | <code>error</code>. Streams ask for a final usage block
+(<code>stream_options.include_usage</code>), and cost is priced from it, hidden reasoning tokens
+included. Before that, a streamed answer was priced from its visible text at ~4 characters per token,
+which put a $0.19 thinking answer at a fraction of a cent. Providers that send no usage still fall
+back to that estimate.</p>
 
 <h3>Routing modes</h3>
 <p>Per chat and per API request: <code>cascade</code> as described, or <code>direct</code>, which
@@ -824,7 +830,7 @@ exception class — because <code>sqlite3</code> and libsql raise different clas
 Sessions view.</p>
 
 <h2 id="api"><span class="n">14</span>HTTP surface</h2>
-<p>45 routes. The ones that matter:</p>
+<p>46 routes, split across routers in <code>app/api/</code>. The ones that matter:</p>
 
 <div class="table-wrap"><table>
   <thead><tr><th>method + path</th><th>purpose</th><th>auth</th></tr></thead>
