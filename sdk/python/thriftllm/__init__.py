@@ -1,17 +1,20 @@
 """ThriftLLM: calibrate your models, then route every prompt to the cheapest
 one that can answer it.
 
+    pip install "git+https://github.com/AnshumanDas001/llm-router.git#subdirectory=sdk/python"
+
+    import os
     import thriftllm
 
-    thriftllm.configure(api_key="rtr_...", base_url="https://your-thriftllm-host")
+    GROQ_KEY = os.environ["GROQ_API_KEY"]
 
-    small = thriftllm.calibrate("groq/openai/gpt-oss-20b", api_key=GROQ_KEY)
-    big = thriftllm.calibrate("openai/gpt-5", api_key=OPENAI_KEY)
-
-    router = thriftllm.Router(cheap=small, frontier=big)
-    reply = router.chat("What is the capital of Australia?")
+    thriftllm.configure(api_key="rtr_...", base_url="https://your-host")
+    small  = thriftllm.calibrate("groq/openai/gpt-oss-20b",  api_key=GROQ_KEY)
+    medium = thriftllm.calibrate("groq/openai/gpt-oss-120b", api_key=GROQ_KEY)
+    router = thriftllm.Router(cheap=small, mid=medium)
+    reply  = router.chat("What is the capital of Australia?")
     print(reply.text, reply.tier, reply.cost)
-    print(reply.explain())
+    print(reply.explain())          # the same route "Why this route?" shows
 """
 from thriftllm.client import (
     CalibratedModel,

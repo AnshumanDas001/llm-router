@@ -52,6 +52,7 @@
   --on-accent: #ffffff;
 
   --good: #2fc67a;
+  --code-string: #8ee0b9;
   --good-soft: rgba(47, 198, 122, 0.13);
   --warning: #f5b53d;
   --warning-soft: rgba(245, 181, 61, 0.11);
@@ -87,6 +88,8 @@
     --grad-a: #2f6fe4; --grad-b: #7a4fe0; --grad-c: #0f9a68;
     --accent-ink: #1f5fd2; --accent-soft: rgba(47, 111, 228, 0.1);
     --good: #13874f; --good-soft: rgba(19, 135, 79, 0.1);
+  --code-string: #0b7343;
+    --code-string: #0b7343;
     --warning: #a96800; --warning-soft: rgba(201, 135, 0, 0.1);
     --critical: #c43c3c; --critical-soft: rgba(196, 60, 60, 0.09);
     --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.05);
@@ -535,7 +538,10 @@ input[type=checkbox]:disabled { opacity: 0.45; cursor: default; }
 }
 .code-block pre .c { color: var(--text-muted); }
 .code-block pre .k { color: var(--accent-ink); }
-.code-block pre .s { color: #8ee0b9; }
+.code-block pre .s { color: var(--code-string); }
+/* A one-line command too long for the box (a pip install URL) wraps rather
+   than hiding its end; copying still gives the single line. */
+.code-block pre.wrap-line { white-space: pre-wrap; overflow-wrap: anywhere; }
 .code-block .copy-btn { position: absolute; top: 8px; right: 8px; }
 
 /* --- thinking on / off: on the built-in stack, the only thing separating

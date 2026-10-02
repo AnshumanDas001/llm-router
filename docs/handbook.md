@@ -395,10 +395,21 @@ is set. Only the local eval harness sets that.
 
 ### 4.12 Python SDK (`sdk/python`)
 
-**What.** A small client over the API:
+**What.** A small client over the API. Install it straight from GitHub
+(Python 3.10+, depends only on httpx):
+
+```bash
+pip install "git+https://github.com/AnshumanDas001/llm-router.git#subdirectory=sdk/python"
+```
+
+Then, with an API key from Settings:
 
 ```python
+import os
 import thriftllm
+
+GROQ_KEY = os.environ["GROQ_API_KEY"]
+
 thriftllm.configure(api_key="rtr_...", base_url="https://your-host")
 small  = thriftllm.calibrate("groq/openai/gpt-oss-20b",  api_key=GROQ_KEY)
 medium = thriftllm.calibrate("groq/openai/gpt-oss-120b", api_key=GROQ_KEY)
@@ -407,6 +418,22 @@ reply  = router.chat("What is the capital of Australia?")
 print(reply.text, reply.tier, reply.cost)
 print(reply.explain())          # the same route "Why this route?" shows
 ```
+
+**Where it lives.** The package is the folder [`sdk/python/`](../sdk/python/),
+and `#subdirectory=sdk/python` in the install command tells pip to build it
+from there:
+
+| file | role |
+|---|---|
+| `pyproject.toml` | package name, version, Python 3.10+, the httpx dependency |
+| `README.md` | install, example, reference table |
+| `thriftllm/__init__.py` | what `import thriftllm` exposes: `configure`, `calibrate`, `Router`, `Client`, `Reply`, `CalibratedModel`, `ThriftLLMError` |
+| `thriftllm/client.py` | everything else, about 300 lines |
+
+In this repo's venv it is installed in editable mode (`pip install -e
+sdk/python`, also in `requirements-dev.txt`): `site-packages` holds a pointer
+to the folder instead of a copy, so edits to `client.py` apply on the next
+import.
 
 **How.** [`sdk/python/thriftllm/client.py`](../sdk/python/thriftllm/client.py)
 uses httpx and calls the endpoints above:

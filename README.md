@@ -516,27 +516,38 @@ Then:
 
 ### Python SDK
 
+Install it straight from GitHub (Python 3.10+; its only dependency is httpx):
+
+```bash
+pip install "git+https://github.com/AnshumanDas001/llm-router.git#subdirectory=sdk/python"
+```
+
+Create an API key under **Settings** in the app, then:
+
 ```python
 import os
 import thriftllm
 
-thriftllm.configure(api_key="rtr_...", base_url="http://localhost:8000")
+GROQ_KEY = os.environ["GROQ_API_KEY"]
 
-small = thriftllm.calibrate("groq/openai/gpt-oss-20b", api_key=os.environ["GROQ_API_KEY"])
-large = thriftllm.calibrate("openai/gpt-5", api_key=os.environ["OPENAI_API_KEY"])
-
-router = thriftllm.Router(cheap=small, frontier=large)
-reply = router.chat("What is the capital of Australia?")
+thriftllm.configure(api_key="rtr_...", base_url="https://your-host")
+small  = thriftllm.calibrate("groq/openai/gpt-oss-20b",  api_key=GROQ_KEY)
+medium = thriftllm.calibrate("groq/openai/gpt-oss-120b", api_key=GROQ_KEY)
+router = thriftllm.Router(cheap=small, mid=medium)
+reply  = router.chat("What is the capital of Australia?")
 print(reply.text, reply.tier, reply.cost)
-print(reply.explain())
+print(reply.explain())          # the same route "Why this route?" shows
 ```
 
 `calibrate()` connects the model if needed and runs 24 graded questions on
 your key (six per band, expert included). A model calibrated before comes back
 straight away with its stored numbers. The router sends your provider keys
 with each request; the server uses them for that call and never stores them.
-`pip install -e sdk/python`; the full reference is in
-[`sdk/python/README.md`](sdk/python/README.md).
+Add a third model with `frontier=` for questions neither of these clears.
+
+Working on the SDK itself? Install your checkout in editable mode instead,
+`pip install -e sdk/python`, so edits take effect without reinstalling. The
+full reference is in [`sdk/python/README.md`](sdk/python/README.md).
 
 ### HTTP
 

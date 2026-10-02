@@ -75,6 +75,21 @@ curl -X POST <span class="s" id="host-url">https://your-host</span>/v1/chat/comp
   -H "Content-Type: application/json" \
   -d '{"messages": [{"role": "user", "content": "What is 2+2?"}]}'</pre></div>
             <p class="hint" style="margin:10px 0 0;">Route across your own models with <code>/api/v1/route</code>. See the <a href="/guide#quickstart">quickstart</a>.</p>
+            <h3 style="margin:18px 0 6px;">Or use the Python SDK</h3>
+            <div class="code-block"><pre class="wrap-line">pip install <span class="s">"git+https://github.com/AnshumanDas001/llm-router.git#subdirectory=sdk/python"</span></pre></div>
+            <div class="code-block" style="margin-top:8px;"><pre><span class="k">import</span> os
+<span class="k">import</span> thriftllm
+
+GROQ_KEY = os.environ[<span class="s">"GROQ_API_KEY"</span>]
+
+thriftllm.configure(api_key=<span class="s">"rtr_..."</span>, base_url=<span class="s" data-host>"https://your-host"</span>)
+small  = thriftllm.calibrate(<span class="s">"groq/openai/gpt-oss-20b"</span>,  api_key=GROQ_KEY)
+medium = thriftllm.calibrate(<span class="s">"groq/openai/gpt-oss-120b"</span>, api_key=GROQ_KEY)
+router = thriftllm.Router(cheap=small, mid=medium)
+reply  = router.chat(<span class="s">"What is the capital of Australia?"</span>)
+print(reply.text, reply.tier, reply.cost)
+print(reply.explain())          <span class="c"># the same route "Why this route?" shows</span></pre></div>
+            <p class="hint" style="margin:10px 0 0;">Use a key from <b>API keys</b> on this page. See the <a href="/guide#sdk">SDK guide</a>.</p>
           </div>
         </div>
 
@@ -158,6 +173,7 @@ curl -X POST <span class="s" id="host-url">https://your-host</span>/v1/chat/comp
 
   async function loadAccount() {
     document.getElementById("host-url").textContent = window.location.origin;
+    document.querySelectorAll("[data-host]").forEach(el => { el.textContent = `"${window.location.origin}"`; });
     try {
       const me = await api("/auth/me");
       document.getElementById("acct-name").textContent = me.username;
