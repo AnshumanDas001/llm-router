@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     latency_ms REAL,
     difficulty TEXT,
     escalation_reasons TEXT,
+    route_trace TEXT,
     timestamp TEXT NOT NULL
 );
 
@@ -200,7 +201,8 @@ def init_chat_db():
         _add_column(conn, "ALTER TABLE chats ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0")
         _add_column(conn, "ALTER TABLE chats ADD COLUMN mode TEXT NOT NULL DEFAULT 'builtin'")
         _add_column(conn, "ALTER TABLE chats ADD COLUMN routing_mode TEXT NOT NULL DEFAULT 'cascade'")
-        for column, decl in (("difficulty", "TEXT"), ("escalation_reasons", "TEXT")):
+        for column, decl in (("difficulty", "TEXT"), ("escalation_reasons", "TEXT"),
+                             ("route_trace", "TEXT")):
             _add_column(conn, f"ALTER TABLE chat_messages ADD COLUMN {column} {decl}")
         _add_column(conn, "ALTER TABLE calibration_results ADD COLUMN quality_by_difficulty TEXT")
 
@@ -370,15 +372,18 @@ def add_chat_message(chat_id: int, role: str, content: str, timestamp: str,
                       tier: str | None = None, cost: float | None = None,
                       baseline_cost: float | None = None, escalated: bool | None = None,
                       latency_ms: float | None = None, difficulty: str | None = None,
-                      escalation_reasons: list | None = None):
+                      escalation_reasons: list | None = None, route_trace: dict | None = None):
+    """route_trace is the cascade's full decision record for an answer --
+    what "Why this route?" renders -- stored as JSON."""
     with get_conn() as conn:
         conn.execute(
             "INSERT INTO chat_messages (chat_id, role, content, tier, cost, baseline_cost, "
-            "escalated, latency_ms, difficulty, escalation_reasons, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "escalated, latency_ms, difficulty, escalation_reasons, route_trace, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (chat_id, role, content, tier, cost, baseline_cost,
              int(escalated) if escalated is not None else None, latency_ms, difficulty,
-             json.dumps(escalation_reasons) if escalation_reasons else None, timestamp),
+             json.dumps(escalation_reasons) if escalation_reasons else None,
+             json.dumps(route_trace) if route_trace else None, timestamp),
         )
         conn.commit()
 

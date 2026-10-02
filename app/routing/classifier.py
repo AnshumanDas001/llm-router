@@ -5,6 +5,7 @@ labelled question sets to guess a difficulty band before any model call.
 """
 import re
 import threading
+import time
 
 from sentence_transformers import SentenceTransformer, util
 
@@ -95,9 +96,9 @@ def vote(similarities: list[float], labels: list[str]) -> str:
     return max(votes, key=votes.get) if votes else "medium"
 
 
-def difficulty_from_similarities(scores, labels: list[str]) -> str:
-    """The embedding vote, given one query's cosine similarity to every
-    labelled question (a 1-D tensor) and their labels.
+def explain_similarities(scores, labels: list[str], texts: list[str] | None = None) -> dict:
+    """The embedding vote with its evidence, given one query's cosine
+    similarity to every labelled question (a 1-D tensor) and their labels.
 
     Two stages. First the expert gate: is this a competition-maths style
     problem, by a clear share of its nearest neighbours? If not, a
@@ -112,37 +113,64 @@ def difficulty_from_similarities(scores, labels: list[str]) -> str:
     Single-neighbour is fragile here because the reference set is 52% "hard",
     so one spurious topical match drags a query straight to the mid tier.
     Summing similarity over five neighbours dilutes that.
+
+    Returns {band, expert_share, gate, neighbours, votes} -- everything
+    "Why this route?" shows about the classification.
     """
+    def rows(top):
+        return [{"band": labels[i], "similarity": round(v, 3),
+                 **({"text": texts[i]} if texts else {})}
+                for v, i in zip(top.values.tolist(), top.indices.tolist())]
+
     top = scores.topk(min(EXPERT_K, len(labels)))
     weights = [(v, labels[i]) for v, i in zip(top.values.tolist(), top.indices.tolist()) if v > 0]
     total = sum(v for v, _ in weights)
-    if total and sum(v for v, label in weights if label == "expert") / total >= EXPERT_MIN_SHARE:
-        return "expert"
+    share = (sum(v for v, label in weights if label == "expert") / total) if total else 0.0
+    gate = {"k": EXPERT_K, "share": round(share, 3), "needed": EXPERT_MIN_SHARE}
+    if total and share >= EXPERT_MIN_SHARE:
+        return {"band": "expert", "expert_share": share, "gate": gate, "neighbours": rows(top),
+                "votes": {"expert": round(share, 3)}}
 
     everyday = scores.clone()
     for i, label in enumerate(labels):
         if label == "expert":
             everyday[i] = -1.0
     top = everyday.topk(min(TOP_K, len(labels)))
-    return vote(top.values.tolist(), [labels[i] for i in top.indices.tolist()])
+    sims, bands = top.values.tolist(), [labels[i] for i in top.indices.tolist()]
+    votes = {}
+    for v, b in zip(sims, bands):
+        if v > 0:
+            votes[b] = round(votes.get(b, 0.0) + v, 3)
+    return {"band": vote(sims, bands), "expert_share": share, "gate": gate,
+            "neighbours": rows(top), "votes": votes}
 
 
-def _embedding_difficulty(query: str) -> str:
+def difficulty_from_similarities(scores, labels: list[str]) -> str:
+    """Just the band; see explain_similarities."""
+    return explain_similarities(scores, labels)["band"]
+
+
+def _embedding_vote(query: str) -> dict:
     with _model_lock:
         labeled_queries, labeled_embeddings = _get_labeled_set()
         query_emb = _get_model().encode(query, convert_to_tensor=True)
         scores = util.cos_sim(query_emb, labeled_embeddings)[0]
-        return difficulty_from_similarities(scores, [q["difficulty"] for q in labeled_queries])
+        return explain_similarities(scores, [q["difficulty"] for q in labeled_queries],
+                                    [q["query"] for q in labeled_queries])
 
 
-def apply_overrides(query: str, embedding_guess: str) -> str:
+def _embedding_difficulty(query: str) -> str:
+    return _embedding_vote(query)["band"]
+
+
+def override(query: str, embedding_guess: str) -> tuple[str, str | None]:
     """Structural corrections to the embedding vote, for what topical
-    similarity can't see."""
+    similarity can't see. Returns (band, the rule that changed it or None)."""
     # Expert is a band of whole problem *types* (competition maths), and
     # its references are long, so the length rule below would demote every
     # one of them to medium. Trust the vote.
     if embedding_guess == "expert":
-        return "expert"
+        return "expert", None
 
     # Long, multi-step, or code-heavy queries are at least medium even if
     # embedding similarity suggests otherwise.
@@ -151,9 +179,12 @@ def apply_overrides(query: str, embedding_guess: str) -> str:
     has_multi_step = bool(MULTI_STEP_KEYWORDS.search(query))
 
     if word_count > 25 or has_multi_step:
-        return "hard" if embedding_guess == "hard" else "medium"
+        band = "hard" if embedding_guess == "hard" else "medium"
+        why = (f"{word_count} words, over the 25-word limit" if word_count > 25
+               else "asks for multiple steps")
+        return band, (None if band == embedding_guess else f"raised to medium: {why}")
     if has_code and embedding_guess == "easy":
-        return "medium"
+        return "medium", "raised to medium: mentions code"
 
     # Embedding similarity measures *topic*, not difficulty: "what's the worst
     # case of quicksort" lands next to "explain why naive quicksort degrades
@@ -164,9 +195,27 @@ def apply_overrides(query: str, embedding_guess: str) -> str:
     # escalates -- that safety net is exactly what makes starting low safe.
     if (embedding_guess == "hard" and word_count <= RECALL_MAX_WORDS
             and RECALL_QUESTION.match(query) and not has_multi_step):
-        return "medium"
+        return "medium", f"capped at medium: a short recall question ({word_count} words)"
 
-    return embedding_guess
+    return embedding_guess, None
+
+
+def apply_overrides(query: str, embedding_guess: str) -> str:
+    return override(query, embedding_guess)[0]
+
+
+def classify_with_trace(query: str) -> tuple[str, dict]:
+    """(band, trace): the band, and how it was reached -- the nearest
+    labelled examples, the vote, the expert gate, any override."""
+    start = time.perf_counter()
+    voted = _embedding_vote(query)
+    band, rule = override(query, voted["band"])
+    return band, {
+        "band": band, "embedding_band": voted["band"], "override": rule,
+        "gate": voted["gate"], "votes": voted["votes"],
+        "neighbours": [{**n, "text": n.get("text", "")[:160]} for n in voted["neighbours"]],
+        "ms": round((time.perf_counter() - start) * 1000, 1),
+    }
 
 
 def classify_difficulty(query: str) -> str:

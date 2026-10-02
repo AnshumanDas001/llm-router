@@ -7,3 +7,4 @@ logs/*.db
 .claude/
 data/scorer/training_*.jsonl
 .pytest_cache/
+*.egg-info/

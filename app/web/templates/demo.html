@@ -135,7 +135,8 @@
   function model(t) { return (routing.models[t] || "").split("/").pop(); }
 
   function renderMatrix(activeBand) {
-    const head = `<tr><th>Band</th>${TIERS.map(t => `<th><span class="badge ${t}">${t}</span></th>`).join("")}<th>Starts at</th></tr>`;
+    const THINK = { cheap: "", mid: ' <span class="think">thinking off</span>', frontier: ' <span class="think on">thinking on</span>' };
+    const head = `<tr><th>Band</th>${TIERS.map(t => `<th><span class="badge ${t}">${t}</span>${THINK[t]}</th>`).join("")}<th>Starts at</th></tr>`;
     document.querySelector("#matrix thead").innerHTML = head;
     document.querySelector("#matrix tbody").innerHTML = routing.bands.map(b => {
       const start = routing.map[b];

@@ -10,6 +10,7 @@ from app.api.common import (
     baseline_cost,
     check_routing_mode,
     enforce_daily_limit,
+    finish_trace,
     log_result,
     now,
     provider_needs_key,
@@ -163,6 +164,7 @@ def api_get_chat(chat_id: int, user=Depends(get_current_user)):
                 "escalated": bool(m["escalated"]) if m["escalated"] is not None else False,
                 "latency_ms": m["latency_ms"], "difficulty": m["difficulty"],
                 "escalation_reasons": json.loads(m["escalation_reasons"]) if m["escalation_reasons"] else [],
+                "trace": json.loads(m["route_trace"]) if m["route_trace"] else None,
             }
             for m in messages
         ],
@@ -206,20 +208,24 @@ def _prepare_send(chat_id: int, req: SendMessageRequest, user) -> dict:
     }
 
 
-def _finish_send(chat_id: int, content: str, result: dict, tier_models: dict | None) -> dict:
-    """Shared teardown: price the answer, persist it, and return the totals
-    both send paths report back."""
+def _finish_send(chat_id: int, user_id: int, content: str, result: dict,
+                 tier_models: dict | None) -> dict:
+    """Shared teardown: price the answer, persist it with its decision
+    trace, and return what both send paths report back."""
     baseline = baseline_cost(result, tier_models)
+    trace = finish_trace(result, user_id, tier_models, baseline)
     chat_db.add_chat_message(
         chat_id, "assistant", result["text"], now(),
         tier=result["final_tier"], cost=result["total_cost"], baseline_cost=baseline,
         escalated=result["escalated"], latency_ms=result["total_latency_ms"],
         difficulty=result["difficulty"], escalation_reasons=result["escalation_reasons"],
+        route_trace=trace,
     )
     log_result(content, result)
     totals = chat_db.get_chat_totals(chat_id)
     return {
         "baseline_cost": baseline,
+        "trace": trace,
         "chat_total_cost": totals["total_cost"],
         "chat_total_baseline_cost": totals["total_baseline_cost"],
         "chat_cost_saved": max(0.0, totals["total_baseline_cost"] - totals["total_cost"]),
@@ -237,7 +243,7 @@ def api_send_message_stream(chat_id: int, req: SendMessageRequest, user=Depends(
         try:
             for event in run_cascade_stream(**plan):
                 if event["type"] == "done":
-                    event.update(_finish_send(chat_id, req.content, event, plan["tier_models"]))
+                    event.update(_finish_send(chat_id, user["id"], req.content, event, plan["tier_models"]))
                 yield sse(event)
         except AllTiersUnavailable:
             yield sse({"type": "error",
@@ -262,7 +268,7 @@ def api_send_message(chat_id: int, req: SendMessageRequest, user=Depends(get_cur
     except Exception:
         raise HTTPException(status_code=502, detail="Something went wrong generating a response.")
 
-    totals = _finish_send(chat_id, req.content, result, plan["tier_models"])
+    totals = _finish_send(chat_id, user["id"], req.content, result, plan["tier_models"])
     return {
         "content": result["text"],
         "tier": result["final_tier"],

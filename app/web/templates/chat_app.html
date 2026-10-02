@@ -377,11 +377,47 @@
 
   /* --- "why this route" disclosure on assistant messages ------------------ */
   .route-info {
-    margin-top: 8px; padding: 9px 11px; background: var(--surface-1); border: 1px solid var(--border);
-    border-radius: 8px; font-size: 12px; color: var(--text-secondary); line-height: 1.6;
+    margin-top: 10px; padding: 16px 18px; background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 14px; font-size: 12.5px; color: var(--text-secondary); line-height: 1.6;
+    display: flex; flex-direction: column; gap: 18px;
   }
   .route-info .ri-row { display: flex; gap: 6px; }
   .route-info .ri-row .k { color: var(--text-muted); flex-shrink: 0; }
+  .ri-step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; }
+  .ri-step .ri-n {
+    width: 22px; height: 22px; border-radius: 7px; display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--accent-ink); background: var(--accent-soft);
+  }
+  .ri-step h4 { margin: 1px 0 6px; font-size: 13px; color: var(--text-primary); font-weight: 650; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ri-step h4 .hint { font-weight: 400; }
+  .ri-step p { margin: 0 0 8px; }
+  .ri-note { font-size: 12px; color: var(--text-muted); }
+  .ri-note.warn { color: var(--warning); }
+  .ri-nb { display: grid; grid-template-columns: 66px 120px minmax(0, 1fr); gap: 12px; align-items: center; padding: 4px 0; }
+  .ri-nb .t { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 640px) {
+    .ri-nb { grid-template-columns: 66px minmax(0, 1fr); row-gap: 2px; }
+    .ri-nb .t { grid-column: 1 / -1; white-space: normal; font-size: 11.5px; }
+    .route-info { padding: 14px; }
+  }
+  .ri-bar { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; }
+  .ri-bar .b { flex: 1; height: 5px; border-radius: 4px; background: var(--surface-3); overflow: hidden; position: relative; min-width: 36px; }
+  .ri-bar .b i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+  .ri-bar .b .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--warning); }
+  .ri-table { width: 100%; font-size: 12px; }
+  .ri-table th { padding: 6px 8px; font-size: 10px; }
+  .ri-table td { padding: 7px 8px; }
+  .ri-table tr.chosen td { background: rgba(255, 255, 255, 0.035); }
+  .ri-table td.ok { color: var(--good); } .ri-table td.no { color: var(--warning); }
+  .ri-attempt { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; }
+  .ri-attempt + .ri-attempt { margin-top: 8px; }
+  .ri-attempt .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ri-attempt .top .m { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); }
+  .ri-attempt .top .out { margin-left: auto; }
+  .ri-attempt .verdict { font-size: 12px; color: var(--text-secondary); border-left: 2px solid var(--border-strong); padding-left: 9px; }
+  .ri-cost { display: flex; gap: 22px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 12px; }
+  .ri-cost b { color: var(--text-primary); font-weight: 600; }
+  .ri-cost .good { color: var(--good); }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
 </head>
@@ -884,6 +920,10 @@
     return model.split("/").pop();
   }
 
+  // On the built-in stack mid and frontier are the same model; whether it
+  // may think is the whole difference, so the cards say so.
+  const BUILTIN_THINK = { cheap: "", mid: '<span class="think">thinking off</span>', frontier: '<span class="think on">thinking on</span>' };
+
   // The routing map as three tier cards: each tier, its model, and the
   // difficulty bands that start there. The predicted tier for whatever is
   // being typed lights up (see schedulePredict).
@@ -903,7 +943,7 @@
       <div class="hero-route-label">Where questions start</div>
       <div class="route-map">${order.map(t => `
         <div class="route-tier ${t} tier-name" data-tier="${t}">
-          <div class="rt-head"><span class="badge ${t}">${t}</span></div>
+          <div class="rt-head"><span class="badge ${t}">${t}</span>${currentChatMode === "byom" ? "" : BUILTIN_THINK[t]}</div>
           <div class="rt-model" title="${escapeHtml(tiers[t])}">${escapeHtml(shortModelName(tiers[t]))}</div>
           <div class="rt-bands">${(startsAt[t] || []).map(b => `<span class="diff ${b}">${b}</span>`).join("")
             || '<span class="none">escalations only</span>'}</div>
@@ -1322,12 +1362,7 @@
       routeInfoEl = document.createElement("div");
       routeInfoEl.className = "route-info";
       routeInfoEl.hidden = true;
-      const reasons = m.escalation_reasons && m.escalation_reasons.length
-        ? m.escalation_reasons.join("; ") : "none -- answered at the first tier tried";
-      routeInfoEl.innerHTML = `
-        <div class="ri-row"><span class="k">classified</span><span>${escapeHtml(m.difficulty)}</span></div>
-        <div class="ri-row"><span class="k">escalation</span><span>${escapeHtml(reasons)}</span></div>
-      `;
+      routeInfoEl.innerHTML = m.trace ? renderTrace(m.trace) : renderLegacyRoute(m);
     }
 
     if (m.role === "assistant" && m.content) {
@@ -1365,6 +1400,129 @@
     }
     if (routeInfoEl) wrap.appendChild(routeInfoEl);
     return wrap;
+  }
+
+  // --- "Why this route?": the cascade's decision trace, step by step ---
+  function money(v) {
+    if (v == null) return "\u2014";
+    return "$" + (v === 0 ? "0" : v < 0.001 ? v.toPrecision(2) : v.toFixed(4));
+  }
+  function pctTxt(v) { return v == null ? "n/m" : `${Math.round(v * 100)}%`; }
+  function bar(v, color, mark, label) {
+    const w = v == null ? 0 : Math.max(2, Math.min(100, v * 100));
+    return `<span class="ri-bar"><span class="b"><i style="width:${w}%;${color ? `background:${color}` : ""}"></i>` +
+      (mark != null ? `<span class="mark" style="left:${mark * 100}%"></span>` : "") + `</span>` +
+      (label != null ? `<span>${label}</span>` : "") + `</span>`;
+  }
+
+  function renderLegacyRoute(m) {
+    const reasons = m.escalation_reasons && m.escalation_reasons.length
+      ? m.escalation_reasons.join("; ") : "none: answered at the first tier tried";
+    return `
+      <div class="ri-row"><span class="k">classified</span><span>${escapeHtml(m.difficulty)}</span></div>
+      <div class="ri-row"><span class="k">escalation</span><span>${escapeHtml(reasons)}</span></div>
+      <div class="ri-note">This answer predates the detailed route record.</div>`;
+  }
+
+  function startSentence(s) {
+    const rows = s.tiers || [];
+    const chosen = rows.find(r => r.tier === s.chosen);
+    const cleared = rows.filter(r => r.clears_floor);
+    const band = escapeHtml(s.band);
+    let txt;
+    if (!chosen) {
+      txt = `Routing used the default map for ${band} questions.`;
+    } else if (chosen.clears_floor && cleared[0] && cleared[0].tier === chosen.tier) {
+      txt = `<b>${chosen.tier}</b> is the cheapest tier scoring at least ${pctTxt(s.floor)} on ${band} questions, and starting there has the lowest expected cost once checking and escalating are priced in.`;
+    } else if (chosen.clears_floor) {
+      txt = `${cleared[0].tier} also clears the ${pctTxt(s.floor)} floor, but starting at <b>${chosen.tier}</b> has a lower expected cost: the cheaper tier's check and its escalations would cost more than they save.`;
+    } else {
+      const below = rows.filter(r => r.tier !== chosen.tier && !r.last_tier)
+        .map(r => `${r.tier} ${pctTxt(r.quality)}`).join(", ");
+      txt = `No cheaper tier scores ${pctTxt(s.floor)} on ${band} questions${below ? ` (${below})` : ""}, so it starts at <b>${chosen.tier}</b>, the strongest tier. A wrong answer from a lower tier could ship, because only the cheapest tier gets a real check.`;
+    }
+    if (s.direct) txt += ` Direct mode skips the cheapest tier, so this chat started at <b>${escapeHtml(s.tier)}</b>.`;
+    return txt;
+  }
+
+  function renderCheck(c) {
+    if (!c) return "";
+    if (c.kind === "none") return `<div class="ri-note">Not checked: ${escapeHtml(c.reason)}.</div>`;
+    let html = "";
+    if (c.p_correct != null) {
+      html += `<div class="ri-nb" style="grid-template-columns:120px minmax(0,1fr) 120px;">
+        <span class="ri-note">learned gate</span>${bar(c.p_correct, c.p_correct >= c.accept_threshold ? "var(--good)" : "var(--warning)", c.accept_threshold)}
+        <span class="mono" style="font-size:11.5px">P(correct) ${c.p_correct.toFixed(2)} / ${c.accept_threshold}</span></div>`;
+      html += `<div class="ri-note">${c.p_correct >= c.accept_threshold
+        ? "Confident enough to ship without asking the judge."
+        : `Under the ${c.accept_threshold} bar, so the judge decides.`}</div>`;
+    }
+    if (c.judge_verdict) {
+      html += `<div class="verdict"><span class="ri-note">judge${c.judge_model ? ` (${escapeHtml(shortModelName(c.judge_model))})` : ""}:</span> ${escapeHtml(c.judge_verdict)}</div>`;
+    }
+    if (c.kind === "structural") {
+      html += `<div class="ri-note">Structural check only (non-empty, not a refusal): ${c.passed ? "passed" : escapeHtml(c.reason)}. Tiers above the cheapest don't get a paid check.</div>`;
+    }
+    if (c.kind && c.kind.startsWith("skipped")) html += `<div class="ri-note warn">${escapeHtml(c.reason)}</div>`;
+    if (c.cost) html += `<div class="ri-note">check cost ${money(c.cost)}</div>`;
+    return html;
+  }
+
+  function renderTrace(t) {
+    const c = t.classification || {};
+    const s = t.start || {};
+    const nbs = (c.neighbours || []).slice(0, 5).map(n => `
+      <div class="ri-nb"><span class="diff ${escapeHtml(n.band)}">${escapeHtml(n.band)}</span>
+        ${bar(n.similarity, null, null, Number(n.similarity).toFixed(2))}<span class="t" title="${escapeHtml(n.text || "")}">${escapeHtml(n.text || "")}</span></div>`).join("");
+    const votes = Object.entries(c.votes || {}).sort((a, b) => b[1] - a[1])
+      .map(([b, v]) => `${b} ${Number(v).toFixed(2)}`).join(" &middot; ");
+    const gate = c.gate ? `Expert gate: ${pctTxt(c.gate.share)} of the similarity among the ${c.gate.k} nearest examples is competition maths (it takes ${pctTxt(c.gate.needed)}).` : "";
+
+    const rows = (s.tiers || []).map(r => `
+      <tr class="${r.tier === s.chosen ? "chosen" : ""}">
+        <td><span class="badge ${r.tier}">${r.tier}</span></td>
+        <td class="mono" style="color:var(--text-muted)">${escapeHtml(shortModelName(r.model || ""))}</td>
+        <td>${bar(r.quality, r.clears_floor ? "var(--good)" : "var(--warning)", s.floor)}</td>
+        <td class="mono">${pctTxt(r.quality)}</td>
+        <td class="${r.clears_floor ? "ok" : "no"}">${r.clears_floor ? "clears" : r.last_tier ? "last tier" : "below"}</td>
+        <td class="mono" style="text-align:right">${money(r.expected_cost)}</td>
+      </tr>`).join("");
+
+    const attempts = (t.attempts || []).map(a => `
+      <div class="ri-attempt">
+        <div class="top"><span class="badge ${a.tier}">${a.tier}</span><span class="m">${escapeHtml(shortModelName(a.model || ""))}</span>
+          ${a.cost != null ? `<span class="mono ri-note">${money(a.cost)} &middot; ${fmtMs(a.latency_ms)}${a.tokens_out ? ` &middot; ${a.tokens_out} tokens` : ""}</span>` : ""}
+          <span class="out badge ${a.outcome === "shipped" ? "good" : "escalated"}">${a.outcome === "unavailable" ? `unavailable: ${escapeHtml(a.reason || "")}` : a.outcome}</span></div>
+        ${renderCheck(a.check)}
+      </div>`).join("");
+
+    const tot = t.totals || {};
+    return `
+      <div class="ri-step"><span class="ri-n">1</span><div>
+        <h4>Classified <span class="diff ${escapeHtml(c.band || "")}">${escapeHtml(c.band || "?")}</span><span class="hint">in ${c.ms != null ? fmtMs(c.ms) : "\u2014"}, no model call</span></h4>
+        <p class="ri-note">Nearest labelled questions by meaning, and how similar each is:</p>
+        ${nbs}
+        <p class="ri-note" style="margin-top:6px">${votes ? `Similarity-weighted vote: ${votes}. ` : ""}${gate}</p>
+        ${c.override ? `<p class="ri-note warn">Override: the vote said ${escapeHtml(c.embedding_band)}, ${escapeHtml(c.override)}.</p>` : ""}
+      </div></div>
+      <div class="ri-step"><span class="ri-n">2</span><div>
+        <h4>Started at <span class="badge ${escapeHtml(s.tier || s.chosen || "")}">${escapeHtml(s.tier || s.chosen || "?")}</span></h4>
+        <p>${startSentence(s)}</p>
+        ${rows ? `<div class="table-wrap"><table class="ri-table">
+          <thead><tr><th>tier</th><th>model</th><th>score on ${escapeHtml(s.band || "")}</th><th></th><th>${pctTxt(s.floor)} floor</th><th style="text-align:right">expected cost</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>
+          <p class="ri-note" style="margin-top:6px">Expected cost = the tier's answer + its check + the chance it fails &times; the cost of escalating.</p>` : ""}
+      </div></div>
+      <div class="ri-step"><span class="ri-n">3</span><div>
+        <h4>What happened</h4>
+        ${attempts || '<p class="ri-note">No attempt recorded.</p>'}
+      </div></div>
+      <div class="ri-step"><span class="ri-n">4</span><div>
+        <h4>Cost</h4>
+        <div class="ri-cost"><span>spent <b>${money(tot.cost)}</b></span><span>strongest tier would cost <b>${money(tot.baseline)}</b></span>
+          <span class="good">saved ${money(tot.saved)}${tot.baseline ? ` (${Math.round((tot.saved / tot.baseline) * 100)}%)` : ""}</span>
+          <span>${fmtMs(tot.latency_ms)} total</span></div>
+      </div></div>`;
   }
 
   function escapeHtml(s) {
@@ -1511,7 +1669,7 @@
         role: "assistant", content: finalEvent.text, tier: finalEvent.final_tier,
         cost: finalEvent.total_cost, latency_ms: finalEvent.total_latency_ms,
         escalated: finalEvent.escalated, difficulty: finalEvent.difficulty,
-        escalation_reasons: finalEvent.escalation_reasons,
+        escalation_reasons: finalEvent.escalation_reasons, trace: finalEvent.trace,
       }));
       if (DEMO) {
         demoHistory.push({ role: "user", content }, { role: "assistant", content: finalEvent.text });

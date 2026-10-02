@@ -12,6 +12,7 @@ from app.api.common import (
     baseline_cost,
     builtin_routing,
     check_routing_mode,
+    finish_trace,
     log_result,
     now,
     sse,
@@ -109,6 +110,7 @@ def api_try(req: DemoRequest, tl_demo: str | None = Cookie(default=None),
                                             skip_cheapest=(req.routing_mode == "direct")):
                 if event["type"] == "done":
                     event["baseline_cost"] = baseline_cost(event, None)
+                    event["trace"] = finish_trace(event, 0, None, event["baseline_cost"])
                     event["saved"] = max(0.0, event["baseline_cost"] - event["total_cost"])
                     event["remaining"] = max(0, DEMO_PROMPT_LIMIT - used)
                     log_result(content, event)

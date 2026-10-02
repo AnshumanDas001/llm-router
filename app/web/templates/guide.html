@@ -143,6 +143,7 @@
     <a class="toc-link" href="#introduction">Introduction</a>
     <a class="toc-link" href="#authentication">Authentication</a>
     <a class="toc-link" href="#quickstart">Quickstart</a>
+    <a class="toc-link" href="#sdk">Python SDK</a>
     <div class="group-label">Concepts</div>
     <a class="toc-link" href="#tiers">Tiers</a>
     <a class="toc-link" href="#cascade">Classifier &amp; cascade</a>
@@ -201,6 +202,7 @@
   -H "Content-Type: application/json" \
   -d '{
     "messages": [{"role": "user", "content": "What is the capital of France?"}],
+    "models": {"cheap": "groq/llama-3.1-8b-instant", "frontier": "gemini/gemini-3.5-flash"},
     "tier_api_keys": {"cheap": "your-groq-key", "frontier": "your-gemini-key"}
   }'</code></pre></div>
         <div class="code-pane" data-lang="python"><pre><code class="language-python">import requests
@@ -210,6 +212,7 @@ resp = requests.post(
     headers={"Authorization": "Bearer rtr_your_key_here"},
     json={
         "messages": [{"role": "user", "content": "What is the capital of France?"}],
+        "models": {"cheap": "groq/llama-3.1-8b-instant", "frontier": "gemini/gemini-3.5-flash"},
         "tier_api_keys": {"cheap": "your-groq-key", "frontier": "your-gemini-key"},
     },
 )
@@ -224,6 +227,7 @@ print(data["_router"])  # tier used, cost, escalated, etc.</code></pre></div>
   },
   body: JSON.stringify({
     messages: [{ role: "user", content: "What is the capital of France?" }],
+    models: { cheap: "groq/llama-3.1-8b-instant", frontier: "gemini/gemini-3.5-flash" },
     tier_api_keys: { cheap: "your-groq-key", frontier: "your-gemini-key" },
   }),
 });
@@ -231,7 +235,41 @@ const data = await resp.json();
 console.log(data.choices[0].message.content);
 console.log(data._router);</code></pre></div>
       </div>
-      <p>Your upstream provider keys (<code>tier_api_keys</code>) are used only for this one request and never written to disk.</p>
+      <p>Every model in <code>models</code> must be calibrated first (below, or with the SDK). Your upstream provider keys (<code>tier_api_keys</code>) are used only for this one request and never written to disk.</p>
+    </section>
+
+    <section id="sdk">
+      <h2>Python SDK</h2>
+      <p>The same flow in a few lines: calibrate each model once, build a router from them, send prompts. Install it from the repo with <code>pip install -e sdk/python</code>.</p>
+      <div class="code-block">
+        <div class="code-tabs">
+          <button class="code-tab active" data-lang="python">Python</button>
+          <span class="code-tab-spacer"></span>
+          <button class="copy-btn" data-copy>Copy</button>
+        </div>
+        <div class="code-pane active" data-lang="python"><pre><code class="language-python">import os
+import thriftllm
+
+thriftllm.configure(api_key="rtr_your_key_here", base_url="https://your-router-host")
+
+# 24 graded questions per model on your key; a model calibrated before is reused for free
+small = thriftllm.calibrate("groq/llama-3.1-8b-instant", api_key=os.environ["GROQ_API_KEY"])
+large = thriftllm.calibrate("openai/gpt-5", api_key=os.environ["OPENAI_API_KEY"])
+print(small)   # scores on easy / medium / hard / expert
+
+router = thriftllm.Router(cheap=small, frontier=large)
+print(router.route_map)   # which tier each band starts at
+
+reply = router.chat("What is the capital of France?")
+print(reply.text, reply.tier, reply.cost)
+print(reply.explain())    # the full route: band, start, checks, cost</code></pre></div>
+      </div>
+      <ul>
+        <li><code>calibrate(model, api_key, provider=None, api_base=None, force=False)</code> connects the model if it isn't connected yet and returns its per-band scores. The key is used for the run and kept only in your process.</li>
+        <li><code>Router(cheap=, mid=, frontier=, mode="cascade")</code> takes one to three calibrated models. <code>mode="direct"</code> skips the cheapest tier and its judge.</li>
+        <li><code>router.classify(prompt)</code> shows where a prompt would start and why, with no model call.</li>
+        <li><code>reply.explain()</code> prints the route the chat app shows under <strong>Why this route?</strong></li>
+      </ul>
     </section>
 
     <section id="tiers">

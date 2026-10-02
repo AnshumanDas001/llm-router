@@ -23,7 +23,7 @@ import litellm
 from app.config import JUDGE_MODEL, TIER_MODEL_LIST, VERIFIER, router
 from app.pricing import estimate_cost_for_model
 from app.routing import scorer
-from app.routing.classifier import classify_initial_tier
+from app.routing.classifier import DIFFICULTY_TO_TIER, classify_with_trace
 from app.routing.policy import TIER_ORDER
 from app.routing.verifier import verify_response, verify_with_judge
 
@@ -142,6 +142,8 @@ def _verify_learned(tier, messages, query, text, logprobs, entropy, finish_reaso
         judge_model, judge_api_key, judge_tier_label = judge
         judged = verify_with_judge(query, text, judge_model, judge_api_key, judge_tier_label)
         judged["reason"] = f"{result['reason']}; judge: {judged['reason']}"
+        judged["p_correct"], judged["accept_threshold"] = result["p_correct"], result["accept_threshold"]
+        judged["judge_verdict"] = judged["reason"].split("judge: ", 1)[-1]
         cost += judged["cost"]
         result = judged
     result["cost"] = cost
@@ -155,9 +157,11 @@ class AllTiersUnavailable(Exception):
 
 def _plan(messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest):
     """Classify the query and lay out the tiers to try, and who judges.
-    Returns (query, difficulty, tier_sequence, judge_model_for)."""
+    Returns (query, difficulty, tier_sequence, judge_model_for, trace)."""
     query = messages[-1]["content"]
-    initial_tier, difficulty = classify_initial_tier(query, difficulty_to_tier)
+    difficulty, classification = classify_with_trace(query)
+    tier_map = difficulty_to_tier or DIFFICULTY_TO_TIER
+    initial_tier = tier_map.get(difficulty, DIFFICULTY_TO_TIER[difficulty])
 
     available_tiers = TIER_ORDER if tier_models is None else [
         t for t in TIER_ORDER if t in tier_models
@@ -177,7 +181,37 @@ def _plan(messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapes
     cheapest_tier = available_tiers[0]
     if len(available_tiers) > 1 and cheapest_tier in tier_sequence:
         judge_model_for[cheapest_tier] = judge_for(available_tiers, tier_models, tier_api_keys)
-    return query, difficulty, tier_sequence, judge_model_for
+    trace = {
+        "classification": classification,
+        "start": {"mapped_tier": initial_tier, "tier": tier_sequence[0],
+                  "direct": skip_cheapest and tier_sequence[0] != initial_tier,
+                  "sequence": tier_sequence},
+        "attempts": [],
+    }
+    return query, difficulty, tier_sequence, judge_model_for, trace
+
+
+def _check_record(tier, scored, judge_model_for, verify_result) -> dict:
+    """What checked one tier's answer, and what it said."""
+    if scored:
+        kind = "learned gate" if verify_result.get("verifier_tier") == "scorer" else "learned gate, then judge"
+    elif tier in judge_model_for:
+        kind = "judge"
+    else:
+        kind = "structural"
+    record = {"kind": kind, "passed": verify_result["passed"], "reason": verify_result["reason"],
+              "cost": verify_result["cost"]}
+    for k in ("p_correct", "accept_threshold", "judge_verdict"):
+        if k in verify_result:
+            record[k] = verify_result[k]
+    if kind == "judge":
+        record["judge_verdict"] = verify_result["reason"]
+        record["judge_model"] = (judge_model_for[tier] or (None,))[0]
+    elif "judge" in kind:
+        record["judge_model"] = (judge_model_for[tier] or (None,))[0]
+    if verify_result.get("rate_limited"):
+        record["kind"] = "skipped (verifier rate limited)"
+    return record
 
 
 def _verify(scored, tier, messages, query, text, logprobs, entropy, finish_reason,
@@ -215,9 +249,10 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
                 tier_api_keys: dict | None = None,
                 difficulty_to_tier: dict | None = None,
                 skip_cheapest: bool = False) -> dict:
-    query, difficulty, tier_sequence, judge_model_for = _plan(
+    query, difficulty, tier_sequence, judge_model_for, trace = _plan(
         messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest)
     initial_tier = tier_sequence[0]
+    attempts = trace["attempts"]
 
     total_cost = 0.0
     total_latency_ms = 0.0
@@ -246,6 +281,8 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
             # there is no next tier, fall back to whatever we already have.
             escalated = True
             escalation_reasons.append(f"{tier} unavailable ({_why(exc)}), skipped")
+            attempts.append({"tier": tier, "model": _model_for(tier, tier_models),
+                             "outcome": "unavailable", "reason": _why(exc)})
             continue
         latency_ms = (time.perf_counter() - start) * 1000
 
@@ -255,9 +292,13 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
         total_cost += cost
         total_latency_ms += latency_ms
         final_text, final_tier, final_usage = text, tier, resp.usage  # best effort so far
+        attempt = {"tier": tier, "model": _model_for(tier, tier_models), "cost": cost,
+                   "latency_ms": round(latency_ms), "tokens_out": getattr(resp.usage, "completion_tokens", None)}
+        attempts.append(attempt)
 
         is_last_tier = i == len(tier_sequence) - 1
         if is_last_tier:
+            attempt.update(outcome="shipped", check={"kind": "none", "reason": "last tier in the sequence: nothing to escalate to"})
             break  # nothing left to escalate to; trust it unconditionally
 
         logprobs, entropy = [], []
@@ -273,6 +314,8 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
 
         total_cost += verify_result["cost"]
         total_latency_ms += verify_result["latency_ms"]
+        attempt["check"] = _check_record(tier, scored, judge_model_for, verify_result)
+        attempt["outcome"] = "shipped" if verify_result["passed"] else "escalated"
 
         if verify_result["passed"]:
             break
@@ -296,6 +339,7 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
         "total_latency_ms": total_latency_ms,
         "tokens_in": final_usage.prompt_tokens if final_usage else None,
         "tokens_out": final_usage.completion_tokens if final_usage else None,
+        "trace": trace,
     }
 
 
@@ -352,9 +396,10 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
 
     Events: routing, token, escalated, done, error.
     """
-    query, difficulty, tier_sequence, judge_model_for = _plan(
+    query, difficulty, tier_sequence, judge_model_for, trace = _plan(
         messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest)
     initial_tier = tier_sequence[0]
+    attempts = trace["attempts"]
 
     yield {"type": "routing", "difficulty": difficulty, "initial_tier": initial_tier,
            "direct": skip_cheapest}
@@ -396,6 +441,8 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
         except SKIPPABLE as exc:
             escalated = True
             escalation_reasons.append(f"{tier} unavailable ({_why(exc)}), skipped")
+            attempts.append({"tier": tier, "model": _model_for(tier, tier_models),
+                             "outcome": "unavailable", "reason": _why(exc)})
             yield {"type": "escalated", "from": tier, "reason": _why(exc)}
             continue
 
@@ -414,9 +461,14 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
         total_cost += cost
         total_latency_ms += latency_ms
         final_text, final_tier = text, tier
+        attempt = {"tier": tier, "model": _model_for(tier, tier_models), "cost": cost,
+                   "latency_ms": round(latency_ms), "tokens_out": tokens_out,
+                   "priced_from": "usage" if usage else "estimate"}
+        attempts.append(attempt)
 
         is_last_tier = i == len(tier_sequence) - 1
         if is_last_tier:
+            attempt.update(outcome="shipped", check={"kind": "none", "reason": "last tier in the sequence: nothing to escalate to"})
             break
 
         verify_result = _verify(scored, tier, messages, query, text, logprobs, entropy,
@@ -425,6 +477,8 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
 
         total_cost += verify_result["cost"]
         total_latency_ms += verify_result["latency_ms"]
+        attempt["check"] = _check_record(tier, scored, judge_model_for, verify_result)
+        attempt["outcome"] = "shipped" if verify_result["passed"] else "escalated"
 
         if verify_result["passed"]:
             break
@@ -446,4 +500,5 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
         "initial_tier": initial_tier, "final_tier": final_tier, "escalated": escalated,
         "escalation_reasons": escalation_reasons, "total_cost": total_cost,
         "total_latency_ms": total_latency_ms, "tokens_in": tokens_in, "tokens_out": tokens_out,
+        "trace": trace,
     }

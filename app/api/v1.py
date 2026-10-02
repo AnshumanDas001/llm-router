@@ -8,8 +8,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from app.api.common import (
     baseline_cost,
     check_routing_mode,
+    explain_start,
     completion_response,
     enforce_daily_limit,
+    finish_trace,
     log_result,
     now,
     resolve_tier_keys,
@@ -17,9 +19,11 @@ from app.api.common import (
     validate_byom_models,
 )
 from app.api.models import calibrate_one_model
-from app.api.schemas import CalibrateModelRequest, ChatRequest, RouteRequest
+from app.api.schemas import CalibrateModelRequest, ChatRequest, ClassifyApiRequest, RouteRequest, RoutingMapRequest
 from app.auth import get_user_from_api_key
-from app.routing.cascade import AllTiersUnavailable, run_cascade
+from app.routing.cascade import AllTiersUnavailable, plan_sequence, run_cascade
+from app.routing.classifier import DIFFICULTY_TO_TIER, classify_with_trace
+from app.routing.policy import TIER_ORDER
 from app.storage import chat_db
 
 router = APIRouter()
@@ -55,14 +59,80 @@ def chat_completions(req: ChatRequest, authorization: str | None = Header(defaul
         raise HTTPException(status_code=502, detail="Something went wrong generating a response.")
 
     log_result(req.messages[-1].content, result)
-    return completion_response(result)
+    baseline = baseline_cost(result, None)
+    return completion_response(result, baseline_cost=baseline,
+                               trace=finish_trace(result, 0, None, baseline))
+
+
+def connect_model(user_id: int, model_name: str, provider: str | None, api_base: str | None) -> None:
+    """Make model_name a connected model, so code can calibrate a model in
+    one call without visiting the Models page. Models connected this way
+    share one provider entry per provider type, named "<provider> (API)";
+    no key is stored on it."""
+    if chat_db.get_model_with_provider(user_id, model_name) is not None:
+        return
+    provider = (provider or (model_name.split("/", 1)[0] if "/" in model_name else "")).strip()
+    if not provider:
+        raise HTTPException(status_code=400,
+                            detail=f"can't tell the provider of '{model_name}': use litellm's "
+                                   "'provider/model' form or pass 'provider'")
+    name = f"{provider} (API)"
+    existing = next((p for p in chat_db.list_providers(user_id) if p["name"] == name), None)
+    provider_id = existing["id"] if existing else chat_db.create_provider(
+        user_id, name, provider, None, api_base, now())
+    chat_db.add_provider_model(provider_id, model_name, now())
 
 
 @router.post("/api/v1/calibrate")
 def api_v1_calibrate(req: CalibrateModelRequest, user=Depends(get_user_from_api_key)):
-    """Calibrate one connected model via an API key -- same effect as the
-    Settings-page flow, for integrations that never touch the web UI."""
+    """Calibrate one model via an API key -- same effect as the Models-page
+    flow, for code that never touches the web UI. Connects the model first
+    if needed. The provider key is used for this run and never stored."""
+    connect_model(user["id"], req.model_name.strip(), req.provider, req.api_base)
     return calibrate_one_model(user["id"], req.model_name, req.api_key)
+
+
+@router.get("/api/v1/models")
+def api_v1_models(user=Depends(get_user_from_api_key)):
+    """Every model this account has calibrated, with its per-band numbers,
+    so code can reuse a calibration instead of paying for it again."""
+    return {"models": [
+        {"model_name": name, "quality_by_difficulty": c.get("quality_by_difficulty"),
+         "cost_by_difficulty": c.get("cost_by_difficulty"), "avg_quality": c.get("avg_quality"),
+         "avg_cost": c.get("avg_cost"), "avg_latency_ms": c.get("avg_latency_ms"),
+         "n_queries": c.get("n_queries"), "calibrated_at": c.get("created_at")}
+        for name, c in sorted(chat_db.get_model_calibrations(user["id"]).items())
+    ]}
+
+
+@router.post("/api/v1/routing-map")
+def api_v1_routing_map(req: RoutingMapRequest, user=Depends(get_user_from_api_key)):
+    """Which tier each band starts at for these models, derived from their
+    calibration exactly as /api/v1/route will derive it."""
+    tier_models = req.models or None
+    if tier_models:
+        validate_byom_models(user["id"], tier_models, "POST /api/v1/calibrate first")
+    return {"map": tier_map_for(user["id"], tier_models)}
+
+
+@router.post("/api/v1/classify")
+def api_v1_classify(req: ClassifyApiRequest, user=Depends(get_user_from_api_key)):
+    """Where a prompt would start and why, without calling any model --
+    free, and not counted against the daily limit."""
+    if not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt must not be empty")
+    check_routing_mode(req.routing_mode)
+    tier_models = req.models or None
+    if tier_models:
+        validate_byom_models(user["id"], tier_models, "POST /api/v1/calibrate first")
+    band, classification = classify_with_trace(req.prompt)
+    start = explain_start(user["id"], tier_models, band)
+    mapped = start["chosen"] or DIFFICULTY_TO_TIER[band]
+    available = [t for t in TIER_ORDER if tier_models is None or t in tier_models]
+    tier = plan_sequence(mapped, available, req.routing_mode == "direct")[0]
+    return {"band": band, "tier": tier,
+            "trace": {"classification": classification,
+                      "start": {**start, "tier": tier, "direct": tier != mapped}}}
 
 
 @router.post("/api/v1/route")
@@ -103,4 +173,5 @@ def api_route(req: RouteRequest, user=Depends(get_user_from_api_key)):
         result["escalated"], result["total_cost"], baseline, result["total_latency_ms"], now(),
         api_key_id=user["api_key_id"],
     )
-    return completion_response(result, baseline_cost=baseline)
+    return completion_response(result, baseline_cost=baseline,
+                               trace=finish_trace(result, user["id"], tier_models, baseline))

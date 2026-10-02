@@ -225,7 +225,7 @@
 cheapest model that can plausibly handle it, check the answer, and escalate only when the check
 fails. This document describes every mechanism, the measurements behind each decision, and the
 things that were tried and abandoned.</p>
-<p class="meta">4,601 lines of Python · 4,348 lines of templates and styles · 2,454 lines of eval tooling · 31 tests · 17 tables · 46 endpoints</p>
+<p class="meta">4,601 lines of Python · 4,348 lines of templates and styles · 2,454 lines of eval tooling · 31 tests · 17 tables · 49 endpoints</p>
 
 <h2 id="thesis"><span class="n">1</span>The problem, and the one that matters</h2>
 <p>Most traffic to a language model does not need the most expensive model available. The naive
@@ -830,14 +830,17 @@ exception class — because <code>sqlite3</code> and libsql raise different clas
 Sessions view.</p>
 
 <h2 id="api"><span class="n">14</span>HTTP surface</h2>
-<p>46 routes, split across routers in <code>app/api/</code>. The ones that matter:</p>
+<p>49 routes, split across routers in <code>app/api/</code>. The ones that matter:</p>
 
 <div class="table-wrap"><table>
   <thead><tr><th>method + path</th><th>purpose</th><th>auth</th></tr></thead>
   <tbody>
     <tr><td class="mono">POST /v1/chat/completions</td><td>OpenAI-compatible; adds a <code>_router</code> block with tier, cost, difficulty, escalation</td><td>API key, unless <code>ALLOW_ANON_V1</code></td></tr>
     <tr><td class="mono">POST /api/v1/route</td><td>pass-through routing across the caller's own models and transient keys</td><td>API key</td></tr>
-    <tr><td class="mono">POST /api/v1/calibrate</td><td>calibrate one of the caller's models</td><td>API key</td></tr>
+    <tr><td class="mono">POST /api/v1/calibrate</td><td>connect (if needed) and calibrate one of the caller's models</td><td>API key</td></tr>
+    <tr><td class="mono">GET /api/v1/models</td><td>the caller's calibrated models with per-band scores, so a calibration is reused rather than re-bought</td><td>API key</td></tr>
+    <tr><td class="mono">POST /api/v1/routing-map</td><td>which tier each band starts at for a set of models</td><td>API key</td></tr>
+    <tr><td class="mono">POST /api/v1/classify</td><td>where a prompt would start and the evidence, with no model call</td><td>API key</td></tr>
     <tr><td class="mono">POST /api/chats/{id}/messages/stream</td><td>SSE: routing, tier_start, token, escalated, done</td><td>cookie</td></tr>
     <tr><td class="mono">POST /api/chats/{id}/messages</td><td>blocking equivalent</td><td>cookie</td></tr>
     <tr><td class="mono">POST /api/classify</td><td>classifier only — no model call, no cost; with a <code>chat_id</code>, predicts with that chat's map and mode</td><td>cookie</td></tr>
@@ -862,6 +865,29 @@ never read as tiers. Components: buttons in primary / ghost / subtle and small /
 with focus rings, stat tiles, score bars that turn amber below the 0.80 floor, a routing-map card, empty
 states, and code blocks with copy buttons. The chat renders LaTeX with KaTeX, which competition-maths
 answers need, after lifting maths out of the markdown so underscores aren't read as italics.</p>
+
+<h3>The route trace</h3>
+<p>Every answer carries the record of how it was routed, built as the cascade runs and finished by the
+API layer with the routing explanation and the money. It is stored on the chat message
+(<code>chat_messages.route_trace</code>), returned under <code>_router.trace</code>, and rendered by
+<strong>Why this route?</strong> in the chat and <code>reply.explain()</code> in the SDK:</p>
+<div class="kv">
+  <dt>classification</dt><dd>the band; the five nearest labelled questions with their similarity; the
+  similarity-weighted vote; the expert gate's share against its 0.50 bar; any override rule that fired</dd>
+  <dt>start</dt><dd>every tier's calibrated score on the band against the 0.80 floor and its expected cost
+  (answer + check + failure-weighted escalation), the tier chosen, and whether direct mode moved it</dd>
+  <dt>attempts</dt><dd>each tier tried: model, cost, latency, tokens; what checked it (learned gate with
+  P(correct) and its threshold, the judge's verdict, or the structural check); shipped or escalated</dd>
+  <dt>totals</dt><dd>cost, the strongest-tier baseline, saving, and wall time</dd>
+</div>
+
+<h3>Python SDK</h3>
+<p><code>sdk/python/thriftllm</code> is a thin client over these endpoints. <code>calibrate(model, api_key)</code>
+returns a calibrated model (reusing a stored calibration unless <code>force=True</code>);
+<code>Router(cheap=, mid=, frontier=)</code> holds up to three of them and their provider keys in memory;
+<code>router.chat()</code> posts to <code>/api/v1/route</code> with those keys for that request only. Routing
+decisions stay on the server: <code>router.route_map</code> asks it rather than recomputing, so the client
+can never disagree with what routing will do.</p>
 
 <h2 id="auth"><span class="n">15</span>Auth, keys, and quotas</h2>
 <div class="kv">

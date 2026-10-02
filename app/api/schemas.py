@@ -62,10 +62,23 @@ class AddModelRequest(BaseModel):
 class CalibrateModelRequest(BaseModel):
     model_name: str
     api_key: str | None = None         # omitted when the provider has a stored key
+    # API only: connect the model first if it isn't connected yet
+    provider: str | None = None        # litellm prefix; inferred from "groq/..." when omitted
+    api_base: str | None = None        # e.g. a local Ollama
 
 
 class CreateApiKeyRequest(BaseModel):
     name: str | None = None
+
+
+class ClassifyApiRequest(BaseModel):
+    prompt: str
+    models: dict[str, str] = {}         # tier -> model_name; omit for the built-in stack
+    routing_mode: str = "cascade"
+
+
+class RoutingMapRequest(BaseModel):
+    models: dict[str, str] = {}         # tier -> model_name; omit for the built-in stack
 
 
 class RouteRequest(BaseModel):

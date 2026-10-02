@@ -514,6 +514,32 @@ Then:
 
 ## Using it from code
 
+### Python SDK
+
+```python
+import os
+import thriftllm
+
+thriftllm.configure(api_key="rtr_...", base_url="http://localhost:8000")
+
+small = thriftllm.calibrate("groq/llama-3.1-8b-instant", api_key=os.environ["GROQ_API_KEY"])
+large = thriftllm.calibrate("openai/gpt-5", api_key=os.environ["OPENAI_API_KEY"])
+
+router = thriftllm.Router(cheap=small, frontier=large)
+reply = router.chat("What is the capital of Australia?")
+print(reply.text, reply.tier, reply.cost)
+print(reply.explain())
+```
+
+`calibrate()` connects the model if needed and runs 24 graded questions on
+your key (six per band, expert included). A model calibrated before comes back
+straight away with its stored numbers. The router sends your provider keys
+with each request; the server uses them for that call and never stores them.
+`pip install -e sdk/python`; the full reference is in
+[`sdk/python/README.md`](sdk/python/README.md).
+
+### HTTP
+
 OpenAI-compatible, with routing metadata attached:
 
 ```bash
@@ -538,10 +564,18 @@ curl -X POST http://localhost:8000/api/v1/route \
     "escalation_reasons": [],
     "cost": 0.0000042,
     "baseline_cost": 0.0000185,
+    "trace": {
+      "classification": {"band": "easy", "ms": 7.1, "neighbours": [{"band": "easy", "similarity": 0.81, "text": "What is 17 * 23?"}, "..."]},
+      "start": {"chosen": "cheap", "floor": 0.8, "tiers": [{"tier": "cheap", "quality": 0.9, "clears_floor": true, "expected_cost": 0.00003}, "..."]},
+      "attempts": [{"tier": "cheap", "cost": 0.0000042, "outcome": "shipped", "check": {"kind": "judge", "judge_verdict": "YES"}}],
+      "totals": {"cost": 0.0000042, "baseline": 0.0000185, "saved": 0.0000143}
+    },
     "latency_ms": 842.0
   }
 }
 ```
+
+`trace` is the same record the chat app renders under **Why this route?**.
 
 The built-in routing map is public, with the calibration behind it:
 
@@ -551,13 +585,22 @@ curl http://localhost:8000/api/routing
 #  "quality": {"mid": {"expert": 0.7, ...}, ...}, "threshold": 0.8, ...}
 ```
 
-Calibrate a model once before routing to it:
+Calibrate a model once before routing to it. It is connected automatically
+if it isn't yet; the provider comes from the `groq/` prefix:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/calibrate \
   -H "Authorization: Bearer rtr_your_key" \
   -d '{"model_name": "groq/openai/gpt-oss-20b", "api_key": "your-provider-key"}'
 ```
+
+| endpoint | what it does | costs |
+|---|---|---|
+| `POST /api/v1/calibrate` | connect and calibrate a model | 24 answers on your key |
+| `GET /api/v1/models` | your calibrated models and their per-band scores | free |
+| `POST /api/v1/routing-map` | which tier each band starts at for a set of models | free |
+| `POST /api/v1/classify` | where a prompt would start, and why | free, no model call |
+| `POST /api/v1/route` | answer through the cascade; `_router.trace` holds the full route | the answer |
 
 ## Layout
 
@@ -593,7 +636,8 @@ data/
   probe/               probe question sets and every answer from every run (.jsonl)
   calibration/         builtin.json: measured quality and cost per tier and band
   scorer/              the trained gate (+ its training data, gitignored)
-tests/                 graders, policy, classifier rules, and the HTTP layer with models stubbed
+sdk/python/            the thriftllm client: calibrate(), Router(), reply.explain()
+tests/                 graders, policy, classifier rules, the HTTP layer and the SDK, with models stubbed
 docs/                  internals reference, failure analysis, deploy guide, roadmap
 ```
 

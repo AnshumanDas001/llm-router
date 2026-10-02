@@ -262,5 +262,6 @@ def verify_learned(query: str, answer: str, **signals) -> dict:
     return {
         "passed": passed, "verdict": verdict,
         "reason": f"scorer P(correct)={p:.2f} -> {verdict}",
+        "p_correct": round(p, 3), "accept_threshold": b["accept"],
         "cost": 0.0, "latency_ms": latency_ms, "verifier_tier": "scorer",
     }

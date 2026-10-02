@@ -90,6 +90,22 @@
   .live-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--surface-3); transition: background 0.3s ease; cursor: pointer; }
   .live-dots i.on { background: var(--accent); }
 
+  .lane .think { margin-top: 7px; }
+  .cta-tertiary { color: var(--text-secondary); font-size: 14px; font-weight: 500; padding: 10px 6px; }
+  .cta-tertiary:hover { color: var(--text-primary); }
+
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  @media (max-width: 760px) { .modes { grid-template-columns: 1fr; } }
+  .mode { background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px; }
+  .mode.on { border-color: rgba(35, 196, 138, 0.45); }
+  .mode-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; flex-wrap: wrap; }
+  .mode-head h3 { margin: 0; font-size: 16px; }
+  .mode .model { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
+  .mode dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; font-size: 13px; }
+  .mode dt { color: var(--text-muted); }
+  .mode dd { margin: 0; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-primary); }
+  .mode .what { margin: 14px 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+
   /* --- metrics --- */
   .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
   @media (max-width: 860px) { .metrics { grid-template-columns: 1fr 1fr; } }
@@ -207,7 +223,7 @@
         <a href="#frontier" class="lnk hide-sm">Results</a>
         <a href="/demo" class="lnk hide-sm">Explorer</a>
         <a href="/guide" class="lnk hide-sm">Docs</a>
-        <a href="/app" class="btn ghost sm">Sign in</a>
+        <a href="/app" class="btn ghost sm">Open the app</a>
       </nav>
     </div>
   </div>
@@ -225,9 +241,10 @@
         </p>
         <div class="cta-row animate-in stagger-3">
           <a class="btn lg" href="/try">Try the demo &rarr;</a>
-          <a class="btn ghost lg" href="/demo">Explore the routing</a>
+          <a class="btn ghost lg" href="/app">Open the full app</a>
+          <a class="cta-tertiary" href="/demo">Explore the routing &rarr;</a>
         </div>
-        <div class="cta-note animate-in stagger-4">3 prompts free, no signup &middot; 10 a day with an account</div>
+        <div class="cta-note animate-in stagger-4">demo: 3 prompts, no signup &middot; full app: free account, 10 prompts a day, your own models</div>
       </div>
 
       <div class="live animate-in stagger-2" aria-label="Live routing examples">
@@ -243,9 +260,9 @@
             <span>&rarr; starts at the cheapest tier that clears 80%</span>
           </div>
           <div class="lanes" id="lanes">
-            <div class="lane cheap" data-tier="cheap"><span class="badge cheap">cheap</span><div class="m" data-m>&nbsp;</div><div class="q" data-q>&nbsp;</div></div>
-            <div class="lane mid" data-tier="mid"><span class="badge mid">mid</span><div class="m" data-m>&nbsp;</div><div class="q" data-q>&nbsp;</div></div>
-            <div class="lane frontier" data-tier="frontier"><span class="badge frontier">frontier</span><div class="m" data-m>&nbsp;</div><div class="q" data-q>&nbsp;</div></div>
+            <div class="lane cheap" data-tier="cheap"><span class="badge cheap">cheap</span><div class="m" data-m>&nbsp;</div><span class="think">small &middot; fast</span><div class="q" data-q>&nbsp;</div></div>
+            <div class="lane mid" data-tier="mid"><span class="badge mid">mid</span><div class="m" data-m>&nbsp;</div><span class="think">thinking off</span><div class="q" data-q>&nbsp;</div></div>
+            <div class="lane frontier" data-tier="frontier"><span class="badge frontier">frontier</span><div class="m" data-m>&nbsp;</div><span class="think on">thinking on</span><div class="q" data-q>&nbsp;</div></div>
           </div>
           <div class="live-foot">
             <span>calibrated cost per answer <b id="live-cost">&ndash;</b></span>
@@ -312,6 +329,31 @@
           everyday question they score the same, so for a long time the router never reached the
           frontier at all. These are the sets we tried, in order.</p>
       </div>
+      <div class="modes">
+        <div class="mode">
+          <div class="mode-head"><span class="badge mid">mid</span><h3>Thinking off</h3><span class="think">reasoning_effort: minimal</span></div>
+          <div class="model">gemini-3.5-flash</div>
+          <dl>
+            <dt>hidden reasoning</dt><dd>0 tokens</dd>
+            <dt>an AIME answer</dt><dd>~2,000 visible tokens &middot; $0.019 &middot; 14s</dd>
+            <dt>AIME 2025</dt><dd>7 / 10</dd>
+            <dt>everyday questions</dt><dd>100% on every band</dd>
+          </dl>
+          <p class="what">Writes its working straight into the answer. Commits to its first line of attack, so a wrong turn early in a long derivation stays wrong.</p>
+        </div>
+        <div class="mode on">
+          <div class="mode-head"><span class="badge frontier">frontier</span><h3>Thinking on</h3><span class="think on">reasoning_effort: high</span></div>
+          <div class="model">gemini-3.5-flash &middot; the same model</div>
+          <dl>
+            <dt>hidden reasoning</dt><dd>13,000&ndash;31,000 tokens</dd>
+            <dt>an AIME answer</dt><dd>$0.13&ndash;0.29 &middot; ~2 minutes</dd>
+            <dt>AIME 2025</dt><dd>fixed 2 of mid's 3 misses</dd>
+            <dt>everyday questions</dt><dd>100%, at 4&times; mid's cost</dd>
+          </dl>
+          <p class="what">Thinks privately before answering: tries an approach, checks it, backs out. That only pays where the problem punishes a first guess, which is why only expert questions start here.</p>
+        </div>
+      </div>
+
       <div class="results">
         <div class="res">
           <span class="tag">attempt 1 &middot; 263 questions</span>
@@ -329,7 +371,6 @@
           <p class="sub">Countdown, knights and knaves, logic grids, shortest paths. Each brute-forced to one answer.</p>
           <div class="bars">
             <div class="bar-row"><span class="badge mid">mid</span><span class="track"><i style="width:100%; background:var(--series-mid)"></i></span><span class="v">25/25</span></div>
-            <div class="bar-row"><span class="badge cheap">cheap</span><span class="track"><i style="width:0%"></i></span><span class="v">&ndash;</span></div>
           </div>
           <div class="verdict">With thinking off, mid still searches, just out loud. Nothing to separate.</div>
         </div>
@@ -407,11 +448,11 @@ curl -X POST https://your-host/api/v1/route \
       <div class="final-inner">
         <div>
           <h2>See it route something.</h2>
-          <p>Three prompts, no account. Each answer shows which tier it landed on, what it cost, and whether it had to escalate.</p>
+          <p>The demo is three prompts with no account. The full app is free: saved chats, 10 prompts a day, your own models, and the full route behind every answer.</p>
         </div>
         <div class="cta-row">
           <a class="btn lg" href="/try">Try the demo &rarr;</a>
-          <a class="btn ghost lg" href="/app">Create an account</a>
+          <a class="btn ghost lg" href="/app">Open the full app</a>
         </div>
       </div>
     </div>
@@ -446,7 +487,8 @@ curl -X POST https://your-host/api/v1/route \
   function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 
   function renderMatrix() {
-    const head = `<tr><th>Band</th>${TIERS.map(t => `<th><span class="badge ${t}">${t}</span><div class="mono hint" style="text-transform:none; letter-spacing:0; margin-top:4px;">${esc((routing.models[t] || "").split("/").pop())}${t === "mid" ? " &middot; no thinking" : t === "frontier" ? " &middot; thinking" : ""}</div></th>`).join("")}<th>Starts at</th></tr>`;
+    const THINK = { cheap: '<span class="think">small &middot; fast</span>', mid: '<span class="think">thinking off</span>', frontier: '<span class="think on">thinking on</span>' };
+    const head = `<tr><th>Band</th>${TIERS.map(t => `<th><span class="badge ${t}">${t}</span><div class="mono hint" style="text-transform:none; letter-spacing:0; margin:4px 0;">${esc((routing.models[t] || "").split("/").pop())}</div>${THINK[t]}</th>`).join("")}<th>Starts at</th></tr>`;
     document.querySelector("#matrix thead").innerHTML = head;
     document.querySelector("#matrix tbody").innerHTML = routing.bands.map(b => {
       const start = routing.map[b];

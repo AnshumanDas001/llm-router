@@ -13,7 +13,7 @@ from app.pricing import estimate_cost_for_model, estimate_frontier_cost
 from app.routing import scorer
 from app.routing.cascade import DEFAULT_TIER_MODELS, judge_for, learned_verifier_on
 from app.evaluation.datasets import DIFFICULTIES
-from app.routing.policy import QUALITY_THRESHOLD, TIER_ORDER, derive_tier_map
+from app.routing.policy import QUALITY_THRESHOLD, TIER_ORDER, derive_tier_map, expected_costs
 from app.storage import chat_db, key_vault
 from app.storage.eval_log import log_cascade
 
@@ -144,6 +144,25 @@ def judge_cost_estimate(tiers: list[str], tier_models: dict | None) -> float:
     return judge
 
 
+def _routing_inputs(user_id: int, tier_models: dict | None):
+    """(tiers, quality, cost, judge_cost) for the models in this session --
+    the same numbers whether deriving the map or explaining it."""
+    if tier_models is None:
+        tiers = list(BUILTIN_CALIBRATION.keys())
+        quality = {t: BUILTIN_CALIBRATION[t]["quality"] for t in tiers}
+        cost = {t: BUILTIN_CALIBRATION[t]["cost"] for t in tiers}
+    else:
+        tiers = [t for t in TIER_ORDER if t in tier_models]
+        calibrations = chat_db.get_model_calibrations(user_id)
+        quality = {t: (calibrations.get(m) or {}).get("quality_by_difficulty") for t, m in tier_models.items()}
+        cost = {t: (calibrations.get(m) or {}).get("cost_by_difficulty") for t, m in tier_models.items()}
+        # Older calibrations predate per-band cost; without it, fall back to
+        # the quality-floor rule rather than pricing every tier at zero.
+        if any(v is None for v in cost.values()):
+            cost = None
+    return tiers, quality, cost, judge_cost_estimate(tiers, tier_models)
+
+
 def tier_map_for(user_id: int, tier_models: dict | None) -> dict:
     """The difficulty->tier map implied by the models in *this session*,
     routing by expected cost with a quality floor (see routing/policy.py).
@@ -153,20 +172,40 @@ def tier_map_for(user_id: int, tier_models: dict | None) -> dict:
     assembled per session from whichever tiers it was created with. The
     built-in stack uses the eval set's measurements of itself.
     """
-    if tier_models is None:
-        tiers = list(BUILTIN_CALIBRATION.keys())
-        quality = {t: BUILTIN_CALIBRATION[t]["quality"] for t in tiers}
-        cost = {t: BUILTIN_CALIBRATION[t]["cost"] for t in tiers}
-    else:
-        tiers = list(tier_models.keys())
-        calibrations = chat_db.get_model_calibrations(user_id)
-        quality = {t: (calibrations.get(m) or {}).get("quality_by_difficulty") for t, m in tier_models.items()}
-        cost = {t: (calibrations.get(m) or {}).get("cost_by_difficulty") for t, m in tier_models.items()}
-        # Older calibrations predate per-band cost; without it, fall back to
-        # the quality-floor rule rather than pricing every tier at zero.
-        if any(v is None for v in cost.values()):
-            cost = None
-    return derive_tier_map(quality, tiers, cost, judge_cost_estimate(tiers, tier_models))
+    tiers, quality, cost, judge = _routing_inputs(user_id, tier_models)
+    return derive_tier_map(quality, tiers, cost, judge)
+
+
+def explain_start(user_id: int, tier_models: dict | None, band: str) -> dict:
+    """Why a band starts where it does: every tier's calibrated score on
+    the band against the floor, and the expected cost of starting there
+    (generation + verification + failure-weighted escalation)."""
+    tiers, quality, cost, judge = _routing_inputs(user_id, tier_models)
+    expected = expected_costs(tiers, quality, cost, judge, band) if cost else {}
+    rows = []
+    for i, t in enumerate(tiers):
+        q = (quality.get(t) or {}).get(band)
+        rows.append({
+            "tier": t,
+            "model": (tier_models or DEFAULT_TIER_MODELS).get(t),
+            "quality": q,
+            "clears_floor": q is not None and q >= QUALITY_THRESHOLD,
+            "last_tier": i == len(tiers) - 1,
+            "expected_cost": expected.get(t),
+        })
+    return {"band": band, "floor": QUALITY_THRESHOLD, "judge_cost": judge, "tiers": rows,
+            "chosen": tier_map_for(user_id, tier_models).get(band)}
+
+
+def finish_trace(result: dict, user_id: int, tier_models: dict | None, baseline: float) -> dict:
+    """The cascade's trace plus the routing explanation and the money."""
+    trace = dict(result.get("trace") or {})
+    trace["start"] = {**(trace.get("start") or {}),
+                      **explain_start(user_id, tier_models, result["difficulty"])}
+    trace["totals"] = {"cost": result["total_cost"], "baseline": baseline,
+                       "saved": max(0.0, baseline - result["total_cost"]),
+                       "latency_ms": round(result["total_latency_ms"])}
+    return trace
 
 
 def builtin_routing() -> dict:
