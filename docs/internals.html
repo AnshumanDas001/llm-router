@@ -885,7 +885,7 @@ API layer with the routing explanation and the money. It is stored on the chat m
 <p>Install: <code>pip install "git+https://github.com/AnshumanDas001/llm-router.git#subdirectory=sdk/python"</code>.</p>
 <p><code>sdk/python/thriftllm</code> is a thin client over these endpoints. <code>calibrate(model, api_key)</code>
 returns a calibrated model (reusing a stored calibration unless <code>force=True</code>);
-<code>Router(cheap=, mid=, frontier=)</code> holds up to three of them and their provider keys in memory;
+<code>Router(cheap=, mid=, frontier=)</code> holds up to three of them and their provider keys in memory (with none, <code>router.chat()</code> posts to <code>/v1/chat/completions</code>, the built-in stack);
 <code>router.chat()</code> posts to <code>/api/v1/route</code> with those keys for that request only. Routing
 decisions stay on the server: <code>router.route_map</code> asks it rather than recomputing, so the client
 can never disagree with what routing will do.</p>

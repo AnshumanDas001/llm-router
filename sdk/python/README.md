@@ -47,6 +47,10 @@ band. A model you've calibrated before comes back immediately; pass
 `print(router.route_map)` shows which tier each band starts at. Add a third
 model with `frontier=` for the questions neither of these clears.
 
+To use the server's built-in models instead, the ones its chat app runs on,
+leave the models out: `router = thriftllm.Router()`. Nothing needs
+calibrating, and the calls count toward your account's daily allowance.
+
 `reply.explain()` prints the same route the chat app shows under **Why this
 route?**: the labelled questions that set the band, each tier's score against
 the 80% floor with its expected cost, every attempt and what checked it, and
@@ -58,7 +62,7 @@ the cost against the strongest tier.
 |---|---|
 | `thriftllm.configure(api_key, base_url)` | the server and key the shortcuts use; also read from `THRIFTLLM_API_KEY` and `THRIFTLLM_BASE_URL` |
 | `thriftllm.calibrate(model, api_key, *, provider=None, api_base=None, force=False)` | measure a model, or reuse its stored calibration. Returns a `CalibratedModel` |
-| `thriftllm.Router(cheap=, mid=, frontier=, mode="cascade")` | at least one tier. `mode="direct"` skips the cheapest tier and its judge |
+| `thriftllm.Router(cheap=, mid=, frontier=, mode="cascade")` | up to three calibrated models; with none, the server's built-in models (the ones its chat app runs on), so nothing needs calibrating. `mode="direct"` skips the cheapest tier and its judge |
 | `router.chat(prompt)` | a string, or a list of `{"role", "content"}` messages. Returns a `Reply` |
 | `router.classify(prompt)` | where it would start and why, with no model call and no cost |
 | `router.route_map` | which tier each band starts at |

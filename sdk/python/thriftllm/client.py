@@ -103,6 +103,11 @@ class Router:
         router = Router(cheap=small, mid=medium, frontier=large)
         reply = router.chat("What is 2+2?")
 
+    With no models it uses the server's built-in stack -- the models the
+    ThriftLLM chat app runs on -- so nothing needs calibrating:
+
+        router = Router()
+
     Each difficulty band starts at the cheapest model that scored at least
     80% on it, priced so that checking and escalating are included. The
     cheapest model's answers are checked by a judge, and a failed check
@@ -116,8 +121,6 @@ class Router:
                  frontier: CalibratedModel | None = None, *, mode: str = "cascade",
                  client: "Client | None" = None):
         self.tiers = {t: m for t, m in (("cheap", cheap), ("mid", mid), ("frontier", frontier)) if m}
-        if not self.tiers:
-            raise ValueError("give the router at least one model: Router(cheap=..., mid=..., frontier=...)")
         for tier, m in self.tiers.items():
             if not isinstance(m, CalibratedModel):
                 raise TypeError(f"{tier} must be a CalibratedModel from calibrate(), got {type(m).__name__}")
@@ -136,10 +139,15 @@ class Router:
         """Send a prompt (or a list of {"role", "content"} messages) through
         the cascade and return the answer with its route."""
         messages = [{"role": "user", "content": prompt}] if isinstance(prompt, str) else prompt
-        data = self.client._post("/api/v1/route", {
-            "messages": messages, "models": self._models(), "tier_api_keys": self._keys(),
-            "routing_mode": self.mode,
-        }, timeout=ROUTE_TIMEOUT_S)
+        if self.tiers:
+            data = self.client._post("/api/v1/route", {
+                "messages": messages, "models": self._models(), "tier_api_keys": self._keys(),
+                "routing_mode": self.mode,
+            }, timeout=ROUTE_TIMEOUT_S)
+        else:   # the built-in stack, through the OpenAI-compatible endpoint
+            data = self.client._post("/v1/chat/completions", {
+                "messages": messages, "routing_mode": self.mode,
+            }, timeout=ROUTE_TIMEOUT_S)
         r = data.get("_router", {})
         return Reply(
             text=data["choices"][0]["message"]["content"], tier=r.get("final_tier"),
@@ -165,7 +173,7 @@ class Router:
         return self.client._post("/api/v1/routing-map", {"models": self._models()})["map"]
 
     def __repr__(self) -> str:
-        tiers = ", ".join(f"{t}={m.name}" for t, m in self.tiers.items())
+        tiers = ", ".join(f"{t}={m.name}" for t, m in self.tiers.items()) or "built-in stack"
         return f"Router({tiers}, mode={self.mode!r})"
 
 

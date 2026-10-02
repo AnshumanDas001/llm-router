@@ -83,7 +83,30 @@ def test_router_maps_classifies_and_chats(sdk, monkeypatch):
 
 
 def test_router_needs_calibrated_models():
-    with pytest.raises(ValueError):
-        thriftllm.Router(client=object())
     with pytest.raises(TypeError):
         thriftllm.Router(cheap="groq/small-model", client=object())
+    with pytest.raises(ValueError):
+        thriftllm.Router(mode="fastest", client=object())
+
+
+def test_router_with_no_models_uses_the_builtin_stack(sdk, monkeypatch):
+    router = sdk.router()
+    assert router.route_map["expert"] == "frontier"
+    assert router.classify("What is the capital of France?")["tier"] in ("cheap", "mid", "frontier")
+
+    seen = {}
+
+    def fake_cascade(messages, difficulty_to_tier, skip_cheapest=False, **kw):
+        seen.update(skip=skip_cheapest, byom=kw.get("tier_models"))
+        return {"text": "Paris.", "difficulty": "easy", "initial_tier": "cheap", "final_tier": "cheap",
+                "escalated": False, "escalation_reasons": [], "total_cost": 0.00001,
+                "total_latency_ms": 800.0, "tokens_in": 10, "tokens_out": 2,
+                "trace": {"classification": {"band": "easy", "ms": 6.0, "neighbours": []},
+                          "start": {"tier": "cheap"}, "attempts": []}}
+
+    monkeypatch.setattr(v1, "run_cascade", fake_cascade)
+    reply = router.chat("What is the capital of France?")
+    assert reply.text == "Paris." and reply.tier == "cheap" and seen == {"skip": False, "byom": None}
+    assert "Started at cheap" in reply.explain()
+    sdk.router(mode="direct").chat("What is the capital of France?")
+    assert seen["skip"] is True

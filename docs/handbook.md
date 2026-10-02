@@ -172,6 +172,23 @@ $1.40 a day even if every token were frontier thinking. Behind Caddy,
 uvicorn runs with `--proxy-headers`, so it sees the visitor's real IP, not
 the proxy's.
 
+**From code.** A **Chat / From code** switch in the demo's header opens a
+second view showing how to do the same thing programmatically:
+1. get an API key;
+2. install the SDK;
+3. route a prompt. The tabs show the built-in models, your own models, or
+   curl, all using the site's real address. After a demo answer, the
+   snippets use that answer's prompt.
+4. read the route: the answer's trace printed exactly as `reply.explain()`
+   prints it.
+
+It is also reachable from the empty chat ("Building something?"), from
+"View as code" under each answer, and directly at `/try#code`. On a first
+visit a callout points at the tab once (remembered in localStorage as
+`tl_seen_code_tip`; `/try?tip` shows it again). The JS port
+of `explain_trace` is `explainText` in `chat_app.html`; keep the two in
+step.
+
 ### 4.3 Routing explorer (`/demo`)
 
 **What.** Type or pick a prompt and see its band, its start tier, each
@@ -383,7 +400,7 @@ All of it is in [`app/api/v1.py`](../app/api/v1.py), authenticated with
 
 | endpoint | what it does | counts toward limits |
 |---|---|---|
-| `POST /v1/chat/completions` | OpenAI-compatible, on the built-in stack. The response has the usual shape plus `_router` (band, tiers, escalation, cost, baseline, trace) | prompts + tokens |
+| `POST /v1/chat/completions` | OpenAI-compatible, on the built-in stack. The response has the usual shape plus `_router` (band, tiers, escalation, cost, baseline, trace). Takes an optional `routing_mode` (`cascade` or `direct`) | prompts + tokens |
 | `POST /api/v1/calibrate` | connect (if needed) and calibrate a model with a provider key; the key isn't stored | no |
 | `GET /api/v1/models` | every model this account has calibrated, with per-band numbers | no |
 | `POST /api/v1/routing-map` | the band → tier map for a set of calibrated models | no |
@@ -434,6 +451,10 @@ In this repo's venv it is installed in editable mode (`pip install -e
 sdk/python`, also in `requirements-dev.txt`): `site-packages` holds a pointer
 to the folder instead of a copy, so edits to `client.py` apply on the next
 import.
+
+With no models, `thriftllm.Router()` uses the server's built-in stack (the
+models the chat app runs on): nothing to calibrate, and calls count toward
+the account's daily allowance.
 
 **How.** [`sdk/python/thriftllm/client.py`](../sdk/python/thriftllm/client.py)
 uses httpx and calls the endpoints above:

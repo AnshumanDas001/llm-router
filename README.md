@@ -543,7 +543,9 @@ print(reply.explain())          # the same route "Why this route?" shows
 your key (six per band, expert included). A model calibrated before comes back
 straight away with its stored numbers. The router sends your provider keys
 with each request; the server uses them for that call and never stores them.
-Add a third model with `frontier=` for questions neither of these clears.
+Add a third model with `frontier=` for questions neither of these clears, or
+leave the models out (`thriftllm.Router()`) to use the built-in stack, with
+nothing to calibrate.
 
 Working on the SDK itself? Install your checkout in editable mode instead,
 `pip install -e sdk/python`, so edits take effect without reinstalling. The

@@ -283,7 +283,7 @@ print(reply.explain())          # the same route &quot;Why this route?&quot; sho
       </div>
       <ul>
         <li><code>calibrate(model, api_key, provider=None, api_base=None, force=False)</code> connects the model if it isn't connected yet and returns its per-band scores. The key is used for the run and kept only in your process.</li>
-        <li><code>Router(cheap=, mid=, frontier=, mode="cascade")</code> takes one to three calibrated models. <code>mode="direct"</code> skips the cheapest tier and its judge.</li>
+        <li><code>Router(cheap=, mid=, frontier=, mode="cascade")</code> takes up to three calibrated models. With none, <code>Router()</code> uses the built-in models the chat app runs on, so nothing needs calibrating. <code>mode="direct"</code> skips the cheapest tier and its judge.</li>
         <li><code>router.classify(prompt)</code> shows where a prompt would start and why, with no model call.</li>
         <li><code>reply.explain()</code> prints the route the chat app shows under <strong>Why this route?</strong></li>
         <li><code>print(small)</code> shows a model's per-band scores and <code>router.route_map</code> which tier each band starts at. Add a third model with <code>frontier=</code>.</li>

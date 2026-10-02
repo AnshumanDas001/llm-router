@@ -45,10 +45,12 @@ def chat_completions(req: ChatRequest, authorization: str | None = Header(defaul
         enforce_daily_limit(user)
     if not req.messages:
         raise HTTPException(status_code=400, detail="messages must not be empty")
+    check_routing_mode(req.routing_mode)
 
     try:
         result = run_cascade([m.model_dump() for m in req.messages],
-                             difficulty_to_tier=tier_map_for(0, None))
+                             difficulty_to_tier=tier_map_for(0, None),
+                             skip_cheapest=req.routing_mode == "direct")
     except AllTiersUnavailable:
         raise HTTPException(
             status_code=503,

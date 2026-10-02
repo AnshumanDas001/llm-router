@@ -130,6 +130,125 @@
   }
   #nav-toggle:hover { background: var(--surface-2); color: var(--text-primary); }
 
+  /* --- demo: the same router, from code -----------------------------------
+     The demo's second view. People who open the demo see a chat app; this
+     is where they find out the chat is one client of an API they can call. */
+  .view-switch {
+    display: inline-flex; padding: 3px; gap: 2px; flex-shrink: 0;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2);
+  }
+  .view-switch button {
+    border: none; background: none; box-shadow: none; padding: 5px 12px; border-radius: 7px;
+    font-size: 13px; font-weight: 550; color: var(--text-muted); display: inline-flex; gap: 6px; align-items: center;
+  }
+  .view-switch button:hover { color: var(--text-primary); background: none; transform: none; }
+  .view-switch button.on { background: var(--surface-1); color: var(--text-primary); box-shadow: 0 0 0 1px var(--border), var(--shadow-1); }
+  .view-switch .vs-code { font-family: var(--font-mono); font-size: 11px; color: var(--accent-ink); }
+
+  #code-view { flex: 1; overflow-y: auto; padding: 36px 24px 64px; }
+  .code-page { max-width: 760px; margin: 0 auto; }
+  .code-page .cp-eyebrow { font-family: var(--font-mono); font-size: 11.5px; color: var(--accent-ink); }
+  .code-page h1 { font-size: 27px; line-height: 1.2; letter-spacing: -0.02em; margin: 8px 0 10px; text-wrap: balance; }
+  .code-page .cp-lede { color: var(--text-secondary); font-size: 14.5px; line-height: 1.65; margin: 0; max-width: 62ch; }
+  .cp-steps { display: flex; flex-direction: column; gap: 26px; margin-top: 32px; }
+  .cp-step { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 14px; }
+  .cp-n {
+    width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-ink);
+    font-family: var(--font-mono); font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+  }
+  .cp-step h3 { margin: 3px 0 4px; font-size: 15px; color: var(--text-primary); }
+  .cp-step p { margin: 0 0 10px; color: var(--text-secondary); font-size: 13.5px; line-height: 1.6; }
+  .cp-step p code { font-family: var(--font-mono); font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .cp-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .cp-actions .hint { font-size: 12px; }
+
+  .cp-code { position: relative; border-radius: 12px; overflow: hidden; background: #0a0a0a; border: 1px solid rgba(255, 255, 255, 0.06); }
+  .cp-tabs { display: flex; gap: 2px; padding: 0 8px; background: #121212; border-bottom: 1px solid #222; overflow-x: auto; }
+  .cp-tabs button {
+    border: none; background: none; box-shadow: none; border-radius: 0; padding: 10px 10px 9px; margin-bottom: -1px;
+    font-size: 12.5px; font-weight: 550; color: #8b949e; border-bottom: 2px solid transparent; white-space: nowrap;
+  }
+  .cp-tabs button:hover { color: #e6edf3; background: none; transform: none; }
+  .cp-tabs button.on { color: #e6edf3; border-bottom-color: #4b8eff; }
+  .cp-code pre { margin: 0; padding: 16px 18px; overflow-x: auto; }
+  .cp-code pre code { display: block; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.65; color: #d0d7de; background: none !important; padding: 0; white-space: pre; }
+  .cp-code pre.wrap code { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .cp-code:not(.tabbed) pre { padding-right: 78px; }
+  .cp-copy {
+    position: absolute; top: 7px; right: 8px; z-index: 1; font-size: 11.5px; padding: 4px 10px; border-radius: 7px;
+    background: rgba(255, 255, 255, 0.07); color: #c9d1d9; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: none;
+  }
+  .cp-copy:hover { background: rgba(255, 255, 255, 0.13); color: #fff; transform: none; }
+  .cp-code.tabbed .cp-copy { top: 6px; }
+  .cp-code.tabbed .cp-tabs { padding-right: 70px; }
+
+  .cp-out {
+    margin: 0; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface-2);
+    font-family: var(--font-mono); font-size: 12px; line-height: 1.65; color: var(--text-primary); white-space: pre; overflow-x: auto;
+  }
+  .cp-fields { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 0; font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+  .cp-fields b { color: var(--text-primary); font-weight: 600; }
+  .cp-empty {
+    border: 1px dashed var(--border-strong); border-radius: 12px; padding: 18px; color: var(--text-muted);
+    font-size: 13px; line-height: 1.6; display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  }
+
+  /* A one-time pointer to the "From code" tab, so people who only ever open
+     the demo learn it is more than a chat app. Inverted colours so it reads as
+     a callout in either theme. */
+  .coach {
+    position: fixed; z-index: 70; width: min(290px, calc(100vw - 24px));
+    display: flex; gap: 10px; align-items: flex-start; padding: 12px 12px 12px 14px;
+    background: var(--text-primary); color: var(--bg); border-radius: 12px; box-shadow: var(--shadow-2);
+    font-size: 12.5px; line-height: 1.5; animation: coach-in 0.35s ease both;
+  }
+  .coach::before {
+    content: ""; position: absolute; top: -6px; left: var(--arrow-x, 40px); width: 12px; height: 12px;
+    background: inherit; transform: translateX(-50%) rotate(45deg); border-radius: 2px;
+  }
+  .coach b { display: block; font-size: 13px; margin-bottom: 2px; }
+  .coach .coach-body { flex: 1; }
+  .coach .coach-go {
+    margin-top: 8px; padding: 4px 11px; border-radius: 7px; font-size: 12px; font-weight: 600;
+    background: var(--bg); color: var(--text-primary); border: none; box-shadow: none;
+  }
+  .coach .coach-go:hover { transform: none; opacity: 0.9; }
+  .coach .coach-x {
+    border: none; background: none; box-shadow: none; color: inherit; opacity: 0.6; padding: 0 2px;
+    font-size: 17px; line-height: 1; cursor: pointer;
+  }
+  .coach .coach-x:hover { opacity: 1; transform: none; background: none; }
+  .coach.leaving { animation: coach-out 0.25s ease both; }
+  @keyframes coach-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @keyframes coach-out { to { opacity: 0; transform: translateY(6px); } }
+  /* the tab it points at pulses while the callout is up */
+  .view-switch button.nudge { animation: nudge 1.6s ease-in-out infinite; }
+  @keyframes nudge { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 4px var(--accent-soft); } }
+  @media (prefers-reduced-motion: reduce) {
+    .coach, .coach.leaving, .view-switch button.nudge { animation: none; }
+  }
+
+  /* the way in from the empty chat */
+  .hero-code-link {
+    display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 18px; padding: 12px 14px; text-align: left;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); box-shadow: none;
+    font-size: 13px; color: var(--text-secondary); font-weight: 400;
+  }
+  .hero-code-link:hover { border-color: var(--border-strong); background: var(--surface-2); color: var(--text-secondary); transform: none; }
+  .hero-code-link .hcl-icon {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--accent-ink); background: var(--accent-soft);
+    border-radius: 8px; padding: 6px 8px; flex-shrink: 0;
+  }
+  .hero-code-link b { color: var(--text-primary); font-weight: 600; }
+  .hero-code-link .hcl-go { margin-left: auto; color: var(--accent-ink); font-weight: 550; white-space: nowrap; }
+  @media (max-width: 760px) {
+    #code-view { padding: 24px 16px 48px; }
+    .code-page h1 { font-size: 23px; }
+    .cp-step { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .view-switch button { padding: 5px 9px; font-size: 12.5px; }
+    .hero-code-link .hcl-go { display: none; }
+  }
+
   /* --- phone layout ------------------------------------------------------
      The chat app can't scroll as a document: the composer has to stay put
      while the message list scrolls under it. So it keeps the desktop's
@@ -519,6 +638,10 @@
         <h2 id="chat-title">New chat</h2>
         <span class="bc-dot"></span>
       </div>
+      <div class="view-switch" id="view-switch" role="tablist" aria-label="View" hidden>
+        <button type="button" role="tab" data-view="chat" class="on" aria-selected="true">Chat</button>
+        <button type="button" role="tab" data-view="code" aria-selected="false"><span class="vs-code" aria-hidden="true">&lt;/&gt;</span>From code</button>
+      </div>
       <div class="header-stats">
         <span class="hs-item" id="hs-latency" hidden></span>
         <span class="hs-sep">&middot;</span>
@@ -534,12 +657,13 @@
             <button type="button" data-routing="direct">Direct<span class="desc">Skip the cheap tier and its judge. Faster; same cost when mid is already cheap</span></button>
           </div>
         </div>
-        <a class="header-icon-btn" href="/settings" title="Model &amp; routing settings">
+        <a class="header-icon-btn" id="header-settings" href="/settings" title="Model &amp; routing settings">
           <svg viewBox="0 0 16 16" fill="none"><path d="M2 4.5h5M10 4.5h4M2 11.5h4M9 11.5h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="8.5" cy="4.5" r="1.6" stroke="currentColor" stroke-width="1.3"/><circle cx="7.5" cy="11.5" r="1.6" stroke="currentColor" stroke-width="1.3"/></svg>
         </a>
       </div>
     </div>
     <div id="messages"></div>
+    <div id="code-view" hidden></div>
     <div id="composer">
       <div id="composer-unit">
         <div class="composer-inner" id="composer-inner">
@@ -836,6 +960,297 @@
     renderHeaderStats();
     renderDemoQuota();
     renderHeroState();
+
+    // The demo's header is a Chat / From code switch: there is no chat title
+    // to show, and the settings link needs an account.
+    document.querySelector("#chat-header .breadcrumb").hidden = true;
+    document.getElementById("header-settings").hidden = true;
+    const viewSwitch = document.getElementById("view-switch");
+    viewSwitch.hidden = false;
+    viewSwitch.querySelectorAll("button").forEach(b => { b.onclick = () => { hideCoach(true); setView(b.dataset.view); }; });
+    if (window.location.hash === "#code") setView("code");
+    else scheduleCoach();
+  }
+
+  // --- the "From code" callout ---------------------------------------------
+  // Shown once per browser: closing it, following it, or switching tabs
+  // yourself all count as seen. It waits for the router notice to clear
+  // (on a phone both sit at the top) and leaves on its own after a while.
+  const COACH_KEY = "tl_seen_code_tip";
+  const COACH_SHOW_MS = 12000;
+  let coachEl = null;
+
+  function coachSeen() { try { return localStorage.getItem(COACH_KEY) === "1"; } catch { return true; } }
+  function markCoachSeen() { try { localStorage.setItem(COACH_KEY, "1"); } catch { /* fine: shows again next time */ } }
+
+  function scheduleCoach() {
+    // ?tip shows it again, for checking how it looks
+    if (new URLSearchParams(window.location.search).has("tip")) { try { localStorage.removeItem(COACH_KEY); } catch {} }
+    if (coachSeen()) return;
+    const started = Date.now();
+    const tick = () => {
+      if (coachSeen() || !document.getElementById("code-view").hidden) return;
+      const quiet = window.routerReady && !document.querySelector(".warmup-toast");
+      if (quiet && Date.now() - started > 1500) showCoach();
+      else setTimeout(tick, 400);
+    };
+    setTimeout(tick, 400);
+  }
+
+  function placeCoach() {
+    if (!coachEl) return;
+    const target = document.querySelector('#view-switch [data-view="code"]').getBoundingClientRect();
+    const width = coachEl.offsetWidth;
+    const centre = target.left + target.width / 2;
+    const left = Math.max(12, Math.min(centre - 36, window.innerWidth - width - 12));
+    coachEl.style.top = `${target.bottom + 12}px`;
+    coachEl.style.left = `${left}px`;
+    coachEl.style.setProperty("--arrow-x", `${centre - left}px`);
+  }
+
+  function showCoach() {
+    if (coachEl) return;
+    coachEl = document.createElement("div");
+    coachEl.className = "coach";
+    coachEl.setAttribute("role", "status");
+    coachEl.innerHTML = `
+      <div class="coach-body">
+        <b>Not just a chat app</b>
+        Everything here is one call in the Python SDK. See the code for this chat.
+        <div><button type="button" class="coach-go">Show me</button></div>
+      </div>
+      <button type="button" class="coach-x" aria-label="Dismiss">&times;</button>`;
+    document.body.appendChild(coachEl);
+    placeCoach();
+    document.querySelector('#view-switch [data-view="code"]').classList.add("nudge");
+    coachEl.querySelector(".coach-go").onclick = () => { hideCoach(true); setView("code"); };
+    coachEl.querySelector(".coach-x").onclick = () => hideCoach(true);
+    window.addEventListener("resize", placeCoach);
+    markCoachSeen();                       // seen once is enough, even if it times out
+    setTimeout(() => hideCoach(false), COACH_SHOW_MS);
+  }
+
+  function hideCoach(seen) {
+    if (seen) markCoachSeen();
+    document.querySelector('#view-switch [data-view="code"]')?.classList.remove("nudge");
+    if (!coachEl) return;
+    const el = coachEl;
+    coachEl = null;
+    window.removeEventListener("resize", placeCoach);
+    el.classList.add("leaving");
+    setTimeout(() => el.remove(), 260);
+  }
+
+  // --- demo: the same router, from code -------------------------------------
+  // The answer most recently shown, or picked with "View as code": its
+  // prompt goes into the snippets and its route is printed the way the SDK's
+  // reply.explain() prints it.
+  let codeSubject = null;
+  let codeTab = "builtin";
+  const SAMPLE_PROMPT = "What is the capital of Australia?";
+
+  function codeSubjectOf(m) {
+    return { prompt: m.prompt, trace: m.trace, tier: m.tier, band: m.difficulty, cost: m.cost, escalated: m.escalated };
+  }
+
+  function setView(view) {
+    const code = view === "code";
+    document.getElementById("messages").hidden = code;
+    document.getElementById("composer").hidden = code;
+    const cv = document.getElementById("code-view");
+    cv.hidden = !code;
+    document.querySelectorAll("#view-switch button").forEach(b => {
+      const on = b.dataset.view === view;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    history.replaceState(null, "", code ? "#code" : window.location.pathname);
+    if (code) { renderCodeView(); cv.scrollTop = 0; }
+    else if (!input.disabled) input.focus();
+  }
+
+  // The same text thriftllm's explain_trace() produces (sdk/python/thriftllm/client.py).
+  function explainText(trace, band, tier) {
+    if (!trace) return `classified ${band}, answered by ${tier} (no route detail)`;
+    const L = [], c = trace.classification || {};
+    const usd = v => `$${Number(v || 0).toFixed(5)}`;
+    L.push(`1. Classified ${c.band || band} in ${c.ms ?? "?"}ms, without calling a model.`);
+    (c.neighbours || []).slice(0, 3).forEach(n =>
+      L.push(`     ${Number(n.similarity).toFixed(2)}  ${String(n.band).padEnd(7)} ${(n.text || "").slice(0, 70)}`));
+    if (c.override) L.push(`   Override: the vote said ${c.embedding_band}, ${c.override}.`);
+    const st = trace.start || {};
+    L.push(`2. Started at ${st.tier || st.chosen}.`);
+    (st.tiers || []).forEach(r => {
+      const q = r.quality == null ? "n/m" : `${Math.round(r.quality * 100)}%`;
+      L.push(`     ${r.tier.padEnd(9)} ${q.padStart(4)} on ${st.band} (${r.clears_floor ? "clears" : "below"} 80%)` +
+             (r.expected_cost != null ? `, expected $${r.expected_cost.toFixed(5)}` : "") +
+             (r.tier === st.chosen ? "   <- chosen" : ""));
+    });
+    if (st.direct) L.push("   Direct mode skipped the cheapest tier.");
+    L.push("3. What happened:");
+    (trace.attempts || []).forEach(a => {
+      if (a.outcome === "unavailable") { L.push(`     ${a.tier}: unavailable (${a.reason}), skipped`); return; }
+      const ch = a.check || {};
+      let d = ch.kind || "";
+      if (ch.p_correct != null) d += `, P(correct) ${Number(ch.p_correct).toFixed(2)} vs ${ch.accept_threshold}`;
+      if (ch.judge_verdict) d += `, judge: ${ch.judge_verdict}`;
+      L.push(`     ${a.tier}: ${usd(a.cost)}, ${a.latency_ms}ms, ${a.outcome} (${d})`);
+    });
+    const t = trace.totals || {};
+    if (Object.keys(t).length) {
+      L.push(`4. Cost ${usd(t.cost)} against ${usd(t.baseline)} for the strongest tier: saved ${usd(t.saved)}.`);
+    }
+    return L.join("\n");
+  }
+
+  function codeSnippets(prompt) {
+    const origin = window.location.origin;
+    const py = JSON.stringify(prompt);                 // a valid Python string literal too
+    const mode = currentRoutingMode === "direct" ? 'mode="direct"' : "";
+    const shQuoted = JSON.stringify({ messages: [{ role: "user", content: prompt }] }).replace(/'/g, "'\\''");
+    return {
+      install: 'pip install "git+https://github.com/AnshumanDas001/llm-router.git#subdirectory=sdk/python"',
+      builtin: [
+        "import thriftllm",
+        "",
+        `thriftllm.configure(api_key="rtr_...", base_url="${origin}")`,
+        "",
+        `router = thriftllm.Router(${mode})${mode ? "  " : "               "}# the models this demo runs on`,
+        `reply = router.chat(${py})`,
+        "",
+        "print(reply.text)",
+        "print(reply.tier, reply.band, reply.cost)",
+        "print(reply.explain())                # the route, step by step",
+      ].join("\n"),
+      own: [
+        "import os",
+        "import thriftllm",
+        "",
+        'GROQ_KEY = os.environ["GROQ_API_KEY"]',
+        "",
+        `thriftllm.configure(api_key="rtr_...", base_url="${origin}")`,
+        'small  = thriftllm.calibrate("groq/openai/gpt-oss-20b",  api_key=GROQ_KEY)',
+        'medium = thriftllm.calibrate("groq/openai/gpt-oss-120b", api_key=GROQ_KEY)',
+        `router = thriftllm.Router(cheap=small, mid=medium${mode ? ", " + mode : ""})`,
+        `reply  = router.chat(${py})`,
+        "print(reply.text, reply.tier, reply.cost)",
+        'print(reply.explain())          # the same route "Why this route?" shows',
+      ].join("\n"),
+      curl: [
+        `curl ${origin}/v1/chat/completions \\`,
+        '  -H "Authorization: Bearer rtr_..." \\',
+        '  -H "Content-Type: application/json" \\',
+        `  -d '${shQuoted}'`,
+        "",
+        "# an OpenAI-shaped chat.completion, plus what the router decided:",
+        '# "_router": {"difficulty", "initial_tier", "final_tier", "escalated", "cost", "baseline_cost", "trace"}',
+      ].join("\n"),
+    };
+  }
+
+  function codeBlock(code, lang, { tabs = null, wrap = false } = {}) {
+    const box = document.createElement("div");
+    box.className = "cp-code" + (tabs ? " tabbed" : "");
+    if (tabs) {
+      const bar = document.createElement("div");
+      bar.className = "cp-tabs";
+      bar.setAttribute("role", "tablist");
+      tabs.forEach(([key, label]) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = label;
+        b.classList.toggle("on", key === codeTab);
+        b.setAttribute("role", "tab");
+        b.onclick = () => { codeTab = key; renderCodeView(); };
+        bar.appendChild(b);
+      });
+      box.appendChild(bar);
+    }
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "cp-copy";
+    copy.textContent = "Copy";
+    copy.onclick = () => {
+      navigator.clipboard.writeText(code).catch(() => {});
+      copy.textContent = "Copied";
+      setTimeout(() => { copy.textContent = "Copy"; }, 1400);
+    };
+    box.appendChild(copy);
+    const pre = document.createElement("pre");
+    if (wrap) pre.className = "wrap";
+    const el = document.createElement("code");
+    el.className = `language-${lang}`;
+    el.textContent = code;
+    pre.appendChild(el);
+    box.appendChild(pre);
+    try { hljs.highlightElement(el); } catch { /* plain text is fine */ }
+    return box;
+  }
+
+  function renderCodeView() {
+    const cv = document.getElementById("code-view");
+    const subject = codeSubject;
+    const snippets = codeSnippets(subject ? subject.prompt : SAMPLE_PROMPT);
+    cv.innerHTML = `
+      <div class="code-page">
+        <span class="cp-eyebrow">python sdk &middot; openai-compatible api</span>
+        <h1>This chat is one API call. Make it from your code.</h1>
+        <p class="cp-lede">Everything the demo just did (classify the prompt, start at the cheapest tier that
+          can answer it, check the answer, escalate if the check fails) is available to your own code, with the
+          route behind every answer. Use the built-in models, or calibrate your own and route across those.</p>
+        <div class="cp-steps">
+          <div class="cp-step"><span class="cp-n">1</span><div>
+            <h3>Get an API key</h3>
+            <p>Create a free account, then <b>Settings &rarr; Create key</b>. Keys start with <code>rtr_</code>
+              and are shown once.</p>
+            <div class="cp-actions"><a class="btn sm" href="/app">Create a free account</a>
+              <span class="hint">10 prompts a day, free</span></div>
+          </div></div>
+          <div class="cp-step"><span class="cp-n">2</span><div>
+            <h3>Install the SDK</h3>
+            <p>Python 3.10 or newer. Its only dependency is httpx.</p>
+            <div id="cp-install"></div>
+          </div></div>
+          <div class="cp-step"><span class="cp-n">3</span><div>
+            <h3>Route a prompt</h3>
+            <p>${subject ? "Your prompt from the chat, " : ""}${codeTab === "own"
+              ? "across two models you calibrate once on your own Groq key. Each band then starts at whichever of them scores 80% on it."
+              : codeTab === "curl"
+                ? "without the SDK: the OpenAI-compatible endpoint, so any OpenAI client works too."
+                : "on the same built-in models this demo uses. Nothing to calibrate."}</p>
+            <div id="cp-route"></div>
+          </div></div>
+          <div class="cp-step"><span class="cp-n">4</span><div>
+            <h3>Read the route</h3>
+            <div id="cp-out"></div>
+          </div></div>
+        </div>
+      </div>`;
+    cv.querySelector("#cp-install").appendChild(codeBlock(snippets.install, "bash", { wrap: true }));
+    cv.querySelector("#cp-route").appendChild(codeBlock(snippets[codeTab], codeTab === "curl" ? "bash" : "python", {
+      tabs: [["builtin", "Built-in models"], ["own", "Your own models"], ["curl", "curl"]],
+    }));
+
+    const out = cv.querySelector("#cp-out");
+    if (subject && subject.trace) {
+      out.innerHTML = `
+        <p>Every reply carries its route. Here is your answer from the chat, as <code>reply.explain()</code> prints it:</p>
+        <pre class="cp-out"></pre>
+        <div class="cp-fields">
+          <span>reply.tier <b>${escapeHtml(JSON.stringify(subject.tier))}</b></span>
+          <span>reply.band <b>${escapeHtml(JSON.stringify(subject.band))}</b></span>
+          <span>reply.cost <b>${Number(subject.cost || 0).toFixed(6)}</b></span>
+          <span>reply.escalated <b>${subject.escalated ? "True" : "False"}</b></span>
+        </div>`;
+      out.querySelector(".cp-out").textContent = explainText(subject.trace, subject.band, subject.tier);
+    } else {
+      out.innerHTML = `
+        <p>Every reply carries its route: the band, where it started and why, every check, and the cost.</p>
+        <div class="cp-empty"><span>Send a prompt in the chat and its route shows up here, exactly as
+          <code>reply.explain()</code> prints it.</span>
+          <button type="button" class="sm">Back to the chat</button></div>`;
+      out.querySelector("button").onclick = () => setView("chat");
+    }
   }
 
   function renderDemoQuota() {
@@ -966,6 +1381,17 @@
           .catch(() => { badgeEl.parentElement.style.visibility = "hidden"; }));
       });
       wrap.appendChild(suggestions);
+
+      if (DEMO) {
+        const codeLink = document.createElement("button");
+        codeLink.type = "button";
+        codeLink.className = "hero-code-link";
+        codeLink.innerHTML = `<span class="hcl-icon">&lt;/&gt;</span>
+          <span><b>Building something?</b> This chat is one call in the Python SDK.</span>
+          <span class="hcl-go">See the code &rarr;</span>`;
+        codeLink.onclick = () => setView("code");
+        wrap.appendChild(codeLink);
+      }
 
       const hint = document.createElement("div");
       hint.className = "composer-hint";
@@ -1458,6 +1884,13 @@
         routeBtn.onclick = () => { routeInfoEl.hidden = !routeInfoEl.hidden; };
         actions.appendChild(routeBtn);
       }
+      if (DEMO && m.prompt) {
+        const codeBtn = document.createElement("button");
+        codeBtn.type = "button";
+        codeBtn.textContent = "View as code";
+        codeBtn.onclick = () => { codeSubject = codeSubjectOf(m); setView("code"); };
+        actions.appendChild(codeBtn);
+      }
       wrap.appendChild(actions);
     }
 
@@ -1743,13 +2176,16 @@
       });
 
       if (!finalEvent) throw new Error("the response ended unexpectedly");
-      loadingEl.replaceWith(renderMessage({
+      const answered = {
         role: "assistant", content: finalEvent.text, tier: finalEvent.final_tier,
         cost: finalEvent.total_cost, latency_ms: finalEvent.total_latency_ms,
         escalated: finalEvent.escalated, difficulty: finalEvent.difficulty,
         escalation_reasons: finalEvent.escalation_reasons, trace: finalEvent.trace,
-      }));
+        prompt: content,
+      };
+      loadingEl.replaceWith(renderMessage(answered));
       if (DEMO) {
+        codeSubject = codeSubjectOf(answered);
         demoHistory.push({ role: "user", content }, { role: "assistant", content: finalEvent.text });
         demoTotals.cost += finalEvent.total_cost || 0;
         demoTotals.baseline += finalEvent.baseline_cost || 0;

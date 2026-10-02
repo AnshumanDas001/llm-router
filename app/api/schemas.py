@@ -10,6 +10,7 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[Message]
     model: str | None = None  # ignored; the cascade always decides the tier
+    routing_mode: str = "cascade"  # not an OpenAI field; OpenAI clients leave it at the default
 
 
 class AuthRequest(BaseModel):
