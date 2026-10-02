@@ -638,7 +638,7 @@ data/
   scorer/              the trained gate (+ its training data, gitignored)
 sdk/python/            the thriftllm client: calibrate(), Router(), reply.explain()
 tests/                 graders, policy, classifier rules, the HTTP layer and the SDK, with models stubbed
-docs/                  internals reference, failure analysis, deploy guide, roadmap
+docs/                  handbook, internals reference, failure analysis, deploy guide, roadmap
 ```
 
 Run the tests with `./venv/bin/python -m pytest`. They never call a model,
@@ -653,6 +653,13 @@ Two scripts check a running server for real:
 # the Python SDK with your app's API key and real provider keys
 THRIFTLLM_API_KEY=rtr_... GROQ_API_KEY=... ./venv/bin/python -m scripts.ops.sdk_check --base-url http://localhost:8000
 ```
+
+## Handbook
+
+[`docs/handbook.md`](docs/handbook.md) walks through the whole application:
+every page and feature, how each is built and where its code lives, the
+routing engine, the data model, every setting, and how to test all of it
+(unit tests, the end-to-end and SDK checks, and a manual checklist).
 
 ## Full internals document
 

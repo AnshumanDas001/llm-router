@@ -220,6 +220,9 @@
   .msg-actions button:hover { background: var(--surface-2); color: var(--text-primary); }
 
   /* rendered markdown inside assistant messages */
+  /* A long equation scrolls on its own line instead of widening the page. */
+  .bubble .katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+  .msg.user .bubble .katex { font-size: 1.05em; }
   .bubble p { margin: 0 0 10px; }
   .bubble p:last-child { margin-bottom: 0; }
   .bubble ul, .bubble ol { margin: 0 0 10px; padding-left: 22px; }
@@ -556,11 +559,14 @@
   // Maths is lifted out before markdown runs -- otherwise marked reads the
   // underscores in "17_b" as italics and eats the backslashes -- then typeset
   // with KaTeX and put back. Competition-maths answers (the expert band) are
-  // mostly LaTeX, and unrendered they read as noise.
-  const MATH_RE = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?![\s$])[^$\n]+?(?<![\s\\])\$)/g;
+  // mostly LaTeX, and unrendered they read as noise. Code is matched first
+  // (group 1) and left alone, so the `$HOME` in a shell snippet stays code.
+  const MATH_RE = /(```[\s\S]*?```|`[^`\n]+`)|(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$(?![\s$])[^$\n]+?(?<![\s\\])\$)/g;
 
-  function renderMath(src) {
-    const display = src.startsWith("$$") || src.startsWith("\\[");
+  const isDisplayMath = src => src.startsWith("$$") || src.startsWith("\\[");
+
+  function renderMath(src, inline = false) {
+    const display = !inline && isDisplayMath(src);
     const body = src.startsWith("$$") ? src.slice(2, -2)
       : src.startsWith("$") ? src.slice(1, -1) : src.slice(2, -2);
     try {
@@ -573,9 +579,51 @@
   function renderMarkdown(text) {
     if (typeof katex === "undefined") return DOMPurify.sanitize(marked.parse(text));
     const stash = [];
-    const safe = text.replace(MATH_RE, m => { stash.push(m); return `@@MATH${stash.length - 1}@@`; });
+    const safe = text.replace(MATH_RE, (m, code) => {
+      if (code) return m;
+      stash.push(m);
+      return `@@MATH${stash.length - 1}@@`;
+    });
     const html = DOMPurify.sanitize(marked.parse(safe));
-    return html.replace(/@@MATH(\d+)@@/g, (_, i) => renderMath(stash[+i]));
+    // A display equation is its own block, so the line breaks around it
+    // (from breaks: true) would only add a blank line.
+    return html.replace(/(<br>\s*)?@@MATH(\d+)@@(\s*<br>)?/g, (m, before, i, after) => {
+      const src = stash[+i];
+      return isDisplayMath(src) ? renderMath(src) : (before || "") + renderMath(src) + (after || "");
+    });
+  }
+
+  // Plain text with its maths typeset: the user's own messages and the
+  // labelled examples in a route trace. No markdown, so what was typed is
+  // what shows.
+  // inline keeps display equations on the line (a one-line trace row).
+  function renderTextWithMath(text, inline = false) {
+    if (typeof katex === "undefined") return escapeHtml(text);
+    let out = "", last = 0;
+    for (const m of text.matchAll(MATH_RE)) {
+      out += escapeHtml(text.slice(last, m.index)) + (m[1] ? escapeHtml(m[0]) : renderMath(m[0], inline));
+      last = m.index + m[0].length;
+    }
+    return out + escapeHtml(text.slice(last));
+  }
+
+  // One-line readings of LaTeX for places that can't typeset it: the sidebar
+  // preview and tooltips. "Let $S$ be ... $n^2 + 3n + 7$" reads
+  // "Let S be ... n² + 3n + 7".
+  const SUPERSCRIPT = { "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "n": "ⁿ" };
+  const LATEX_WORDS = { cdot: "·", times: "×", div: "÷", le: "≤", leq: "≤", ge: "≥", geq: "≥", ne: "≠", neq: "≠",
+    pm: "±", infty: "∞", pi: "π", theta: "θ", alpha: "α", beta: "β", sqrt: "√", equiv: "≡", pmod: "mod ", bmod: "mod",
+    mid: "|", ldots: "…", cdots: "…", dots: "…", in: "∈", sum: "Σ", prod: "Π", angle: "∠", triangle: "△", circ: "°" };
+  function plainMath(text) {
+    return String(text || "")
+      .replace(/\$\$?|\\\(|\\\)|\\\[|\\\]/g, "")
+      .replace(/\\[dt]?frac\{([^{}]*)\}\{([^{}]*)\}/g, "($1)/($2)")
+      .replace(/\^\{?([0-9n])\}?/g, (_, d) => SUPERSCRIPT[d])
+      .replace(/\\(?:left|right|displaystyle|text|mathrm|mathbf|operatorname)\b/g, "")
+      .replace(/\\([a-zA-Z]+)/g, (m, w) => LATEX_WORDS[w] ?? w)
+      .replace(/[{}]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   // "73000ms" reads worse than "73.0s".
@@ -1166,7 +1214,7 @@
         ${c.total_baseline_cost > 0
           ? `<span class="saved" title="saved vs. always using the top tier">$${c.cost_saved.toFixed(3)}</span>` : ""}
       </div>
-      ${c.preview ? `<div class="preview">${escapeHtml(c.preview)}</div>` : ""}
+      ${c.preview ? `<div class="preview">${escapeHtml(plainMath(c.preview))}</div>` : ""}
     `;
     main.onclick = () => openChat(c.id);
 
@@ -1368,7 +1416,7 @@
       bubble.innerHTML = renderMarkdown(m.content);
       highlightCodeBlocks(bubble);
     } else {
-      bubble.textContent = m.content;
+      bubble.innerHTML = renderTextWithMath(m.content);
     }
     wrap.appendChild(bubble);
 
@@ -1488,7 +1536,7 @@
     const s = t.start || {};
     const nbs = (c.neighbours || []).slice(0, 5).map(n => `
       <div class="ri-nb"><span class="diff ${escapeHtml(n.band)}">${escapeHtml(n.band)}</span>
-        ${bar(n.similarity, null, null, Number(n.similarity).toFixed(2))}<span class="t" title="${escapeHtml(n.text || "")}">${escapeHtml(n.text || "")}</span></div>`).join("");
+        ${bar(n.similarity, null, null, Number(n.similarity).toFixed(2))}<span class="t" title="${escapeHtml(plainMath(n.text))}">${renderTextWithMath(n.text || "", true)}</span></div>`).join("");
     const votes = Object.entries(c.votes || {}).sort((a, b) => b[1] - a[1])
       .map(([b, v]) => `${b} ${Number(v).toFixed(2)}`).join(" &middot; ");
     const gate = c.gate ? `Expert gate: ${pctTxt(c.gate.share)} of the similarity among the ${c.gate.k} nearest examples is competition maths (it takes ${pctTxt(c.gate.needed)}).` : "";

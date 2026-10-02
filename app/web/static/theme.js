@@ -1,6 +1,6 @@
 /* Light / dark theme. Loaded in <head> so the saved choice applies before
-   the first paint. With no saved choice the page follows the system
-   setting; the toggle saves an explicit one in this browser.
+   the first paint. Light is the default; the toggle saves a choice of
+   dark (or back to light) in this browser.
 
    Any element with [data-theme-toggle] becomes a toggle button. */
 (function () {
@@ -10,14 +10,9 @@
   var MOON = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" aria-hidden="true"><path d="M13.5 9.6A5.6 5.6 0 0 1 6.4 2.5a5.6 5.6 0 1 0 7.1 7.1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
 
   function saved() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
-  var initial = saved();
-  if (initial === "light" || initial === "dark") root.setAttribute("data-theme", initial);
+  root.setAttribute("data-theme", saved() === "dark" ? "dark" : "light");
 
-  function current() {
-    var set = root.getAttribute("data-theme");
-    if (set) return set;
-    return window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-  }
+  function current() { return root.getAttribute("data-theme") === "dark" ? "dark" : "light"; }
 
   function paint(btn) {
     var dark = current() === "dark";
@@ -43,10 +38,5 @@
       paint(btn);
     });
   };
-  if (window.matchMedia) {
-    window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", function () {
-      document.querySelectorAll("[data-theme-toggle]").forEach(paint);
-    });
-  }
   document.addEventListener("DOMContentLoaded", window.mountThemeToggles);
 })();

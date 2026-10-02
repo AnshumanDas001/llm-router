@@ -69,10 +69,10 @@
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
-/* Light theme. The bare :root above is the dark palette; these redefine
-   the tokens only. It applies when the browser prefers light and nobody
-   chose dark, or when light is chosen explicitly (static/theme.js sets
-   data-theme from the toggle). */
+/* Light theme, the default. The bare :root above is the dark palette;
+   these redefine the tokens only. static/theme.js sets data-theme="light"
+   before the first paint unless dark was chosen with the toggle; the media
+   query covers the moment before that script runs, or a page without it. */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     color-scheme: light;
