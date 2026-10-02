@@ -124,6 +124,16 @@
     #toc-sidebar .toc-link { display: inline-block; min-height: 38px; line-height: 26px; }
     #right-toc { display: none; }
     .table-wrap table { min-width: 520px; }
+    .table-wrap table.fit, .table-wrap table.stack-sm { min-width: 0; }
+    /* Three-column text tables read as stacked rows: the first two cells on
+       one line, the third under them (.swap puts the third on the line and
+       the second under it). */
+    table.stack-sm thead { display: none; }
+    table.stack-sm tr { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: center; }
+    table.stack-sm td { padding: 0; border: none; min-width: 0; overflow-wrap: anywhere; }
+    table.stack-sm td:nth-child(3) { grid-column: 1 / -1; }
+    table.stack-sm.swap td:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+    table.stack-sm.swap td:nth-child(3) { grid-column: 2; grid-row: 1; font-size: 12px; }
   }
 </style>
 </head>
@@ -284,7 +294,7 @@ print(reply.explain())          # the same route &quot;Why this route?&quot; sho
     <section id="tiers">
       <h2>Tiers</h2>
       <p>Three named tiers, each mapped to a real model. Our defaults, or bring your own via calibration:</p>
-      <div class="table-wrap"><table>
+      <div class="table-wrap"><table class="stack-sm swap">
         <thead><tr><th>Tier</th><th>Role</th><th>Our default</th></tr></thead>
         <tbody>
           <tr><td><span class="badge cheap">cheap</span></td><td>Starts most traffic. Calibrated 0.89 / 0.95 / 0.81 on easy / medium / hard, 0 on expert</td><td class="mono">openrouter/meta-llama/llama-3.1-8b-instruct</td></tr>
@@ -422,7 +432,7 @@ resp = requests.post(f"{HOST}/api/v1/route", headers=HEADERS, json={
       <div class="endpoint-title"><span class="badge post">POST</span><code>/api/v1/route</code></div>
       <p>Routes one chat completion through the cascade using your configured models.</p>
       <h3>Request body</h3>
-      <div class="table-wrap"><table>
+      <div class="table-wrap"><table class="stack-sm">
         <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
         <tbody>
           <tr><td><code>messages</code></td><td>array</td><td>OpenAI-style <code>{role, content}</code> messages</td></tr>
@@ -457,7 +467,7 @@ resp = requests.post(f"{HOST}/api/v1/route", headers=HEADERS, json={
 
     <section id="ref-errors">
       <h2>Errors</h2>
-      <div class="table-wrap"><table>
+      <div class="table-wrap"><table class="fit">
         <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
         <tbody>
           <tr><td class="mono">401</td><td>Missing, invalid, or revoked API key</td></tr>

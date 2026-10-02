@@ -255,6 +255,23 @@ p a, .sub a, .section-sub a { text-decoration: underline; text-decoration-color:
     flex-shrink: 0; border-radius: 10px;
   }
   .app-nav-link.active::before { display: none; }
+
+  /* Document pages (Models, Sessions, Settings): brand and account on the
+     first row, the five links as a tab bar under them. One sideways-scrolling
+     row cut "Models" off at the screen edge on a 375px phone. The chat app
+     (#app-nav) keeps its drawer instead. */
+  .app-nav:not(#app-nav) { flex-wrap: wrap; overflow: visible; row-gap: 6px; padding: 8px 10px 6px; }
+  .app-nav:not(#app-nav)::after { content: ""; order: 2; flex-basis: 100%; height: 0; }
+  .app-nav:not(#app-nav) .brand { order: 0; }
+  .app-nav:not(#app-nav) .app-nav-spacer { order: 1; flex: 1; }
+  .app-nav:not(#app-nav) .app-nav-user { order: 1; }
+  .app-nav:not(#app-nav) .app-nav-link {
+    order: 3; flex: 1 1 0; min-width: 0; flex-direction: column; justify-content: center; gap: 3px;
+    min-height: 48px; padding: 4px 2px; font-size: 11px; text-align: center;
+  }
+  .app-nav:not(#app-nav) .app-nav-link .nav-label { flex: none; }
+  .app-nav:not(#app-nav) .app-nav-link .nav-badge { display: none; }
+
   .app-main { overflow: visible; }
   .app-content { padding: 22px 16px 56px; }
 
@@ -435,7 +452,7 @@ input[type=checkbox]:disabled { opacity: 0.45; cursor: default; }
 
 /* --- stat tiles ----------------------------------------------------------- */
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 20px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px; }
 .tile {
   background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 15px 16px; box-shadow: var(--shadow-1);
@@ -574,6 +591,26 @@ input[type=checkbox]:disabled { opacity: 0.45; cursor: default; }
 .route-tier.cheap.predicted { border-color: rgba(75, 142, 255, 0.6); box-shadow: 0 0 0 3px var(--cheap-soft); }
 .route-tier.mid.predicted { border-color: rgba(242, 121, 61, 0.6); box-shadow: 0 0 0 3px var(--mid-soft); }
 .route-tier.frontier.predicted { border-color: rgba(35, 196, 138, 0.6); box-shadow: 0 0 0 3px var(--frontier-soft); }
+@media (max-width: 640px) {
+  /* "mid" plus "thinking off" is wider than a third of a phone: let the
+     pill drop under the badge instead of spilling out of the card. */
+  .route-tier { min-width: 0; }
+  .route-tier .rt-head { flex-wrap: wrap; justify-content: flex-start; row-gap: 5px; }
+  .route-tier .rt-head .think { font-size: 9.5px; padding: 0 5px; }
+}
+
+/* The routing map on a phone: band plus three tiers fits without scrolling.
+   The green cell already marks where each band starts, so the "Starts at"
+   column and the model / thinking labels under each tier drop out. */
+@media (max-width: 560px) {
+  .table-wrap table.matrix { min-width: 0; width: 100%; display: table; }
+  .table-wrap .matrix th:last-child, .table-wrap .matrix td:last-child { display: none; }
+  .table-wrap .matrix th .think, .table-wrap .matrix th .hint { display: none; }
+  .table-wrap .matrix th, .table-wrap .matrix td { padding: 9px 3px; }
+  .table-wrap .matrix th:first-child, .table-wrap .matrix td:first-child { padding-left: 14px; }
+  .table-wrap .matrix th:nth-last-child(2), .table-wrap .matrix td:nth-last-child(2) { padding-right: 14px; }
+  .table-wrap .matrix .cell { min-width: 0; padding: 4px 7px; font-size: 12.5px; }
+}
 
 /* --- motion ---------------------------------------------------------------
    One shared layer so pages animate consistently. Everything here is

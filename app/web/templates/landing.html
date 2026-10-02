@@ -65,7 +65,7 @@
   }
   .live-steps { display: flex; align-items: center; gap: 8px; margin: 14px 0; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; }
   .live-steps .ms { font-family: var(--font-mono); }
-  .lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .lane {
     border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; background: var(--surface-2);
     transition: border-color 0.35s ease, box-shadow 0.35s ease, opacity 0.35s ease, transform 0.35s ease; opacity: 0.55;
@@ -83,6 +83,9 @@
     .lane { padding: 9px; }
     .lane .m { display: none; }
     .lane .q { font-size: 11px; }
+    .lane .think { font-size: 9px; padding: 0 5px; max-width: 100%; }
+    .lane .think::before { display: none; }
+    .fig-card { padding: 14px; }
     .live-steps span:last-child { display: none; }
     .metric .n { font-size: 26px; }
     .final-inner { padding: 32px 22px; }
@@ -104,9 +107,12 @@
   .metric .n.good { color: var(--good); }
   .metric .n small { font-size: 15px; color: var(--text-muted); letter-spacing: -0.01em; }
   .metric .k { font-size: 12.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
+  .metric .k a { color: var(--accent-ink); text-decoration: none; white-space: nowrap; }
+  .metric .k a:hover { text-decoration: underline; }
 
   /* --- sections --- */
   section.block { padding: 96px 0 0; }
+  @media (max-width: 560px) { section.block { padding-top: 64px; } }
   .block-head { max-width: 720px; margin-bottom: 30px; }
   .kicker { font-family: var(--font-mono); font-size: 12px; color: var(--accent-ink); margin-bottom: 12px; display: block; }
   .block-head h2 { font-size: clamp(26px, 3.4vw, 38px); margin: 0 0 14px; font-weight: 650; letter-spacing: -0.035em; line-height: 1.12; }
@@ -154,6 +160,12 @@
 
   figure { margin: 0; }
   figure img { width: 100%; height: auto; display: block; }
+  /* The chart's labels are drawn at desktop size; on a phone it keeps a
+     readable width and scrolls inside its card instead of shrinking. */
+  @media (max-width: 640px) {
+    .fig-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .fig-scroll img { max-width: none; width: 640px; }
+  }
   .fig-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px; padding: 22px; }
   figcaption { color: var(--text-muted); font-size: 12px; margin-top: 12px; line-height: 1.6; }
 
@@ -252,7 +264,7 @@
     <div class="metrics animate-in stagger-4">
       <div class="metric"><div class="n good">41%</div><div class="k">cheaper than sending everything to the mid tier, over 116 routed queries, every graded answer correct</div></div>
       <div class="metric"><div class="n good">82%</div><div class="k">cheaper than sending everything to the frontier on the same queries</div></div>
-      <div class="metric"><div class="n">9<small>/10</small></div><div class="k">AIME 2025 problems right with the thinking frontier behind mid. Mid alone gets 7</div></div>
+      <div class="metric"><div class="n">SDK</div><div class="k">calibrate your own models and route from your code with the Python client. <a href="#byom">Install and example &rarr;</a></div></div>
       <div class="metric"><div class="n">~7<small>ms</small></div><div class="k">to decide where a prompt goes. No model call in the routing decision</div></div>
     </div>
 
@@ -309,7 +321,7 @@
       </div>
       <div class="fig-card">
         <figure>
-          <img src="/static/charts/cascade-savings.svg" alt="Cascade cost of $0.13214 versus $0.73475 frontier-only and $0.22548 mid-only, across 116 routed queries.">
+          <div class="fig-scroll"><img src="/static/charts/cascade-savings.svg" alt="Cascade cost of $0.13214 versus $0.73475 frontier-only and $0.22548 mid-only, across 116 routed queries."></div>
           <figcaption>Measured on 116 routed queries; regenerated from the eval database, not drawn by hand.
             The run predates the expert band.</figcaption>
         </figure>

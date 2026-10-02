@@ -403,6 +403,16 @@
     .ri-nb { grid-template-columns: 66px minmax(0, 1fr); row-gap: 2px; }
     .ri-nb .t { grid-column: 1 / -1; white-space: normal; font-size: 11.5px; }
     .route-info { padding: 14px; }
+    /* The tier table fits the screen as four columns -- tier, score,
+       against the floor, expected cost. The model names are in the chat
+       header, and the score bar repeats the percentage beside it. */
+    .table-wrap table.ri-table { min-width: 0; }
+    .ri-table th:nth-child(2), .ri-table td:nth-child(2),
+    .ri-table th:nth-child(3), .ri-table td:nth-child(3) { display: none; }
+    .ri-table th:nth-child(4)::before { content: "score"; }
+    .ri-table { font-size: 11.5px; }
+    .ri-table th, .ri-table td { padding-left: 5px; padding-right: 5px; }
+    .ri-table th { white-space: normal; line-height: 1.3; }
   }
   .ri-bar { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 11px; }
   .ri-bar .b { flex: 1; height: 5px; border-radius: 4px; background: var(--surface-3); overflow: hidden; position: relative; min-width: 36px; }

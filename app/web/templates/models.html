@@ -49,6 +49,25 @@
   .calibrating .spinner, button .spinner { width: 14px; height: 14px; margin-top: 0; }
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-muted); padding: 12px 20px 16px; border-top: 1px solid var(--border); }
   .legend .score { font-size: 11px; }
+  /* Phones: each model is a card -- its name, the four band scores in a
+     row, cost and latency, then the calibrate button. Eight columns only
+     scrolled sideways, and pushed the empty state off screen. */
+  @media (max-width: 640px) {
+    .table-wrap #models-table { min-width: 0; display: block; white-space: normal; }
+    #models-table thead { display: none; }
+    #models-table tbody { display: block; }
+    #models-table tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 6px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    #models-table td { display: block; padding: 0 !important; border: none; text-align: left !important; }
+    #models-table td:first-child { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
+    #models-table td:last-child { grid-column: 1 / -1; }
+    #models-table td.num { grid-column: span 2; }
+    #models-table td[data-label]::before {
+      content: attr(data-label); display: block; margin-bottom: 4px;
+      font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-family: var(--font-sans, inherit);
+    }
+    #models-table .score .bar { width: 26px; }
+    #models-table td[colspan] { grid-column: 1 / -1; grid-row: auto; text-align: center !important; }
+  }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
 </head>
@@ -306,10 +325,11 @@
   // A score below the routing threshold is why a difficulty skips that model,
   // so mark it rather than leaving the reader to compare numbers by eye.
   const QUALITY_THRESHOLD = 0.80;
-  function scoreCell(v) {
-    if (v == null) return '<td><span class="score none">&mdash;</span></td>';
+  // data-label names the column for the phone layout, where the header is hidden.
+  function scoreCell(v, band) {
+    if (v == null) return `<td data-label="${band}"><span class="score none">&mdash;</span></td>`;
     const cls = v < QUALITY_THRESHOLD ? "score below" : "score";
-    return `<td><span class="${cls}"><span class="bar"><i style="width:${Math.max(3, v * 100)}%"></i></span>${pct(v)}</span></td>`;
+    return `<td data-label="${band}"><span class="${cls}"><span class="bar"><i style="width:${Math.max(3, v * 100)}%"></i></span>${pct(v)}</span></td>`;
   }
 
   async function loadConnectedModels() {
@@ -325,12 +345,12 @@
         <tr>
           <td style="padding-left:20px;"><div class="model-name">${esc(m.model_name)}</div>
               <div class="model-provider">${esc(m.provider_name)}</div></td>
-          ${scoreCell(q.easy)}
-          ${scoreCell(q.medium)}
-          ${scoreCell(q.hard)}
-          ${scoreCell(q.expert)}
-          <td class="num">${m.avg_cost == null ? "&mdash;" : fmt(m.avg_cost)}</td>
-          <td class="num">${m.avg_latency_ms == null ? "&mdash;" : (m.avg_latency_ms / 1000).toFixed(1) + "s"}</td>
+          ${scoreCell(q.easy, "easy")}
+          ${scoreCell(q.medium, "medium")}
+          ${scoreCell(q.hard, "hard")}
+          ${scoreCell(q.expert, "expert")}
+          <td class="num" data-label="avg cost">${m.avg_cost == null ? "&mdash;" : fmt(m.avg_cost)}</td>
+          <td class="num" data-label="latency">${m.avg_latency_ms == null ? "&mdash;" : (m.avg_latency_ms / 1000).toFixed(1) + "s"}</td>
           <td style="text-align:right; padding-right:20px;"><button class="${m.calibrated ? "ghost" : ""} sm" data-calibrate="${esc(m.model_name)}"
                 data-needs-key="${m.has_stored_key ? "0" : "1"}">
               ${m.calibrated ? "Re-calibrate" : "Calibrate"}</button></td>
