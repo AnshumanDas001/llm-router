@@ -95,17 +95,6 @@
   .cta-tertiary { color: var(--text-secondary); font-size: 14px; font-weight: 500; padding: 10px 6px; }
   .cta-tertiary:hover { color: var(--text-primary); }
 
-  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-  @media (max-width: 760px) { .modes { grid-template-columns: 1fr; } }
-  .mode { background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px; }
-  .mode.on { border-color: rgba(35, 196, 138, 0.45); }
-  .mode-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; flex-wrap: wrap; }
-  .mode-head h3 { margin: 0; font-size: 16px; }
-  .mode .model { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-bottom: 14px; }
-  .mode dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; font-size: 13px; }
-  .mode dt { color: var(--text-muted); }
-  .mode dd { margin: 0; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-primary); }
-  .mode .what { margin: 14px 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
 
   /* --- metrics --- */
   .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
@@ -162,19 +151,6 @@
   details.more table { margin-top: 6px; font-size: 12.5px; }
 
   /* results */
-  .results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  @media (max-width: 900px) { .results { grid-template-columns: 1fr; } }
-  .res { background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; }
-  .res.win { border-color: rgba(35, 196, 138, 0.45); background: linear-gradient(180deg, rgba(35,196,138,0.07), var(--surface-1) 60%); }
-  .res .tag { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
-  .res h3 { font-size: 16px; margin: 6px 0 4px; letter-spacing: -0.01em; }
-  .res .sub { font-size: 12.5px; color: var(--text-muted); line-height: 1.55; margin: 0 0 16px; }
-  .bars { display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
-  .bar-row { display: grid; grid-template-columns: 74px 1fr 64px; gap: 10px; align-items: center; font-size: 12px; }
-  .bar-row .track { height: 9px; background: var(--surface-3); border-radius: 6px; overflow: hidden; }
-  .bar-row .track i { display: block; height: 100%; border-radius: 6px; }
-  .bar-row .v { text-align: right; font-family: var(--font-mono); }
-  .res .verdict { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; }
 
   figure { margin: 0; }
   figure img { width: 100%; height: auto; display: block; }
@@ -221,7 +197,7 @@
       <a href="/" class="logo"><span class="brand-mark"></span><span>Thrift<span class="dot">LLM</span></span></a>
       <nav>
         <a href="#routing" class="lnk hide-sm">How it routes</a>
-        <a href="#frontier" class="lnk hide-sm">Results</a>
+        <a href="#numbers" class="lnk hide-sm">Results</a>
         <a href="/demo" class="lnk hide-sm">Explorer</a>
         <a href="/guide" class="lnk hide-sm">Docs</a>
         <button class="theme-toggle" data-theme-toggle></button>
@@ -238,8 +214,7 @@
         <p class="lede animate-in stagger-2">
           Plenty of prompts don't need your most expensive model, but you pay for it anyway.
           ThriftLLM reads each prompt, starts it on the cheapest model calibrated to handle it,
-          checks the answer, and moves up a tier only when the check fails. Competition-grade
-          maths goes straight to a model that thinks.
+          checks the answer, and moves up a tier only when the check fails.
         </p>
         <div class="cta-row animate-in stagger-3">
           <a class="btn lg" href="/try">Try the demo &rarr;</a>
@@ -323,93 +298,10 @@
       </details>
     </section>
 
-    <section class="block reveal" id="frontier">
-      <div class="block-head">
-        <span class="kicker">02 &middot; does the frontier earn its slot?</span>
-        <h2>Same model, thinking off and on. It took three attempts to find where that matters.</h2>
-        <p>Mid and frontier are both Gemini 3.5 Flash; only the frontier is allowed to think. On every
-          everyday question they score the same, so for a long time the router never reached the
-          frontier at all. These are the sets we tried, in order.</p>
-      </div>
-      <div class="modes">
-        <div class="mode">
-          <div class="mode-head"><span class="badge mid">mid</span><h3>Thinking off</h3><span class="think">reasoning_effort: minimal</span></div>
-          <div class="model">gemini-3.5-flash</div>
-          <dl>
-            <dt>hidden reasoning</dt><dd>0 tokens</dd>
-            <dt>an AIME answer</dt><dd>~2,000 visible tokens &middot; $0.019 &middot; 14s</dd>
-            <dt>AIME 2025</dt><dd>7 / 10</dd>
-            <dt>everyday questions</dt><dd>100% on every band</dd>
-          </dl>
-          <p class="what">Writes its working straight into the answer. Commits to its first line of attack, so a wrong turn early in a long derivation stays wrong.</p>
-        </div>
-        <div class="mode on">
-          <div class="mode-head"><span class="badge frontier">frontier</span><h3>Thinking on</h3><span class="think on">reasoning_effort: high</span></div>
-          <div class="model">gemini-3.5-flash &middot; the same model</div>
-          <dl>
-            <dt>hidden reasoning</dt><dd>13,000&ndash;31,000 tokens</dd>
-            <dt>an AIME answer</dt><dd>$0.13&ndash;0.29 &middot; ~2 minutes</dd>
-            <dt>AIME 2025</dt><dd>fixed 2 of mid's 3 misses</dd>
-            <dt>everyday questions</dt><dd>100%, at 4&times; mid's cost</dd>
-          </dl>
-          <p class="what">Thinks privately before answering: tries an approach, checks it, backs out. That only pays where the problem punishes a first guess, which is why only expert questions start here.</p>
-        </div>
-      </div>
-
-      <div class="results">
-        <div class="res">
-          <span class="tag">attempt 1 &middot; 263 questions</span>
-          <h3>MATH-500 + BIG-Bench Hard</h3>
-          <p class="sub">Benchmarks built to be hard. Mid writes its working out in the answer, which is all BBH rewards.</p>
-          <div class="bars">
-            <div class="bar-row"><span class="badge mid">mid</span><span class="track"><i style="width:95.8%; background:var(--series-mid)"></i></span><span class="v">95.8%</span></div>
-            <div class="bar-row"><span class="badge frontier">+ think</span><span class="track"><i style="width:96.6%; background:var(--series-frontier)"></i></span><span class="v">96.6%</span></div>
-          </div>
-          <div class="verdict">+0.8 points for +23% cost. Thinking fixed 2 of mid's 11 misses.</div>
-        </div>
-        <div class="res">
-          <span class="tag">attempt 2 &middot; 25 generated puzzles</span>
-          <h3>Puzzles that need search</h3>
-          <p class="sub">Countdown, knights and knaves, logic grids, shortest paths. Each brute-forced to one answer.</p>
-          <div class="bars">
-            <div class="bar-row"><span class="badge mid">mid</span><span class="track"><i style="width:100%; background:var(--series-mid)"></i></span><span class="v">25/25</span></div>
-          </div>
-          <div class="verdict">With thinking off, mid still searches, just out loud. Nothing to separate.</div>
-        </div>
-        <div class="res win">
-          <span class="tag">attempt 3 &middot; AIME 2025</span>
-          <h3>Competition maths</h3>
-          <p class="sub">Mid's misses were real wrong answers (88 for 81, 73 for 60). Thinking spent 13&ndash;17k tokens fixing two.</p>
-          <div class="bars">
-            <div class="bar-row"><span class="badge cheap">cheap</span><span class="track"><i style="width:0%"></i></span><span class="v">0/10</span></div>
-            <div class="bar-row"><span class="badge mid">mid</span><span class="track"><i style="width:70%; background:var(--series-mid)"></i></span><span class="v">7/10</span></div>
-            <div class="bar-row"><span class="badge frontier">+ think</span><span class="track"><i style="width:90%; background:var(--series-frontier)"></i></span><span class="v">9/10</span></div>
-          </div>
-          <div class="verdict"><strong>Mid falls under the floor.</strong> Expert questions now start at the frontier, on ten problems' worth of evidence.</div>
-        </div>
-      </div>
-
-      <details class="more">
-        <summary>Four grading bugs, and why every number here is a lower bound</summary>
-        <div class="body">
-          <p>Each made a model look worse than it was, and each was caught by reading answers rather than trusting the score.</p>
-          <div class="table-wrap"><table>
-            <thead><tr><th>the grader wanted</th><th>the model said</th><th>damage</th></tr></thead>
-            <tbody>
-              <tr><td class="mono">(B)</td><td class="mono">(B) heptagon</td><td>scored 2/17 on a task it got 11/17 right</td></tr>
-              <tr><td class="mono">syndrome therefrom</td><td class="mono">syndrome, therefrom</td><td>scored 0/5 on a task it got 5/5 right</td></tr>
-              <tr><td class="mono">hypertext transfer protocol</td><td class="mono">**H**yper**T**ext ...</td><td>marked wrong for its bold</td></tr>
-              <tr><td class="mono">a Countdown expression</td><td class="mono">(25 * 7) + 75 + 2 + 1</td><td>0/6 on a task it got 6/6: stripping <code>*</code> as markdown deleted the multiplication</td></tr>
-            </tbody>
-          </table></div>
-          <p style="margin-top:12px;">The fourth nearly recorded "mid fails every Countdown puzzle" as the result that justified a frontier band.</p>
-        </div>
-      </details>
-    </section>
 
     <section class="block reveal" id="numbers">
       <div class="block-head">
-        <span class="kicker">03 &middot; what it saved</span>
+        <span class="kicker">02 &middot; what it saved</span>
         <h2>41% under the mid tier, and it took two stacks to get there.</h2>
         <p>The first stack tied its own mid-tier model exactly: the judge <em>was</em> the mid model, so
           verification cost what it saved. Two changes turned the tie into a saving: a cheap tier that clears
@@ -426,7 +318,7 @@
 
     <section class="block reveal" id="byom">
       <div class="block-head">
-        <span class="kicker">04 &middot; bring your own models</span>
+        <span class="kicker">03 &middot; bring your own models</span>
         <h2>Your providers, your keys, a routing map derived from your numbers.</h2>
         <p>Connect a provider, list its models, calibrate each on 24 graded questions. Those scores are the
           routing map. Change the models and it re-derives itself.</p>
