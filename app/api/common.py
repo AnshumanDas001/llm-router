@@ -26,6 +26,13 @@ COOKIE_SECURE = os.getenv("COOKIE_SECURE", "").lower() in ("1", "true", "yes")
 # the API. It bounds what one free account can spend on the built-in tiers.
 DAILY_PROMPT_LIMIT = int(os.getenv("DAILY_PROMPT_LIMIT", "10"))
 
+# ...and this many tokens per UTC day on the built-in models, counted across
+# every attempt (escalations included) and including hidden reasoning. A
+# prompt count alone doesn't bound spend: one competition-maths question
+# can make the frontier think for 30,000 tokens (~$0.29). 50,000 is about
+# $0.45 on the frontier at worst, and hundreds of everyday answers.
+DAILY_TOKEN_LIMIT = int(os.getenv("DAILY_TOKEN_LIMIT", "50000"))
+
 ROUTING_MODES = ("cascade", "direct")
 
 
@@ -42,14 +49,41 @@ def check_routing_mode(mode: str) -> None:
         raise HTTPException(status_code=400, detail="routing_mode must be 'cascade' or 'direct'")
 
 
-def enforce_daily_limit(user) -> int:
+def enforce_daily_limit(user, builtin: bool = True) -> int:
+    """Refuse once the account has used today's prompts -- or, on the
+    built-in models, today's tokens. BYOM traffic runs on the user's own
+    keys, so only the prompt cap applies to it."""
     used = chat_db.count_prompts_today(user["id"])
     if used >= DAILY_PROMPT_LIMIT:
         raise HTTPException(
             status_code=429,
             detail=f"Daily limit reached ({DAILY_PROMPT_LIMIT} prompts per account). It resets at 00:00 UTC.",
         )
+    if builtin and tokens_today(user["id"]) >= DAILY_TOKEN_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily token limit reached ({DAILY_TOKEN_LIMIT:,} tokens on the built-in models). "
+                   "It resets at 00:00 UTC; chats on your own models still work.",
+        )
     return used
+
+
+def tokens_today(user_id: int) -> int:
+    return chat_db.get_daily_usage(f"user:{user_id}")["tokens"]
+
+
+def tokens_used(result: dict) -> int:
+    """Tokens an answer consumed: input and output of every attempt, so an
+    escalation counts both answers, and a thinking model's hidden reasoning
+    is included (providers bill it as output)."""
+    attempts = (result.get("trace") or {}).get("attempts") or []
+    total = sum((a.get("tokens_in") or 0) + (a.get("tokens_out") or 0) for a in attempts)
+    return total or (result.get("tokens_in") or 0) + (result.get("tokens_out") or 0)
+
+
+def daily_allowance(user_id: int) -> dict:
+    return {"used": chat_db.count_prompts_today(user_id), "limit": DAILY_PROMPT_LIMIT,
+            "tokens_used": tokens_today(user_id), "token_limit": DAILY_TOKEN_LIMIT}
 
 
 # --- providers and keys ------------------------------------------------------

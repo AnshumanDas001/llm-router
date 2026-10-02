@@ -6,7 +6,7 @@ request -- discovered the hard way when Groq's daily token cap got hit
 mid-demo and a raw provider exception was dumped straight into the chat.
 
 Supports BYOM (bring your own model): pass tier_models (e.g.
-{"cheap": "groq/llama-3.1-8b-instant", "frontier": "gpt-4o"}) and
+{"cheap": "groq/openai/gpt-oss-20b", "frontier": "gpt-4o"}) and
 tier_api_keys (the caller's own third-party keys, used transiently for
 this call only -- never stored) to route across a user's own models
 instead of our built-in three. A user may configure only some tiers;
@@ -293,7 +293,9 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
         total_latency_ms += latency_ms
         final_text, final_tier, final_usage = text, tier, resp.usage  # best effort so far
         attempt = {"tier": tier, "model": _model_for(tier, tier_models), "cost": cost,
-                   "latency_ms": round(latency_ms), "tokens_out": getattr(resp.usage, "completion_tokens", None)}
+                   "latency_ms": round(latency_ms),
+                   "tokens_in": getattr(resp.usage, "prompt_tokens", None),
+                   "tokens_out": getattr(resp.usage, "completion_tokens", None)}
         attempts.append(attempt)
 
         is_last_tier = i == len(tier_sequence) - 1
@@ -462,7 +464,7 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
         total_latency_ms += latency_ms
         final_text, final_tier = text, tier
         attempt = {"tier": tier, "model": _model_for(tier, tier_models), "cost": cost,
-                   "latency_ms": round(latency_ms), "tokens_out": tokens_out,
+                   "latency_ms": round(latency_ms), "tokens_in": tokens_in, "tokens_out": tokens_out,
                    "priced_from": "usage" if usage else "estimate"}
         attempts.append(attempt)
 

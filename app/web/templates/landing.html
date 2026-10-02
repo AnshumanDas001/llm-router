@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
 <style>
   html { scroll-behavior: smooth; }
   section[id] { scroll-margin-top: 80px; }
@@ -42,7 +43,7 @@
     margin: 0 0 22px; text-wrap: balance;
   }
   h1 .grad {
-    background: linear-gradient(100deg, #9cc1ff 0%, #b49bff 45%, #5fe0ae 100%);
+    background: linear-gradient(100deg, var(--grad-a) 0%, var(--grad-b) 45%, var(--grad-c) 100%);
     -webkit-background-clip: text; background-clip: text; color: transparent;
   }
   .lede { font-size: clamp(15.5px, 1.6vw, 17.5px); color: var(--text-secondary); max-width: 54ch; margin: 0 0 30px; line-height: 1.65; }
@@ -223,6 +224,7 @@
         <a href="#frontier" class="lnk hide-sm">Results</a>
         <a href="/demo" class="lnk hide-sm">Explorer</a>
         <a href="/guide" class="lnk hide-sm">Docs</a>
+        <button class="theme-toggle" data-theme-toggle></button>
         <a href="/app" class="btn ghost sm">Open the app</a>
       </nav>
     </div>
@@ -471,6 +473,7 @@ curl -X POST https://your-host/api/v1/route \
 </div>
 
 <script src="/static/reveal.js"></script>
+<script src="/static/warmup.js"></script>
 <script>
   const TIERS = ["cheap", "mid", "frontier"];
   const EXAMPLES = [
@@ -535,6 +538,8 @@ curl -X POST https://your-host/api/v1/route \
     });
     const dots = document.getElementById("live-dots");
     let current = 0, timer = null;
+    document.getElementById("live-prompt").textContent = "The router is starting up\u2026";
+    await new Promise(resolve => window.onRouterReady(resolve));
     for (const [i, text] of EXAMPLES.entries()) {
       const t0 = performance.now();
       try {

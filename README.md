@@ -522,7 +522,7 @@ import thriftllm
 
 thriftllm.configure(api_key="rtr_...", base_url="http://localhost:8000")
 
-small = thriftllm.calibrate("groq/llama-3.1-8b-instant", api_key=os.environ["GROQ_API_KEY"])
+small = thriftllm.calibrate("groq/openai/gpt-oss-20b", api_key=os.environ["GROQ_API_KEY"])
 large = thriftllm.calibrate("openai/gpt-5", api_key=os.environ["OPENAI_API_KEY"])
 
 router = thriftllm.Router(cheap=small, frontier=large)
@@ -606,7 +606,7 @@ curl -X POST http://localhost:8000/api/v1/calibrate \
 
 ```
 app/
-  main.py              FastAPI app: mounts the routers, warms the classifier
+  main.py              FastAPI app: mounts the routers, loads the classifier in the background
   config.py            the three tiers and the judge, from env vars
   paths.py             every data file the code reads or writes
   pricing.py           cost estimates and the "what frontier would have cost" baseline
@@ -643,6 +643,16 @@ docs/                  internals reference, failure analysis, deploy guide, road
 
 Run the tests with `./venv/bin/python -m pytest`. They never call a model,
 and they refuse to run against Turso even when `.env` configures it.
+
+Two scripts check a running server for real:
+
+```bash
+# every feature over HTTP (plus Chrome with --browser); costs a fraction of a cent
+./venv/bin/python -m scripts.ops.e2e_check --base-url http://localhost:8000 --browser
+
+# the Python SDK with your app's API key and real provider keys
+THRIFTLLM_API_KEY=rtr_... GROQ_API_KEY=... ./venv/bin/python -m scripts.ops.sdk_check --base-url http://localhost:8000
+```
 
 ## Full internals document
 
@@ -709,8 +719,10 @@ from below.
   band for mid; the cheap tier gets all 76 because it's nearly free to measure
   and its numbers decide what never reaches a paid model.
 - **Auth is project-grade, not production-grade.** bcrypt passwords and cookie
-  sessions; prompts are capped per account (10/day) and per demo device (3),
-  but there's no CSRF token and no rate limit on login attempts.
+  sessions; usage is capped per account (10 prompts and 50,000 built-in-model
+  tokens a day) and for the demo (3 prompts a device, 6 a network, 150,000
+  tokens a day in total), but there's no CSRF token and no rate limit on login
+  attempts.
 
 See [docs/FAILURE_ANALYSIS.md](docs/FAILURE_ANALYSIS.md) for cases where the verifier
 caught a bad answer, missed one, and escalated when it shouldn't have.

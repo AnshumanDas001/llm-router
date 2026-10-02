@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.api.common import (
-    DAILY_PROMPT_LIMIT,
     baseline_cost,
     check_routing_mode,
+    daily_allowance,
     enforce_daily_limit,
     finish_trace,
     log_result,
@@ -17,6 +17,7 @@ from app.api.common import (
     resolve_tier_keys,
     sse,
     tier_map_for,
+    tokens_used,
     validate_byom_models,
 )
 from app.api.schemas import ClassifyRequest, CreateChatRequest, SendMessageRequest, UpdateChatRequest
@@ -53,7 +54,7 @@ def api_chat_stats(user=Depends(get_current_user)):
     """Real aggregate numbers (not simulated) behind the sidebar's router
     status card -- computed from this user's own chat_messages history."""
     stats = chat_db.get_chat_stats(user["id"])
-    stats["daily"] = {"used": chat_db.count_prompts_today(user["id"]), "limit": DAILY_PROMPT_LIMIT}
+    stats["daily"] = daily_allowance(user["id"])
     return stats
 
 
@@ -183,7 +184,7 @@ def _prepare_send(chat_id: int, req: SendMessageRequest, user) -> dict:
         raise HTTPException(status_code=404, detail="chat not found")
     if not req.content.strip():
         raise HTTPException(status_code=400, detail="content must not be empty")
-    enforce_daily_limit(user)
+    enforce_daily_limit(user, builtin=chat["mode"] != "byom")
 
     history = chat_db.get_chat_messages(chat_id)
     chat_db.add_chat_message(chat_id, "user", req.content, now())
@@ -214,6 +215,8 @@ def _finish_send(chat_id: int, user_id: int, content: str, result: dict,
     trace, and return what both send paths report back."""
     baseline = baseline_cost(result, tier_models)
     trace = finish_trace(result, user_id, tier_models, baseline)
+    if tier_models is None:            # the token allowance covers our models only
+        chat_db.add_daily_usage(f"user:{user_id}", tokens=tokens_used(result))
     chat_db.add_chat_message(
         chat_id, "assistant", result["text"], now(),
         tier=result["final_tier"], cost=result["total_cost"], baseline_cost=baseline,

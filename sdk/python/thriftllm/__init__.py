@@ -5,7 +5,7 @@ one that can answer it.
 
     thriftllm.configure(api_key="rtr_...", base_url="https://your-thriftllm-host")
 
-    small = thriftllm.calibrate("groq/llama-3.1-8b-instant", api_key=GROQ_KEY)
+    small = thriftllm.calibrate("groq/openai/gpt-oss-20b", api_key=GROQ_KEY)
     big = thriftllm.calibrate("openai/gpt-5", api_key=OPENAI_KEY)
 
     router = thriftllm.Router(cheap=small, frontier=big)

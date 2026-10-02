@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
 <style>
   body { min-height: 100vh; }
   .page { position: relative; z-index: 1; }
@@ -54,7 +55,7 @@
   .matrix .cell.below { color: var(--warning); }
   .matrix .cell.start { background: var(--good-soft); color: var(--good); box-shadow: 0 0 0 1px rgba(47, 198, 122, 0.4) inset; font-weight: 600; }
   .matrix .cell.na { color: var(--text-muted); }
-  .matrix tr.hl td { background: rgba(255, 255, 255, 0.025); }
+  .matrix tr.hl td { background: var(--tint-1); }
   .foot { color: var(--text-muted); font-size: 12px; padding: 32px 0 48px; }
 </style>
 <script>document.documentElement.classList.add("js-motion");</script>
@@ -67,6 +68,7 @@
     <div class="wrap">
       <a href="/" class="logo"><span class="brand-mark"></span><span>Thrift<span class="dot">LLM</span></span></a>
       <nav>
+        <button class="theme-toggle" data-theme-toggle></button>
         <a class="btn subtle sm" href="/guide">Docs</a>
         <a class="btn ghost sm" href="/try">Try the chat</a>
       </nav>
@@ -119,6 +121,7 @@
   </div>
 </div>
 
+<script src="/static/warmup.js"></script>
 <script>
   const TIERS = ["cheap", "mid", "frontier"];
   const EXAMPLES = [
@@ -129,6 +132,7 @@
   ];
   let routing = null;
   let timer = null;
+  let waitingForRouter = false;
 
   function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
   function pct(v) { return v == null ? "—" : (v * 100).toFixed(0) + "%"; }
@@ -183,6 +187,14 @@
   }
 
   async function classify(text) {
+    if (!window.routerReady) {
+      document.getElementById("idle").textContent = "The router is starting up. This prompt is classified as soon as it's ready.";
+      if (!waitingForRouter) {
+        waitingForRouter = true;
+        window.onRouterReady(() => classify(promptEl.value.trim() || text));
+      }
+      return;
+    }
     const t0 = performance.now();
     const resp = await fetch("/api/try/classify", {
       method: "POST", headers: { "Content-Type": "application/json" },

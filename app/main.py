@@ -10,14 +10,13 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import account, chats, demo, models, pages, usage, v1
 from app.paths import STATIC_DIR
-from app.routing.classifier import classify_initial_tier
+from app.routing import classifier
 from app.storage import chat_db
 from app.storage import connection as dbconn
 from app.storage.eval_log import init_db
 
-# Platforms that scale to zero between requests. They matter twice below:
-# the database must not live on their ephemeral disk, and warmup has to
-# finish before the platform marks the instance ready.
+# Platforms that scale to zero between requests, whose disk doesn't survive
+# a restart -- so the database must live elsewhere (see /health).
 SERVERLESS_ENV_VARS = ("K_SERVICE", "FLY_APP_NAME", "RAILWAY_ENVIRONMENT", "RENDER")
 
 @asynccontextmanager
@@ -57,26 +56,26 @@ def on_startup():
     init_db()
     chat_db.init_chat_db()
 
-    # The embedding classifier takes ~14s to become usable: 7.7s importing
-    # torch and sentence-transformers, 5.5s loading the MiniLM weights.
-    # Left lazy, that lands on whoever sends the first prompt.
-    def _warm():
-        try:
-            classify_initial_tier("warmup")
-        except Exception:
-            pass  # a failed warmup just means the first real call pays for it
+    # The embedding classifier takes ~14s to become usable on a laptop and a
+    # minute or more on a throttled shared vCPU: importing torch and
+    # sentence-transformers, then loading MiniLM and encoding the reference
+    # set. It used to load before the server reported ready, so a cold start
+    # showed a blank page for that whole minute. Now the pages are served at
+    # once and the classifier loads in the background; GET /api/status says
+    # when it's done, and the pages show a notice until then.
+    #
+    # On a scale-to-zero host CPU is throttled outside requests, so a
+    # background thread alone would crawl. The pages long-poll /api/status
+    # while they wait, which keeps a request open -- and the CPU allocated --
+    # until the load finishes.
+    threading.Thread(target=classifier.warm, daemon=True).start()
 
-    # On a scale-to-zero host, warm *before* reporting ready. Those platforms
-    # bill by request and throttle CPU outside one, so a background thread
-    # started here barely runs until traffic arrives -- and then the first
-    # visitor waits for the whole load anyway, at throttled speed. Blocking
-    # keeps the work inside the startup phase, which gets full CPU, so the
-    # request that finally arrives is served warm. On a normal box there is
-    # no such throttle and blocking boot would only slow development down.
-    if any(os.getenv(v) for v in SERVERLESS_ENV_VARS):
-        _warm()
-    else:
-        threading.Thread(target=_warm, daemon=True).start()
+
+@app.get("/api/status")
+def router_status(wait: float = 0):
+    """Whether the router's classifier has loaded. Pass wait=N (up to 25)
+    to hold the request until it's ready or N seconds pass."""
+    return classifier.status(wait=max(0.0, min(float(wait), 25.0)))
 
 
 @app.get("/health")
@@ -89,6 +88,7 @@ def health():
         "status": "ok",
         "database": "turso" if dbconn.using_turso() else "sqlite",
         "durable": durable,
+        "router_ready": classifier.status()["ready"],
         "warnings": dbconn.check(),
         "env": dbconn.env_report(),
     }

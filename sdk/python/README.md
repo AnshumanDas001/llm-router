@@ -20,10 +20,10 @@ thriftllm.configure(api_key="rtr_...", base_url="https://your-thriftllm-host")
 # Each call runs 24 graded questions against the model on your key (easy,
 # medium, hard and AIME-level expert) and returns its score on each band.
 # A model you've calibrated before comes back immediately; pass force=True to re-run.
-small = thriftllm.calibrate("groq/llama-3.1-8b-instant", api_key=os.environ["GROQ_API_KEY"])
-medium = thriftllm.calibrate("groq/openai/gpt-oss-20b", api_key=os.environ["GROQ_API_KEY"])
+small = thriftllm.calibrate("groq/openai/gpt-oss-20b", api_key=os.environ["GROQ_API_KEY"])
+medium = thriftllm.calibrate("groq/openai/gpt-oss-120b", api_key=os.environ["GROQ_API_KEY"])
 large = thriftllm.calibrate("openai/gpt-5", api_key=os.environ["OPENAI_API_KEY"])
-print(small)   # groq/llama-3.1-8b-instant: easy 83%  medium 83%  hard 50% (below 80%)  expert 0% (below 80%)  [24 questions]
+print(small)   # e.g. groq/openai/gpt-oss-20b: easy 100%  medium 100%  hard 83%  expert 33% (below 80%)  [24 questions]
 
 router = thriftllm.Router(cheap=small, mid=medium, frontier=large)
 print(router.route_map)   # {'easy': 'cheap', 'medium': 'cheap', 'hard': 'mid', 'expert': 'frontier'}

@@ -208,7 +208,7 @@ class Client:
         """Measure a model on four difficulty bands and return it, ready to
         be a router tier.
 
-        model     litellm's provider/model form: "groq/llama-3.1-8b-instant"
+        model     litellm's provider/model form: "groq/openai/gpt-oss-20b"
         api_key   the provider's key; used for this run and kept in memory
                   for routing, never stored by the server
         provider  only if the model name has no provider prefix
@@ -269,7 +269,7 @@ def default_client() -> Client:
 
 
 def calibrate(model: str, api_key: str | None = None, **kwargs) -> CalibratedModel:
-    """calibrate("groq/llama-3.1-8b-instant", api_key=...) on the default
+    """calibrate("groq/openai/gpt-oss-20b", api_key=...) on the default
     client; see Client.calibrate."""
     return default_client().calibrate(model, api_key, **kwargs)
 

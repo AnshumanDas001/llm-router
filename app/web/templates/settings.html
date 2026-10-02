@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
 <style>
   .key-form { display: flex; gap: 8px; flex-wrap: wrap; padding: 16px 20px; border-top: 1px solid var(--border); }
   .key-form input { flex: 1; min-width: 180px; }
@@ -85,11 +86,17 @@ curl -X POST <span class="s" id="host-url">https://your-host</span>/v1/chat/comp
             </div>
           </div>
           <div class="card">
-            <div class="card-head" style="margin-bottom:6px;"><div><h3>Daily allowance</h3><p>Prompts on the built-in models, across chat and API. Resets at 00:00 UTC.</p></div></div>
+            <div class="card-head" style="margin-bottom:6px;"><div><h3>Daily allowance</h3><p>Resets at 00:00 UTC. Prompts count everywhere; tokens count only on the built-in models, hidden reasoning included.</p></div></div>
             <div class="tile" style="border:none; padding:0; box-shadow:none; background:none;">
+              <div class="k">prompts</div>
               <div class="v" id="quota-left">&mdash;</div><div class="d" id="quota-detail"></div>
             </div>
             <div class="quota-bar"><i id="quota-fill" style="width:0"></i></div>
+            <div class="tile" style="border:none; padding:0; box-shadow:none; background:none; margin-top:16px;">
+              <div class="k">tokens</div>
+              <div class="v" id="tokens-left">&mdash;</div><div class="d" id="tokens-detail"></div>
+            </div>
+            <div class="quota-bar"><i id="tokens-fill" style="width:0"></i></div>
           </div>
         </div>
       </div>
@@ -161,6 +168,14 @@ curl -X POST <span class="s" id="host-url">https://your-host</span>/v1/chat/comp
         document.getElementById("quota-left").textContent = `${left} left`;
         document.getElementById("quota-detail").textContent = `${stats.daily.used} of ${stats.daily.limit} prompts used today`;
         document.getElementById("quota-fill").style.width = `${(stats.daily.used / stats.daily.limit) * 100}%`;
+        if (stats.daily.token_limit) {
+          const tl = Math.max(0, stats.daily.token_limit - stats.daily.tokens_used);
+          document.getElementById("tokens-left").textContent = `${tl.toLocaleString()} left`;
+          document.getElementById("tokens-detail").textContent =
+            `${stats.daily.tokens_used.toLocaleString()} of ${stats.daily.token_limit.toLocaleString()} used today`;
+          document.getElementById("tokens-fill").style.width =
+            `${Math.min(100, (stats.daily.tokens_used / stats.daily.token_limit) * 100)}%`;
+        }
       }
     } catch { /* decoration only */ }
   }

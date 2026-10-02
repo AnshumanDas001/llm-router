@@ -46,11 +46,14 @@ async function initNav(activePage) {
     <div class="app-nav-user">
       <span class="nav-avatar" id="nav-avatar"></span>
       <span class="nav-user-text"><span id="nav-username"></span></span>
+      <button class="theme-toggle" data-theme-toggle></button>
       <button id="nav-logout-btn" title="Log out">
         <svg viewBox="0 0 16 16" fill="none"><path d="M6.5 13.5H3.5v-11h3M10 10.5 13 8l-3-2.5M13 8H6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>
   `;
+
+  if (window.mountThemeToggles) window.mountThemeToggles();
 
   try {
     const resp = await fetch("/auth/me", { credentials: "same-origin" });

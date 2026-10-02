@@ -13,6 +13,7 @@ from app.api.common import (
     enforce_daily_limit,
     finish_trace,
     log_result,
+    tokens_used,
     now,
     resolve_tier_keys,
     tier_map_for,
@@ -36,10 +37,12 @@ ALLOW_ANON_V1 = os.getenv("ALLOW_ANON_V1", "").lower() in ("1", "true", "yes")
 
 @router.post("/v1/chat/completions")
 def chat_completions(req: ChatRequest, authorization: str | None = Header(default=None)):
-    if not ALLOW_ANON_V1:
+    user = None
+    if not ALLOW_ANON_V1 or authorization:
         if not authorization:
             raise HTTPException(status_code=401, detail="This endpoint needs an API key (Authorization: Bearer ...)")
-        enforce_daily_limit(get_user_from_api_key(authorization))
+        user = get_user_from_api_key(authorization)
+        enforce_daily_limit(user)
     if not req.messages:
         raise HTTPException(status_code=400, detail="messages must not be empty")
 
@@ -60,6 +63,15 @@ def chat_completions(req: ChatRequest, authorization: str | None = Header(defaul
 
     log_result(req.messages[-1].content, result)
     baseline = baseline_cost(result, None)
+    if user is not None:
+        # Counted like every other prompt. This endpoint used to log nothing
+        # here, so its calls never counted toward the daily prompt limit.
+        chat_db.log_usage(
+            user["id"], "openai", result["difficulty"], result["initial_tier"], result["final_tier"],
+            result["escalated"], result["total_cost"], baseline, result["total_latency_ms"], now(),
+            api_key_id=user["api_key_id"],
+        )
+        chat_db.add_daily_usage(f"user:{user['id']}", tokens=tokens_used(result))
     return completion_response(result, baseline_cost=baseline,
                                trace=finish_trace(result, 0, None, baseline))
 
@@ -138,13 +150,13 @@ def api_v1_classify(req: ClassifyApiRequest, user=Depends(get_user_from_api_key)
 @router.post("/api/v1/route")
 def api_route(req: RouteRequest, user=Depends(get_user_from_api_key)):
     """BYOM pass-through: route across the caller's own connected models."""
-    enforce_daily_limit(user)
+    enforce_daily_limit(user, builtin=False)
     tier_models = req.models
     if not tier_models:
         raise HTTPException(
             status_code=400,
             detail="pass 'models' -- a tier->model map drawn from your connected models, "
-                   "e.g. {\"cheap\": \"groq/llama-3.1-8b-instant\", \"frontier\": \"openai/gpt-4o\"}",
+                   "e.g. {\"cheap\": \"groq/openai/gpt-oss-20b\", \"frontier\": \"openai/gpt-4o\"}",
         )
     if not req.messages:
         raise HTTPException(status_code=400, detail="messages must not be empty")

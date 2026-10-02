@@ -1,9 +1,10 @@
 """The signed-out demo at /try: the real chat app against the built-in
 tiers, capped per device, with nothing persisted but the cap."""
+import hashlib
 import os
 import uuid
 
-from fastapi import APIRouter, Cookie, Header, HTTPException, Response
+from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 
 from app.api.common import (
@@ -17,6 +18,7 @@ from app.api.common import (
     now,
     sse,
     tier_map_for,
+    tokens_used,
 )
 from app.api.schemas import ClassifyRequest, DemoRequest
 from app.routing.cascade import DEFAULT_TIER_MODELS, AllTiersUnavailable, run_cascade_stream
@@ -29,6 +31,23 @@ DEMO_COOKIE_NAME = "tl_demo"
 DEMO_PROMPT_LIMIT = int(os.getenv("DEMO_PROMPT_LIMIT", "3"))
 DEMO_HISTORY_TURNS = 6            # earlier turns replayed per demo prompt (bounds cost)
 DEMO_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
+
+# The device cap is easy to reset on purpose (clear site data, new private
+# window), so two more limits bound what the demo can cost:
+#   per network  prompts per day from one IP address. Generous, because a
+#                school or office shares one address. Stored as a salted
+#                hash, never the address itself.
+#   in total     tokens per day across every demo visitor. Whatever anyone
+#                does to the other two, this caps the bill: 150,000 tokens is
+#                about $1.40 if every one of them were frontier thinking.
+DEMO_IP_DAILY_LIMIT = int(os.getenv("DEMO_IP_DAILY_LIMIT", "6"))
+DEMO_DAILY_TOKEN_BUDGET = int(os.getenv("DEMO_DAILY_TOKEN_BUDGET", "150000"))
+_IP_SALT = os.getenv("ROUTER_SECRET_KEY") or "thriftllm-demo"
+
+
+def _network_id(request: Request) -> str:
+    ip = request.client.host if request.client else "unknown"
+    return "demo-ip:" + hashlib.sha256(f"{_IP_SALT}:{ip}".encode()).hexdigest()[:20]
 
 
 def _demo_id(cookie: str | None, header: str | None) -> str:
@@ -83,7 +102,7 @@ def api_routing():
 
 
 @router.post("/api/try")
-def api_try(req: DemoRequest, tl_demo: str | None = Cookie(default=None),
+def api_try(req: DemoRequest, request: Request, tl_demo: str | None = Cookie(default=None),
             x_demo_device: str | None = Header(default=None)):
     """Signed-out demo: the real chat app against the built-in tiers, capped
     per device. The cap bounds cost per casual visitor; it is not meant to
@@ -100,7 +119,22 @@ def api_try(req: DemoRequest, tl_demo: str | None = Cookie(default=None),
             detail=f"Demo limit reached ({DEMO_PROMPT_LIMIT} prompts on this device). "
                    f"Create a free account for {DAILY_PROMPT_LIMIT} a day.",
         )
+    network = _network_id(request)
+    if chat_db.get_daily_usage(network)["prompts"] >= DEMO_IP_DAILY_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail="The demo limit for your network is used up for today. "
+                   f"Create a free account for {DAILY_PROMPT_LIMIT} prompts a day.",
+        )
+    if chat_db.get_daily_usage("demo-all")["tokens"] >= DEMO_DAILY_TOKEN_BUDGET:
+        raise HTTPException(
+            status_code=429,
+            detail="Today's demo budget is spent. It resets at 00:00 UTC, "
+                   "or create a free account to keep going.",
+        )
     used = chat_db.bump_demo_count(demo_id, now())
+    chat_db.add_daily_usage(network, prompts=1)
+    chat_db.add_daily_usage("demo-all", prompts=1)
     history = [m.model_dump() for m in req.history[-DEMO_HISTORY_TURNS:]]
     messages = history + [{"role": "user", "content": content}]
 
@@ -113,6 +147,7 @@ def api_try(req: DemoRequest, tl_demo: str | None = Cookie(default=None),
                     event["trace"] = finish_trace(event, 0, None, event["baseline_cost"])
                     event["saved"] = max(0.0, event["baseline_cost"] - event["total_cost"])
                     event["remaining"] = max(0, DEMO_PROMPT_LIMIT - used)
+                    chat_db.add_daily_usage("demo-all", tokens=tokens_used(event))
                     log_result(content, event)
                 yield sse(event)
         except AllTiersUnavailable:

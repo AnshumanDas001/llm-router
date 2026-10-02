@@ -128,9 +128,13 @@ classifies, verifies and streams. Measured on the eval set:
 | escalated to mid (22%) | ~$0.005 |
 | blended | ~$0.0011 |
 
-The app caps signed-in accounts at `DAILY_PROMPT_LIMIT` prompts per day
-(default 10) and the signed-out demo at `DEMO_PROMPT_LIMIT` per device
-(default 3), so a stranger can cost you at most a few cents. `docker compose
+The app caps signed-in accounts at `DAILY_PROMPT_LIMIT` prompts and
+`DAILY_TOKEN_LIMIT` tokens per day on the built-in models (defaults 10 and
+50,000), and the signed-out demo at `DEMO_PROMPT_LIMIT` per device (3),
+`DEMO_IP_DAILY_LIMIT` per network per day (6), and `DEMO_DAILY_TOKEN_BUDGET`
+tokens per day across all demo visitors (150,000, about $1.40 if all of it
+were frontier thinking). The last one bounds the bill whatever anyone does
+to the others. `docker compose
 logs app` shows every cascade with its cost; the Sessions page totals them.
 
 Ollama is no longer needed. If you want the cheap tier local anyway (A1 has
@@ -189,12 +193,18 @@ not the app being slow — measured warm, the deployed service answers `/` in
 | encode the reference set | 0.3s |
 | **total before the first answer** | **~14s** |
 
-The app warms the classifier *before* reporting ready when it detects a
-serverless host (`K_SERVICE`, `FLY_APP_NAME`, …). That matters because those
-platforms bill by request and throttle CPU outside one: a background warmup
-started at boot barely runs until traffic arrives, so the first visitor would
-otherwise wait for the whole load *at throttled speed*. Doing it inside the
-startup phase gets full CPU, and the request that finally arrives is served warm.
+The pages don't wait for it. torch and sentence-transformers are imported
+lazily, so the app starts serving in about 2s (litellm's import), and the
+classifier loads in a background thread. Pages that need it show a "Starting
+the router" notice with a timer, keep the send button locked, and announce
+"Router ready" when `GET /api/status` says so. Everything else (reading,
+sessions, models, settings) works straight away.
+
+On a serverless host CPU is throttled outside requests, which would starve a
+background load. The pages long-poll `/api/status?wait=20` while they wait,
+so a request is always open and the instance keeps its CPU until the model is
+loaded. API clients don't need to do anything: a request that arrives during
+the load waits for it.
 
 What else helps, in order of effect:
 
@@ -244,6 +254,6 @@ docker compose cp app:/app/logs/router.db ./router-backup-$(date +%F).db
 | Browser times out, no response at all | Layer 2 iptables (§2). Check `sudo iptables -L INPUT -n`. |
 | Caddy logs `no certificate available` / cert errors | `SITE_ADDRESS` doesn't resolve to this IP, or port 80 is blocked (LE needs it for the challenge). |
 | App container restarts repeatedly | `docker compose logs app` — usually a missing key in `.env`. |
-| First prompt hangs ~15 s then works | Classifier warmup hadn't finished. Wait for `start_period`. |
+| "Starting the router" notice for a minute after a deploy or idle period | The classifier is loading. Sending unlocks by itself; `/api/status` shows progress. |
 | Streaming answers appear all at once | Something between browser and app is buffering. Caddy's `flush_interval -1` handles its side; a CDN in front may need streaming enabled. |
 | `exec format error` on build | Building an amd64 image on ARM. Don't pull prebuilt x86 images; `--build` on the box builds native arm64. |

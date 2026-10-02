@@ -149,6 +149,17 @@ CREATE TABLE IF NOT EXISTS demo_usage (
     created_at TEXT NOT NULL
 );
 
+-- Daily counters for spend limits, one row per (subject, UTC day). Subjects:
+-- "user:<id>" (tokens on the built-in models), "demo-ip:<hash>" (demo
+-- prompts from one network), "demo-all" (every demo prompt and token).
+CREATE TABLE IF NOT EXISTS daily_usage (
+    subject TEXT NOT NULL,
+    day TEXT NOT NULL,
+    prompts INTEGER NOT NULL DEFAULT 0,
+    tokens INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (subject, day)
+);
+
 CREATE TABLE IF NOT EXISTS usage_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
@@ -746,6 +757,32 @@ def get_demo_count(demo_id: str) -> int:
             "SELECT n_prompts FROM demo_usage WHERE demo_id = ?", (demo_id,),
         ).fetchone()
         return row["n_prompts"] if row else 0
+
+
+def _today() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def add_daily_usage(subject: str, prompts: int = 0, tokens: int = 0) -> None:
+    """Add to today's counters for a subject, atomically."""
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO daily_usage (subject, day, prompts, tokens) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(subject, day) DO UPDATE SET prompts = prompts + excluded.prompts, "
+            "tokens = tokens + excluded.tokens",
+            (subject, _today(), int(prompts), int(tokens)),
+        )
+        conn.commit()
+
+
+def get_daily_usage(subject: str) -> dict:
+    """{"prompts", "tokens"} for a subject since 00:00 UTC."""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT prompts, tokens FROM daily_usage WHERE subject = ? AND day = ?",
+            (subject, _today()),
+        ).fetchone()
+        return {"prompts": row["prompts"], "tokens": row["tokens"]} if row else {"prompts": 0, "tokens": 0}
 
 
 def bump_demo_count(demo_id: str, timestamp: str) -> int:

@@ -84,3 +84,48 @@ def test_competition_maths_routes_to_frontier(client):
 def test_everyday_maths_stays_off_the_frontier(client):
     r = client.post("/api/classify", json={"content": "What is 15% of 240?"}).json()
     assert r["tier"] != "frontier"
+
+
+def test_status_reports_router_readiness(client):
+    s = client.get("/api/status").json()
+    assert set(s) >= {"ready", "stage"}
+    assert client.get("/api/status", params={"wait": 30}).json()["ready"] in (True, False)
+
+
+def test_token_limit_blocks_builtin_chats(client, monkeypatch):
+    from app.api import common
+    from app.storage import chat_db
+    chat_id = client.post("/api/chats", json={}).json()["id"]
+    monkeypatch.setattr(chats, "run_cascade", lambda **kw: dict(FAKE_RESULT))
+    me = chat_db.get_user_by_username("tester")["id"]
+    monkeypatch.setattr(common, "DAILY_TOKEN_LIMIT", common.tokens_today(me) + 5)
+    first = client.post(f"/api/chats/{chat_id}/messages", json={"content": "hi"})
+    assert first.status_code == 200, first.text         # under the limit: answered, and counted
+    assert common.tokens_today(me) >= 13
+    second = client.post(f"/api/chats/{chat_id}/messages", json={"content": "hi again"})
+    assert second.status_code == 429 and "token" in second.json()["detail"]
+    daily = client.get("/api/chat-stats").json()["daily"]
+    assert daily["tokens_used"] >= daily["token_limit"]
+
+
+def test_demo_network_and_budget_caps(client, monkeypatch):
+    from app.api import demo
+    from app.storage import chat_db
+    monkeypatch.setattr(demo, "DEMO_IP_DAILY_LIMIT", 0)
+    r = client.post("/api/try", json={"content": "hi"})
+    assert r.status_code == 429 and "network" in r.json()["detail"]
+    monkeypatch.setattr(demo, "DEMO_IP_DAILY_LIMIT", 100)
+    monkeypatch.setattr(demo, "DEMO_DAILY_TOKEN_BUDGET", chat_db.get_daily_usage("demo-all")["tokens"])
+    r = client.post("/api/try", json={"content": "hi"})
+    assert r.status_code == 429 and "budget" in r.json()["detail"]
+
+
+def test_openai_endpoint_counts_toward_the_daily_limit(client, monkeypatch):
+    from app.api import v1
+    key = client.post("/api/keys", json={"name": "count"}).json()["key"]
+    monkeypatch.setattr(v1, "run_cascade", lambda *a, **kw: dict(FAKE_RESULT))
+    before = client.get("/api/chat-stats").json()["daily"]["used"]
+    r = client.post("/v1/chat/completions", headers={"Authorization": f"Bearer {key}"},
+                    json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 200, r.text
+    assert client.get("/api/chat-stats").json()["daily"]["used"] == before + 1

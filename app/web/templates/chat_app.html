@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
 <link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
 <style>
   /* --- auth screen: what you get on the left, the form on the right --- */
   #auth-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; padding: 32px 20px; }
@@ -230,7 +231,7 @@
   .bubble blockquote { margin: 0 0 10px; padding-left: 12px; border-left: 2px solid var(--border); color: var(--text-muted); }
   .bubble code { font-size: 0.88em; background: var(--surface-2); padding: 2px 5px; border-radius: 4px; }
   .bubble pre { margin: 0 0 10px; border-radius: 8px; overflow-x: auto; max-width: 100%; }
-  .bubble pre code { display: block; padding: 12px 14px; background: #0a0a0a !important; border-radius: 8px; font-size: 0.85em; line-height: 1.5; }
+  .bubble pre code { display: block; padding: 12px 14px; background: #0a0a0a !important; color: #d0d7de; border-radius: 8px; font-size: 0.85em; line-height: 1.5; }
   .bubble table { border-collapse: collapse; margin: 0 0 10px; font-size: 0.9em; display: block; overflow-x: auto; max-width: 100%; }
   .bubble th, .bubble td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
   .bubble th { background: var(--surface-2); font-weight: 600; }
@@ -407,7 +408,7 @@
   .ri-table { width: 100%; font-size: 12px; }
   .ri-table th { padding: 6px 8px; font-size: 10px; }
   .ri-table td { padding: 7px 8px; }
-  .ri-table tr.chosen td { background: rgba(255, 255, 255, 0.035); }
+  .ri-table tr.chosen td { background: var(--tint-2); }
   .ri-table td.ok { color: var(--good); } .ri-table td.no { color: var(--warning); }
   .ri-attempt { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; }
   .ri-attempt + .ri-attempt { margin-top: 8px; }
@@ -424,6 +425,7 @@
 <body>
 
 <div id="auth-screen">
+  <button class="theme-toggle" data-theme-toggle style="position:absolute; top:calc(16px + env(safe-area-inset-top, 0px)); right:16px; z-index:2;"></button>
   <div class="ambient" aria-hidden="true">
     <div class="grid"></div>
     <div class="orb a"></div>
@@ -485,6 +487,7 @@
       <div class="rs-row"><span>Avg latency</span><span class="v" id="rs-latency">&mdash;</span></div>
       <div class="rs-row"><span>Cost saved</span><span class="v" id="rs-saved">&mdash;</span></div>
       <div class="rs-row"><span>Today</span><span class="v" id="rs-daily">&mdash;</span></div>
+      <div class="rs-row"><span>Tokens</span><span class="v" id="rs-tokens">&mdash;</span></div>
     </div>
     <div id="chat-list"></div>
     <div class="app-nav-spacer" style="flex:0;"></div>
@@ -545,6 +548,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="/static/warmup.js"></script>
 <script src="/static/nav.js"></script>
 <script>
   marked.setOptions({ breaks: true });
@@ -756,7 +760,11 @@
         <p class="demo-note small">10 prompts a day, saved chats, your own models.</p>
       </div>`;
     document.getElementById("app-nav-bottom-mount").innerHTML = `
-      <a class="app-nav-link" href="/"><span class="nav-icon">&larr;</span><span class="nav-label">Back to site</span></a>`;
+      <div style="display:flex; align-items:center; gap:6px; margin:10px;">
+        <a class="app-nav-link" style="flex:1; margin:0;" href="/"><span class="nav-icon">&larr;</span><span class="nav-label">Back to site</span></a>
+        <button class="theme-toggle" data-theme-toggle></button>
+      </div>`;
+    window.mountThemeToggles && window.mountThemeToggles();
     try {
       const tiers = await api("/api/try/tiers");
       builtinTierModels = tiers.builtin;
@@ -816,6 +824,13 @@
         const el = document.getElementById("rs-daily");
         el.textContent = `${left} of ${stats.daily.limit} prompts left`;
         el.style.color = left === 0 ? "var(--critical)" : "";
+        if (stats.daily.token_limit) {
+          const tLeft = Math.max(0, stats.daily.token_limit - stats.daily.tokens_used);
+          const tEl = document.getElementById("rs-tokens");
+          tEl.textContent = `${(tLeft / 1000).toFixed(tLeft < 10000 ? 1 : 0)}k of ${Math.round(stats.daily.token_limit / 1000)}k left`;
+          tEl.title = "Tokens on the built-in models today, hidden reasoning included. Chats on your own models don't count.";
+          tEl.style.color = tLeft === 0 ? "var(--critical)" : "";
+        }
       }
       card.hidden = false;
     } catch { /* non-critical sidebar decoration */ }
@@ -885,12 +900,12 @@
         gridEl.appendChild(card);
 
         const badgeEl = card.querySelector(".sc-meta .badge");
-        api(DEMO ? "/api/try/classify" : "/api/classify", { method: "POST", body: JSON.stringify({ content: p }) })
+        window.onRouterReady(() => api(DEMO ? "/api/try/classify" : "/api/classify", { method: "POST", body: JSON.stringify({ content: p }) })
           .then(({ tier }) => {
             badgeEl.textContent = tier;
             badgeEl.className = `badge ready ${tier}`;
           })
-          .catch(() => { badgeEl.parentElement.style.visibility = "hidden"; });
+          .catch(() => { badgeEl.parentElement.style.visibility = "hidden"; }));
       });
       wrap.appendChild(suggestions);
 
@@ -1450,7 +1465,7 @@
     if (c.kind === "none") return `<div class="ri-note">Not checked: ${escapeHtml(c.reason)}.</div>`;
     let html = "";
     if (c.p_correct != null) {
-      html += `<div class="ri-nb" style="grid-template-columns:120px minmax(0,1fr) 120px;">
+      html += `<div class="ri-nb" style="grid-template-columns:110px minmax(0,1fr) 150px;">
         <span class="ri-note">learned gate</span>${bar(c.p_correct, c.p_correct >= c.accept_threshold ? "var(--good)" : "var(--warning)", c.accept_threshold)}
         <span class="mono" style="font-size:11.5px">P(correct) ${c.p_correct.toFixed(2)} / ${c.accept_threshold}</span></div>`;
       html += `<div class="ri-note">${c.p_correct >= c.accept_threshold
@@ -1579,6 +1594,10 @@
     clearTimeout(predictTimer);
     const text = input.value.trim();
     if (!text) { clearPredict(); return; }
+    if (!window.routerReady) {
+      predictHintEl.textContent = "Router starting: the tier appears once it's loaded";
+      return;
+    }
     predictTimer = setTimeout(async () => {
       try {
         // With a chat open, predict with that chat's own routing map and mode.
@@ -1599,6 +1618,7 @@
   async function sendMessage() {
     const content = input.value.trim();
     if (!content || needsByomKeys(currentChatId)) return;
+    if (!window.routerReady) return;     // the send button stays disabled until it is
     input.value = "";
     autoResizeComposer();
     clearPredict();
@@ -1744,6 +1764,17 @@
       const anyHidden = Array.from(panels).some(p => p.hidden);
       panels.forEach(p => { p.hidden = !anyHidden; });
     }
+  });
+
+  // Until the router has loaded, a prompt can be typed but not sent.
+  if (!window.routerReady) {
+    sendBtn.disabled = true;
+    sendBtn.title = "The router is starting; sending unlocks in a moment";
+  }
+  window.onRouterReady(() => {
+    if (!(DEMO && demoQuota.remaining <= 0)) sendBtn.disabled = false;
+    sendBtn.title = "Send";
+    if (input.value.trim()) schedulePredict();
   });
 
   checkSession();

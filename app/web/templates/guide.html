@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;650&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <link rel="stylesheet" href="/static/app.css">
+<script src="/static/theme.js"></script>
 <style>
   * { box-sizing: border-box; }
   body { font-size: 14.5px; }
@@ -80,15 +81,15 @@
   .callout { margin: 16px 0; }
 
   /* --- badges --- */
-  .badge.get { background: var(--frontier-soft); color: #5fe0ae; font-family: var(--font-mono); }
-  .badge.post { background: var(--cheap-soft); color: #8fb8ff; font-family: var(--font-mono); }
+  .badge.get { background: var(--frontier-soft); color: var(--frontier-ink); font-family: var(--font-mono); }
+  .badge.post { background: var(--cheap-soft); color: var(--cheap-ink); font-family: var(--font-mono); }
   .badge.delete { background: var(--critical-soft); color: var(--critical); font-family: var(--font-mono); }
   .endpoint-title { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
   .endpoint-title code { font-size: 0.95em; background: none; padding: 0; }
 
   /* --- tabbed code blocks --- */
   .code-block { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 14px 0; background: #08090b; }
-  .code-block pre { border: none; border-radius: 0; background: none; }
+  .code-block pre { border: none; border-radius: 0; background: none; color: #d0d7de; }
   .code-tabs .copy-btn { position: static; box-shadow: none; }
   .code-tab { box-shadow: none; border-radius: 0; }
   .code-tab:hover { background: none; color: var(--text-primary); }
@@ -133,6 +134,7 @@
   <div id="topbar-spacer"></div>
   <input type="text" id="search-box" placeholder="Filter docs...">
   <a href="https://github.com/AnshumanDas001/llm-router" target="_blank" class="gh">GitHub &#8599;</a>
+  <button class="theme-toggle" data-theme-toggle></button>
   <a href="/demo" class="btn subtle sm">Explorer</a>
   <a href="/app" class="btn sm">Launch app</a>
 </div>
@@ -202,7 +204,7 @@
   -H "Content-Type: application/json" \
   -d '{
     "messages": [{"role": "user", "content": "What is the capital of France?"}],
-    "models": {"cheap": "groq/llama-3.1-8b-instant", "frontier": "gemini/gemini-3.5-flash"},
+    "models": {"cheap": "groq/openai/gpt-oss-20b", "frontier": "gemini/gemini-3.5-flash"},
     "tier_api_keys": {"cheap": "your-groq-key", "frontier": "your-gemini-key"}
   }'</code></pre></div>
         <div class="code-pane" data-lang="python"><pre><code class="language-python">import requests
@@ -212,7 +214,7 @@ resp = requests.post(
     headers={"Authorization": "Bearer rtr_your_key_here"},
     json={
         "messages": [{"role": "user", "content": "What is the capital of France?"}],
-        "models": {"cheap": "groq/llama-3.1-8b-instant", "frontier": "gemini/gemini-3.5-flash"},
+        "models": {"cheap": "groq/openai/gpt-oss-20b", "frontier": "gemini/gemini-3.5-flash"},
         "tier_api_keys": {"cheap": "your-groq-key", "frontier": "your-gemini-key"},
     },
 )
@@ -227,7 +229,7 @@ print(data["_router"])  # tier used, cost, escalated, etc.</code></pre></div>
   },
   body: JSON.stringify({
     messages: [{ role: "user", content: "What is the capital of France?" }],
-    models: { cheap: "groq/llama-3.1-8b-instant", frontier: "gemini/gemini-3.5-flash" },
+    models: { cheap: "groq/openai/gpt-oss-20b", frontier: "gemini/gemini-3.5-flash" },
     tier_api_keys: { cheap: "your-groq-key", frontier: "your-gemini-key" },
   }),
 });
@@ -253,7 +255,7 @@ import thriftllm
 thriftllm.configure(api_key="rtr_your_key_here", base_url="https://your-router-host")
 
 # 24 graded questions per model on your key; a model calibrated before is reused for free
-small = thriftllm.calibrate("groq/llama-3.1-8b-instant", api_key=os.environ["GROQ_API_KEY"])
+small = thriftllm.calibrate("groq/openai/gpt-oss-20b", api_key=os.environ["GROQ_API_KEY"])
 large = thriftllm.calibrate("openai/gpt-5", api_key=os.environ["OPENAI_API_KEY"])
 print(small)   # scores on easy / medium / hard / expert
 
@@ -349,7 +351,7 @@ print(reply.explain())    # the full route: band, start, checks, cost</code></pr
   -H "Authorization: Bearer rtr_your_key_here" \
   -H "Content-Type: application/json" \
   -d '{
-    "model_name": "groq/llama-3.1-8b-instant",
+    "model_name": "groq/openai/gpt-oss-20b",
     "api_key": "your-groq-key"
   }'</code></pre></div>
         <div class="code-pane" data-lang="python"><pre><code class="language-python">import requests
@@ -357,7 +359,7 @@ print(reply.explain())    # the full route: band, start, checks, cost</code></pr
 resp = requests.post(
     "https://your-router-host/api/v1/calibrate",
     headers={"Authorization": "Bearer rtr_your_key_here"},
-    json={"model_name": "groq/llama-3.1-8b-instant", "api_key": "your-groq-key"},
+    json={"model_name": "groq/openai/gpt-oss-20b", "api_key": "your-groq-key"},
 )
 print(resp.json())  # {"model_name": ..., "stats": {...}, "warnings": [...]}</code></pre></div>
       </div>
@@ -379,7 +381,7 @@ print(resp.json())  # {"model_name": ..., "stats": {...}, "warnings": [...]}</co
         </div>
         <div class="code-pane active" data-lang="python"><pre><code class="language-python">HEADERS = {"Authorization": "Bearer rtr_your_key_here"}
 MODELS = {
-    "cheap": "groq/llama-3.1-8b-instant",
+    "cheap": "groq/openai/gpt-oss-20b",
     "mid": "openai/gpt-4o-mini",
     "frontier": "openai/gpt-4o",
 }
@@ -453,6 +455,7 @@ resp = requests.post(f"{HOST}/api/v1/route", headers=HEADERS, json={
         <tbody>
           <tr><td class="mono">401</td><td>Missing, invalid, or revoked API key</td></tr>
           <tr><td class="mono">400</td><td>No models configured, or empty <code>messages</code></td></tr>
+          <tr><td class="mono">429</td><td>Daily limit reached: 10 prompts per account, and 50,000 tokens on the built-in models (hidden reasoning included). Both reset at 00:00 UTC; your own models aren't token-limited</td></tr>
           <tr><td class="mono">502</td><td>Unexpected upstream failure</td></tr>
           <tr><td class="mono">503</td><td>Every configured tier is temporarily rate limited &mdash; retry shortly</td></tr>
         </tbody>

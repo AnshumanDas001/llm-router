@@ -7,9 +7,12 @@ import re
 import threading
 import time
 
-from sentence_transformers import SentenceTransformer, util
-
 from app.evaluation.datasets import load_reference_queries
+
+# sentence-transformers (and torch under it) is imported on first use, not
+# here: it is 5 of the 8.7 seconds it takes to import the app, and a page
+# shouldn't wait on it. warm() loads it in the background at startup, and
+# status() says when it's done so the UI can tell people what's happening.
 
 CODE_KEYWORDS = re.compile(
     r"\b(function|code|sql|regex|debug|pseudocode|python|javascript|algorithm|"
@@ -48,8 +51,45 @@ _model_lock = threading.Lock()
 def _get_model():
     global _model
     if _model is None:
+        from sentence_transformers import SentenceTransformer
         _model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
     return _model
+
+
+_ready = threading.Event()
+_warm_state = {"stage": "not started", "started": None, "seconds": None, "error": None}
+
+
+def warm() -> None:
+    """Load the embedding model and encode the reference set, so the first
+    real request doesn't pay for it (~14s on a laptop, a minute or more on
+    a throttled shared vCPU). Safe to call more than once."""
+    if _ready.is_set():
+        return
+    _warm_state.update(stage="loading", started=time.time())
+    try:
+        with _model_lock:
+            _get_labeled_set()
+        _warm_state.update(stage="ready", seconds=round(time.time() - _warm_state["started"], 1))
+        _ready.set()
+    except Exception as exc:          # surfaced through status(); requests retry the load
+        _warm_state.update(stage="failed", error=f"{type(exc).__name__}: {exc}"[:300])
+
+
+def status(wait: float = 0.0) -> dict:
+    """Whether the classifier is loaded. With wait > 0, blocks up to that
+    many seconds for it -- a long poll, which on a scale-to-zero host also
+    keeps the instance's CPU allocated while the load finishes."""
+    if wait > 0 and not _ready.is_set():
+        _ready.wait(timeout=wait)
+    started = _warm_state["started"]
+    return {
+        "ready": _ready.is_set(),
+        "stage": _warm_state["stage"],
+        "elapsed_s": round(time.time() - started, 1) if started and not _ready.is_set() else None,
+        "load_s": _warm_state["seconds"],
+        "error": _warm_state["error"],
+    }
 
 
 def _get_labeled_set():
@@ -58,6 +98,9 @@ def _get_labeled_set():
         _labeled_queries = load_reference_queries()
         texts = [q["query"] for q in _labeled_queries]
         _labeled_embeddings = _get_model().encode(texts, convert_to_tensor=True)
+        _ready.set()           # whichever caller got here first, the classifier is usable now
+        if _warm_state["stage"] != "ready":
+            _warm_state["stage"] = "ready"
     return _labeled_queries, _labeled_embeddings
 
 
@@ -153,6 +196,7 @@ def difficulty_from_similarities(scores, labels: list[str]) -> str:
 def _embedding_vote(query: str) -> dict:
     with _model_lock:
         labeled_queries, labeled_embeddings = _get_labeled_set()
+        from sentence_transformers import util
         query_emb = _get_model().encode(query, convert_to_tensor=True)
         scores = util.cos_sim(query_emb, labeled_embeddings)[0]
         return explain_similarities(scores, [q["difficulty"] for q in labeled_queries],

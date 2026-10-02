@@ -894,14 +894,19 @@ can never disagree with what routing will do.</p>
   <dt>passwords</dt><dd>bcrypt with per-password salt</dd>
   <dt>sessions</dt><dd>httponly cookie, 30-day expiry, <code>Secure</code> when <code>COOKIE_SECURE</code> is set</dd>
   <dt>API keys</dt><dd><code>rtr_</code> + 43 random characters; stored as SHA-256, shown once at creation</dd>
-  <dt>demo cap</dt><dd>3 prompts per device</dd>
-  <dt>account cap</dt><dd>10 prompts per UTC day, across chat and API</dd>
+  <dt>demo cap</dt><dd>3 prompts per device; 6 per network per day; 150,000 tokens per day across all demo traffic</dd>
+  <dt>account cap</dt><dd>10 prompts per UTC day across chat and API, and 50,000 tokens per day on the built-in models</dd>
 </div>
 
 <p>API keys are hashed with SHA-256 rather than bcrypt <em>on purpose</em>: they are high-entropy
 random tokens, not user-chosen secrets. bcrypt's deliberate slowness defends against guessing a weak
 secret, which does not apply to a 43-character random token — the same reasoning Stripe and GitHub
 apply to their own issued tokens.</p>
+
+<p>Tokens are counted per answer across every attempt, input and output, so an escalation counts both
+answers and a thinking model's hidden reasoning is included. They live in a <code>daily_usage</code>
+table keyed by subject and UTC day. BYOM traffic runs on the user's own keys and only the prompt cap
+applies to it.</p>
 
 <p>The demo cap is <strong>per device</strong>, implemented as an id held in both an httponly cookie
 and <code>localStorage</code> (returned as an <code>X-Demo-Device</code> header), so clearing one
@@ -976,10 +981,12 @@ period is slow for one reason:</p>
   </tbody>
 </table></div>
 
-<p>The app warms the classifier <em>before</em> reporting ready when it detects a serverless host.
-Those platforms bill by request and throttle CPU outside one, so a background warmup started at boot
-barely runs until traffic arrives — and then the first visitor waits for the whole load anyway, at
-throttled speed. Doing it inside the startup phase gets full CPU.</p>
+<p>The pages no longer wait for it. torch and sentence-transformers are imported lazily, which cut
+importing the app from 8.7s to 2.3s, and the classifier loads in a background thread. Pages that need
+it show a "Starting the router" notice, lock sending, and announce when <code>GET /api/status</code>
+reports ready. On a serverless host, where CPU is throttled outside requests, the pages long-poll
+<code>/api/status?wait=20</code> so a request stays open and the instance keeps its CPU until the load
+finishes.</p>
 <p>What else helps, in order: turn on startup CPU boost (free); set minimum instances to 1 (removes
 cold starts, but keeps an instance alive around the clock and will exceed a free allowance); replace
 torch with ONNX Runtime for the classifier, where ~11 of those 14 seconds live and which would cut
