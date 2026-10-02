@@ -4,6 +4,10 @@ Most LLM traffic doesn't need your most expensive model. This routes each
 request to the cheapest model that can actually handle it, checks the answer,
 and escalates only when the check fails.
 
+[**Try the demo**](https://thriftllm-582468287136.asia-south1.run.app/try) (no signup) ·
+[**Read the write-up**](https://medium.com/@sweetanshuman02/most-of-your-llm-spend-buys-nothing-4e3582c1c725):
+the architecture, the math behind each routing decision, and the experiments that didn't work.
+
 **On a 116-query run it cost 82% less than sending everything to the
 frontier model and 41–63% less than sending everything to the mid-tier
 model, with every graded answer correct.** The mid-only number is the one
@@ -746,3 +750,7 @@ from below.
 
 See [docs/FAILURE_ANALYSIS.md](docs/FAILURE_ANALYSIS.md) for cases where the verifier
 caught a bad answer, missed one, and escalated when it shouldn't have.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

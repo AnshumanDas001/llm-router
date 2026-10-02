@@ -556,7 +556,9 @@
 </head>
 <body>
 
-<div id="auth-screen">
+<!-- Hidden until the page knows it is needed: shown by default, it flashed a
+     login form at demo visitors and signed-in users while the scripts loaded. -->
+<div id="auth-screen" hidden>
   <button class="theme-toggle" data-theme-toggle style="position:absolute; top:calc(16px + env(safe-area-inset-top, 0px)); right:16px; z-index:2;"></button>
   <div class="ambient" aria-hidden="true">
     <div class="grid"></div>

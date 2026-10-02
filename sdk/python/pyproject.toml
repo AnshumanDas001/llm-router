@@ -7,6 +7,7 @@ name = "thriftllm"
 version = "0.1.0"
 description = "Python client for ThriftLLM: calibrate your models, then route every prompt to the cheapest one that can answer it."
 readme = "README.md"
+license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = ["httpx>=0.25"]
 

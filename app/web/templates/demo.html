@@ -223,7 +223,8 @@
     EXAMPLES.forEach(e => {
       const b = document.createElement("button");
       b.type = "button"; b.className = "example";
-      b.textContent = e.length > 46 ? e.slice(0, 44) + "…" : e;
+      const label = e.replace(/\$/g, "");     // the chip is plain text; the LaTeX dollar signs read as noise
+      b.textContent = label.length > 46 ? label.slice(0, 44) + "…" : label;
       b.title = e;
       b.onclick = () => { promptEl.value = e; classify(e); };
       ex.appendChild(b);
