@@ -564,8 +564,51 @@ the strongest tier.
   mid and frontier are the same model at the same list price; they differ
   only in thinking tokens.
 - **BYOM baseline:** the user's own strongest model, priced at its rates.
+- **Cached input:** tokens the provider served from its prompt cache bill at
+  the model's cached rate (`estimate_cost_for_model(..., cached_tokens=)`),
+  and each attempt records `cached_tokens` next to `tokens_in`.
+- **In a conversation,** the baseline adds the history priced at the
+  strongest tier's *cached* rate: had it answered every turn, it would hold
+  the history. That keeps "saved" conservative.
 
-### 5.5 Calibration of the built-in stack
+### 5.5 Prompt caching in conversations
+
+[`app/routing/prompt_cache.py`](../app/routing/prompt_cache.py). Every turn
+re-sends the whole conversation, and a provider bills a prefix it served in
+the last few minutes at its cached rate, on that model only.
+
+- **Remember.** After every call, the cascade records the model, the
+  request's prompt tokens and the time, keyed by a hash of the messages sent.
+- **Predict.** Before a call, `warm_prefix()` finds the longest earlier
+  request to that model, within `CACHE_TTL_S` (default 300 s), whose messages
+  begin this one. Prefixes under `CACHE_MIN_TOKENS` (1,024) never count.
+- **Price.** `history_for()` (in `common.py`) prices re-sending the history
+  on each tier: cached rate × the model's learned hit rate on its warm part,
+  full input rate on the rest. The policy adds that to each tier's
+  calibrated cost per answer (`extra_cost` in `policy.py`), so a warm model
+  can win the expected-cost comparison. The 80% floor is applied first and
+  is never relaxed.
+- **Learn.** After a call predicted to be warm, `observe()` compares the
+  provider's reported cached tokens with the prediction. A provider that
+  reports nothing counts as a miss. Hit rates start at 0.9 and move with
+  evidence.
+- **Show.** "Why this route?" states the history size, which tiers hold it,
+  and their hit rates; each attempt shows how much of its input was cached.
+  `reply.explain()` prints the same.
+
+State is in memory, per process. It only needs to outlive a cache lifetime,
+and the deploy runs one worker; behind several, a request that lands on
+another worker is priced as cold.
+
+Measured on 2026-10-04: Gemini 3.5 Flash and Llama 3.1 8B through OpenRouter
+returned 0 cached tokens on repeated 5,000-token prefixes, and Groq's
+gpt-oss reports no cached count at all. So on the built-in stack the learned
+hit rates fall and routing behaves as before. Providers that cache
+automatically (OpenAI, Gemini's own API, DeepSeek) are where it pays.
+Anthropic only caches prefixes marked with `cache_control`, which the
+router doesn't add yet.
+
+### 5.6 Calibration of the built-in stack
 
 `python -m scripts.calibration.calibrate_builtin` writes
 `data/calibration/builtin.json`.
@@ -642,6 +685,8 @@ Every setting is an environment variable, read from `.env`
 | `DEMO_PROMPT_LIMIT` | 3 | demo prompts per device |
 | `DEMO_IP_DAILY_LIMIT` | 6 | demo prompts per network per day |
 | `DEMO_DAILY_TOKEN_BUDGET` | 150000 | demo tokens per day, all visitors together |
+| `CACHE_TTL_S` | 300 | how long a provider is assumed to keep a prompt prefix cached |
+| `CACHE_MIN_TOKENS` | 1024 | the shortest prefix a provider caches at all |
 | `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | | use Turso instead of the local file |
 | `ROUTER_DB_PATH` | `logs/router.db` | the local database file |
 | `COOKIE_SECURE` | off | set to 1 behind HTTPS |

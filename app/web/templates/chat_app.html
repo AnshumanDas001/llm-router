@@ -1089,6 +1089,9 @@
              (r.tier === st.chosen ? "   <- chosen" : ""));
     });
     if (st.direct) L.push("   Direct mode skipped the cheapest tier.");
+    const hh = st.history || {};
+    if (hh.tokens) L.push(`   History: ${Number(hh.tokens).toLocaleString("en-US")} tokens re-sent, priced into each tier` +
+      ((hh.warm || []).length ? `; ${hh.warm.join(", ")} still has it cached, at the cached rate.` : "; no tier has it cached."));
     L.push("3. What happened:");
     (trace.attempts || []).forEach(a => {
       if (a.outcome === "unavailable") { L.push(`     ${a.tier}: unavailable (${a.reason}), skipped`); return; }
@@ -1096,7 +1099,8 @@
       let d = ch.kind || "";
       if (ch.p_correct != null) d += `, P(correct) ${Number(ch.p_correct).toFixed(2)} vs ${ch.accept_threshold}`;
       if (ch.judge_verdict) d += `, judge: ${ch.judge_verdict}`;
-      L.push(`     ${a.tier}: ${usd(a.cost)}, ${a.latency_ms}ms, ${a.outcome} (${d})`);
+      const cachedTxt = a.cached_tokens ? `${a.cached_tokens.toLocaleString("en-US")} of ${(a.tokens_in || 0).toLocaleString("en-US")} input tokens cached, ` : "";
+      L.push(`     ${a.tier}: ${usd(a.cost)}, ${a.latency_ms}ms, ${cachedTxt}${a.outcome} (${d})`);
     });
     const t = trace.totals || {};
     if (Object.keys(t).length) {
@@ -1932,6 +1936,23 @@
       <div class="ri-note">This answer predates the detailed route record.</div>`;
   }
 
+  // A conversation re-sends its history every turn. Say how big it is and
+  // which tier still holds it in its prompt cache, since that is part of
+  // what each starting point costs.
+  function historyNote(s) {
+    const h = s.history;
+    if (!h || !h.tokens) return "";
+    const tokens = Number(h.tokens).toLocaleString("en-US");
+    const warm = h.warm || [];
+    const intro = `This chat's history is ${tokens} tokens, re-sent with every message.`;
+    if (!warm.length) return `<p class="ri-note">${intro} No tier has it in its prompt cache right now, so each is priced at its full input rate.</p>`;
+    const list = warm.length === 1 ? warm[0] : `${warm.slice(0, -1).join(", ")} and ${warm[warm.length - 1]}`;
+    const rates = warm.map(t => h.hit_rate && h.hit_rate[t] != null ? `${t} ${Math.round(h.hit_rate[t] * 100)}%` : null).filter(Boolean).join(", ");
+    const models = (s.tiers || []).filter(r => warm.includes(r.tier)).map(r => r.model);
+    const shared = new Set(models).size < models.length ? " (tiers running the same model share one cache)" : "";
+    return `<p class="ri-note">${intro} ${escapeHtml(list)} ${warm.length === 1 ? "has" : "have"} sent it in the last few minutes${shared}, so ${warm.length === 1 ? "its" : "their"} share is priced at the cached rate, weighted by how often that provider has actually served a cache hit${rates ? ` (${escapeHtml(rates)})` : ""}.${(s.tiers || []).length > warm.length ? " Any other tier would pay the full input rate." : ""}</p>`;
+  }
+
   function startSentence(s) {
     const rows = s.tiers || [];
     const chosen = rows.find(r => r.tier === s.chosen);
@@ -1942,6 +1963,8 @@
       txt = `Routing used the default map for ${band} questions.`;
     } else if (chosen.clears_floor && cleared[0] && cleared[0].tier === chosen.tier) {
       txt = `<b>${chosen.tier}</b> is the cheapest tier scoring at least ${pctTxt(s.floor)} on ${band} questions, and starting there has the lowest expected cost once checking and escalating are priced in.`;
+    } else if (chosen.clears_floor && chosen.warm_tokens && !cleared[0].warm_tokens) {
+      txt = `${cleared[0].tier} also clears the ${pctTxt(s.floor)} floor, but <b>${chosen.tier}</b> still has this chat's history in its prompt cache. Re-sending it to ${cleared[0].tier} at the full input rate would cost more than staying put.`;
     } else if (chosen.clears_floor) {
       txt = `${cleared[0].tier} also clears the ${pctTxt(s.floor)} floor, but starting at <b>${chosen.tier}</b> has a lower expected cost: the cheaper tier's check and its escalations would cost more than they save.`;
     } else {
@@ -1999,7 +2022,7 @@
     const attempts = (t.attempts || []).map(a => `
       <div class="ri-attempt">
         <div class="top"><span class="badge ${a.tier}">${a.tier}</span><span class="m">${escapeHtml(shortModelName(a.model || ""))}</span>
-          ${a.cost != null ? `<span class="mono ri-note">${money(a.cost)} &middot; ${fmtMs(a.latency_ms)}${a.tokens_out ? ` &middot; ${a.tokens_out} tokens` : ""}</span>` : ""}
+          ${a.cost != null ? `<span class="mono ri-note">${money(a.cost)} &middot; ${fmtMs(a.latency_ms)}${a.tokens_out ? ` &middot; ${a.tokens_out} tokens` : ""}${a.cached_tokens ? ` &middot; ${a.cached_tokens.toLocaleString("en-US")} of ${(a.tokens_in || 0).toLocaleString("en-US")} input cached` : ""}</span>` : ""}
           <span class="out badge ${a.outcome === "shipped" ? "good" : "escalated"}">${a.outcome === "unavailable" ? `unavailable: ${escapeHtml(a.reason || "")}` : a.outcome}</span></div>
         ${renderCheck(a.check)}
       </div>`).join("");
@@ -2019,7 +2042,8 @@
         ${rows ? `<div class="table-wrap"><table class="ri-table">
           <thead><tr><th>tier</th><th>model</th><th>score on ${escapeHtml(s.band || "")}</th><th></th><th>${pctTxt(s.floor)} floor</th><th style="text-align:right">expected cost</th></tr></thead>
           <tbody>${rows}</tbody></table></div>
-          <p class="ri-note" style="margin-top:6px">Expected cost = the tier's answer + its check + the chance it fails &times; the cost of escalating.</p>` : ""}
+          <p class="ri-note" style="margin-top:6px">Expected cost = the tier's answer + its check + the chance it fails &times; the cost of escalating${s.history && s.history.tokens ? " + re-sending this chat's history" : ""}.</p>
+          ${historyNote(s)}` : ""}
       </div></div>
       <div class="ri-step"><span class="ri-n">3</span><div>
         <h4>What happened</h4>

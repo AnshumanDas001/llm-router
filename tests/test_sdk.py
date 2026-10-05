@@ -66,7 +66,7 @@ def test_router_maps_classifies_and_chats(sdk, monkeypatch):
 
     seen = {}
 
-    def fake_cascade(messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest):
+    def fake_cascade(messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest, history=None):
         seen.update(models=tier_models, keys=tier_api_keys)
         return {"text": "Paris.", "difficulty": "easy", "initial_tier": "cheap", "final_tier": "cheap",
                 "escalated": False, "escalation_reasons": [], "total_cost": 0.00001,

@@ -156,6 +156,29 @@ where the 8B clears 0.80 on hard and the judge $J$ is a $0.00004 call, it
 derives `hard→cheap` too, and `expert→frontier`, because mid scores 0.70 on
 competition maths. The map is an output, not a setting.
 
+**In a conversation, the history is part of the price.** Every turn re-sends
+the whole chat, and providers bill a prefix they served in the last few
+minutes at their cached rate (10–50% of input), but only on that model.
+Routing each turn as a fresh question can switch away from the model that
+holds the history and pay full price for all of it elsewhere. So each tier's
+expected cost also includes re-sending the history: at the cached rate on a
+tier that recently served this conversation, weighted by how often that
+provider has actually returned a cache hit, and at the full rate everywhere
+else. Nobody can ask a provider what it has cached, so
+[`app/routing/prompt_cache.py`](app/routing/prompt_cache.py) predicts it from
+what the router itself sent (a conversation is recognised by its opening
+messages, so this works for the chat app, the SDK and the OpenAI-compatible
+endpoint alike) and learns each model's real hit rate from the cached-token
+count on every response.
+
+On the built-in stack it changes nothing: the 8B's full input price
+($0.05/M) is below Gemini's cached price ($0.15/M), and in testing neither
+returned cache hits through OpenRouter, so the hit rates fall and the
+discount disappears. It matters with closer-priced models: two models 3×
+apart with a 20,000-token history cached on the bigger one is $0.015 to stay
+and $0.025 to switch, so the router stays. It never stays on a model below
+the quality floor.
+
 **Step 3 — verify, then escalate.** The cheapest tier's answer goes through a
 learned gate before anything is paid for. The gate is a logistic regression
 over signals the cheap model gives away for free — its own token logprobs

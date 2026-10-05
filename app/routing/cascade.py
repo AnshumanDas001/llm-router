@@ -22,7 +22,7 @@ import litellm
 
 from app.config import JUDGE_MODEL, TIER_MODEL_LIST, VERIFIER, router
 from app.pricing import estimate_cost_for_model
-from app.routing import scorer
+from app.routing import prompt_cache, scorer
 from app.routing.classifier import DIFFICULTY_TO_TIER, classify_with_trace
 from app.routing.policy import TIER_ORDER
 from app.routing.verifier import verify_response, verify_with_judge
@@ -155,7 +155,7 @@ class AllTiersUnavailable(Exception):
     """Raised only if every tier in the cascade sequence is unreachable."""
 
 
-def _plan(messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest):
+def _plan(messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest, history=None):
     """Classify the query and lay out the tiers to try, and who judges.
     Returns (query, difficulty, tier_sequence, judge_model_for, trace)."""
     query = messages[-1]["content"]
@@ -185,7 +185,10 @@ def _plan(messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapes
         "classification": classification,
         "start": {"mapped_tier": initial_tier, "tier": tier_sequence[0],
                   "direct": skip_cheapest and tier_sequence[0] != initial_tier,
-                  "sequence": tier_sequence},
+                  "sequence": tier_sequence,
+                  # what re-sending this conversation costs on each tier, and
+                  # which of them hold it in their prompt cache
+                  **({"history_by_tier": history} if history else {})},
         "attempts": [],
     }
     return query, difficulty, tier_sequence, judge_model_for, trace
@@ -248,9 +251,9 @@ def _complete(tier: str, messages: list[dict], tier_models: dict | None,
 def run_cascade(messages: list[dict], tier_models: dict | None = None,
                 tier_api_keys: dict | None = None,
                 difficulty_to_tier: dict | None = None,
-                skip_cheapest: bool = False) -> dict:
+                skip_cheapest: bool = False, history: dict | None = None) -> dict:
     query, difficulty, tier_sequence, judge_model_for, trace = _plan(
-        messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest)
+        messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest, history)
     initial_tier = tier_sequence[0]
     attempts = trace["attempts"]
 
@@ -268,6 +271,7 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
         start = time.perf_counter()
         scored = learned and tier in judge_model_for
         sibling = _Sibling(tier, messages) if scored and scorer.uses(scorer.SIBLING_FEATURES) else None
+        predicted = prompt_cache.warm_prefix(_model_for(tier, tier_models), messages)
         try:
             if scored:
                 resp = router.completion(model=tier, messages=messages, **scorer.LOGPROB_PARAMS)
@@ -292,10 +296,12 @@ def run_cascade(messages: list[dict], tier_models: dict | None = None,
         total_cost += cost
         total_latency_ms += latency_ms
         final_text, final_tier, final_usage = text, tier, resp.usage  # best effort so far
+        cached = _learn_cache(tier, tier_models, messages, resp.usage, predicted)
         attempt = {"tier": tier, "model": _model_for(tier, tier_models), "cost": cost,
                    "latency_ms": round(latency_ms),
                    "tokens_in": getattr(resp.usage, "prompt_tokens", None),
-                   "tokens_out": getattr(resp.usage, "completion_tokens", None)}
+                   "tokens_out": getattr(resp.usage, "completion_tokens", None),
+                   "cached_tokens": cached, "predicted_cached": predicted}
         attempts.append(attempt)
 
         is_last_tier = i == len(tier_sequence) - 1
@@ -369,6 +375,19 @@ def _model_for(tier, tier_models):
     return tier_models[tier] if tier_models is not None else DEFAULT_TIER_MODELS[tier]
 
 
+def _learn_cache(tier, tier_models, messages, usage, predicted, tokens_in=None):
+    """After a call: read how much input the provider served from its cache,
+    learn from it against what was predicted, and remember this request so
+    the next turn of the conversation knows this model is warm. Returns the
+    cached count (None when the provider didn't report one)."""
+    model = _model_for(tier, tier_models)
+    cached = prompt_cache.cached_tokens(usage)
+    prompt_cache.observe(model, predicted, cached)
+    prompt_cache.remember(model, messages, tokens_in if tokens_in is not None
+                          else getattr(usage, "prompt_tokens", None))
+    return cached
+
+
 def judge_for(available_tiers, tier_models, tier_api_keys):
     """(model, api_key, label) that judges the cheapest tier, or None if
     there's nothing above it to escalate to. Built-in stack: JUDGE_MODEL if
@@ -384,7 +403,7 @@ def judge_for(available_tiers, tier_models, tier_api_keys):
 def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
                         tier_api_keys: dict | None = None,
                         difficulty_to_tier: dict | None = None,
-                        skip_cheapest: bool = False):
+                        skip_cheapest: bool = False, history: dict | None = None):
     """Generator form of run_cascade, yielding events as they happen.
 
     Streaming and verify-then-escalate are in tension: a tier's answer can't
@@ -399,7 +418,7 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
     Events: routing, token, escalated, done, error.
     """
     query, difficulty, tier_sequence, judge_model_for, trace = _plan(
-        messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest)
+        messages, tier_models, tier_api_keys, difficulty_to_tier, skip_cheapest, history)
     initial_tier = tier_sequence[0]
     attempts = trace["attempts"]
 
@@ -418,6 +437,7 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
 
     for i, tier in enumerate(tier_sequence):
         start = time.perf_counter()
+        predicted = prompt_cache.warm_prefix(_model_for(tier, tier_models), messages)
         text_parts = []
         scored = learned and tier in judge_model_for
         sibling = _Sibling(tier, messages) if scored and scorer.uses(scorer.SIBLING_FEATURES) else None
@@ -451,20 +471,22 @@ def run_cascade_stream(messages: list[dict], tier_models: dict | None = None,
         latency_ms = (time.perf_counter() - start) * 1000
         text = "".join(text_parts)
 
-        # Priced from the provider's usage block (reasoning tokens included)
-        # when it sent one, else estimated from the text.
+        # Priced from the provider's usage block (reasoning tokens and cached
+        # input included) when it sent one, else estimated from the text.
         if usage:
             tokens_in, tokens_out = usage.prompt_tokens, usage.completion_tokens
         else:
             tokens_in = _approx_tokens(" ".join(m["content"] for m in messages))
             tokens_out = _approx_tokens(text)
-        cost = estimate_cost_for_model(_model_for(tier, tier_models), tokens_in, tokens_out)
+        cached = _learn_cache(tier, tier_models, messages, usage, predicted, tokens_in)
+        cost = estimate_cost_for_model(_model_for(tier, tier_models), tokens_in, tokens_out, cached)
 
         total_cost += cost
         total_latency_ms += latency_ms
         final_text, final_tier = text, tier
         attempt = {"tier": tier, "model": _model_for(tier, tier_models), "cost": cost,
                    "latency_ms": round(latency_ms), "tokens_in": tokens_in, "tokens_out": tokens_out,
+                   "cached_tokens": cached, "predicted_cached": predicted,
                    "priced_from": "usage" if usage else "estimate"}
         attempts.append(attempt)
 

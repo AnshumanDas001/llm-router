@@ -10,7 +10,7 @@ from fastapi import HTTPException
 
 from app.config import BUILTIN_CALIBRATION
 from app.pricing import estimate_cost_for_model, estimate_frontier_cost
-from app.routing import scorer
+from app.routing import prompt_cache, scorer
 from app.routing.cascade import DEFAULT_TIER_MODELS, judge_for, learned_verifier_on
 from app.evaluation.datasets import DIFFICULTIES
 from app.routing.policy import QUALITY_THRESHOLD, TIER_ORDER, derive_tier_map, expected_costs
@@ -197,7 +197,23 @@ def _routing_inputs(user_id: int, tier_models: dict | None):
     return tiers, quality, cost, judge_cost_estimate(tiers, tier_models)
 
 
-def tier_map_for(user_id: int, tier_models: dict | None) -> dict:
+def history_for(messages: list[dict], tier_models: dict | None) -> dict | None:
+    """What re-sending this conversation's history costs on each tier, with
+    the cached rate where a tier still holds it (app/routing/prompt_cache.py).
+    None for a first message, which has no history and routes as before."""
+    if len(messages) < 2:
+        return None
+    models = tier_models or DEFAULT_TIER_MODELS
+    tokens = prompt_cache.history_tokens(messages)
+    return {t: prompt_cache.history_cost(m, messages, history=tokens)
+            for t, m in models.items() if t in TIER_ORDER}
+
+
+def _extra(history: dict | None) -> dict | None:
+    return {t: h["cost"] for t, h in history.items()} if history else None
+
+
+def tier_map_for(user_id: int, tier_models: dict | None, history: dict | None = None) -> dict:
     """The difficulty->tier map implied by the models in *this session*,
     routing by expected cost with a quality floor (see routing/policy.py).
 
@@ -207,15 +223,17 @@ def tier_map_for(user_id: int, tier_models: dict | None) -> dict:
     built-in stack uses the eval set's measurements of itself.
     """
     tiers, quality, cost, judge = _routing_inputs(user_id, tier_models)
-    return derive_tier_map(quality, tiers, cost, judge)
+    return derive_tier_map(quality, tiers, cost, judge, _extra(history))
 
 
-def explain_start(user_id: int, tier_models: dict | None, band: str) -> dict:
+def explain_start(user_id: int, tier_models: dict | None, band: str,
+                  history: dict | None = None) -> dict:
     """Why a band starts where it does: every tier's calibrated score on
     the band against the floor, and the expected cost of starting there
-    (generation + verification + failure-weighted escalation)."""
+    (generation + verification + failure-weighted escalation), with the
+    conversation's history priced in where there is one."""
     tiers, quality, cost, judge = _routing_inputs(user_id, tier_models)
-    expected = expected_costs(tiers, quality, cost, judge, band) if cost else {}
+    expected = expected_costs(tiers, quality, cost, judge, band, _extra(history)) if cost else {}
     rows = []
     for i, t in enumerate(tiers):
         q = (quality.get(t) or {}).get(band)
@@ -226,16 +244,25 @@ def explain_start(user_id: int, tier_models: dict | None, band: str) -> dict:
             "clears_floor": q is not None and q >= QUALITY_THRESHOLD,
             "last_tier": i == len(tiers) - 1,
             "expected_cost": expected.get(t),
+            **({"history_cost": history[t]["cost"], "warm_tokens": history[t]["warm_tokens"]}
+               if history and t in history else {}),
         })
-    return {"band": band, "floor": QUALITY_THRESHOLD, "judge_cost": judge, "tiers": rows,
-            "chosen": tier_map_for(user_id, tier_models).get(band)}
+    out = {"band": band, "floor": QUALITY_THRESHOLD, "judge_cost": judge, "tiers": rows,
+           "chosen": tier_map_for(user_id, tier_models, history).get(band)}
+    if history:
+        any_h = next(iter(history.values()))
+        out["history"] = {"tokens": any_h["tokens"],
+                          "warm": [t for t, h in history.items() if h["warm_tokens"]],
+                          "hit_rate": {t: h["hit_rate"] for t, h in history.items() if h["warm_tokens"]}}
+    return out
 
 
 def finish_trace(result: dict, user_id: int, tier_models: dict | None, baseline: float) -> dict:
     """The cascade's trace plus the routing explanation and the money."""
     trace = dict(result.get("trace") or {})
-    trace["start"] = {**(trace.get("start") or {}),
-                      **explain_start(user_id, tier_models, result["difficulty"])}
+    start = dict(trace.get("start") or {})
+    history = start.pop("history_by_tier", None)
+    trace["start"] = {**start, **explain_start(user_id, tier_models, result["difficulty"], history)}
     trace["totals"] = {"cost": result["total_cost"], "baseline": baseline,
                        "saved": max(0.0, baseline - result["total_cost"]),
                        "latency_ms": round(result["total_latency_ms"])}
@@ -261,11 +288,20 @@ def builtin_routing() -> dict:
 def baseline_cost(result: dict, tier_models: dict | None) -> float:
     """What the answer would have cost from the strongest tier available:
     for BYOM, the strongest model *this user* configured -- not our own
-    built-in frontier, which they may not even use."""
+    built-in frontier, which they may not even use.
+
+    In a conversation, that tier would have served every turn, so its
+    history would be in its prompt cache: the history is priced at the
+    cached rate. That keeps the "saved" figure conservative."""
+    history = ((result.get("trace") or {}).get("start") or {}).get("history_by_tier") or {}
+    history_tokens = next(iter(history.values()), {}).get("tokens", 0) if history else 0
     if tier_models:
         strongest = next((t for t in reversed(TIER_ORDER) if t in tier_models), result["final_tier"])
-        return estimate_cost_for_model(tier_models[strongest], result["tokens_in"], result["tokens_out"])
-    return estimate_frontier_cost(result["tokens_in"], result["tokens_out"], result["difficulty"])
+        return estimate_cost_for_model(tier_models[strongest], result["tokens_in"], result["tokens_out"],
+                                       cached_tokens=history_tokens)
+    answer = estimate_frontier_cost(result["tokens_in"], result["tokens_out"], result["difficulty"])
+    rates = prompt_cache.prices(DEFAULT_TIER_MODELS[TIER_ORDER[-1]]) if history_tokens else None
+    return answer + (history_tokens * rates[1] if rates else 0.0)
 
 
 def log_result(query: str, result: dict) -> None:

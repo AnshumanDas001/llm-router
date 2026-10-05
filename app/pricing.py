@@ -19,7 +19,12 @@ FRONTIER_MODEL = next(
 )
 
 
-def estimate_cost_for_model(model_name: str, tokens_in: int, tokens_out: int) -> float:
+def estimate_cost_for_model(model_name: str, tokens_in: int, tokens_out: int,
+                            cached_tokens: int | None = None) -> float:
+    """cached_tokens is the part of tokens_in the provider served from its
+    prompt cache; it bills at the model's cached rate. Without it a cache
+    hit was priced as full-price input, so the router could never see what
+    staying on a warm model saved."""
     # litellm rejects non-integer token counts, and the except below turns
     # that into a silent $0 -- which is how an average like 14.3 tokens came
     # back as "free". Round so averages price correctly.
@@ -28,6 +33,7 @@ def estimate_cost_for_model(model_name: str, tokens_in: int, tokens_out: int) ->
             model=model_name,
             prompt_tokens=int(round(tokens_in or 0)),
             completion_tokens=int(round(tokens_out or 0)),
+            cache_read_input_tokens=int(min(cached_tokens or 0, tokens_in or 0)),
         )
         return prompt_cost + completion_cost
     except Exception:

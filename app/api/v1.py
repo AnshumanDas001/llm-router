@@ -12,6 +12,7 @@ from app.api.common import (
     completion_response,
     enforce_daily_limit,
     finish_trace,
+    history_for,
     log_result,
     tokens_used,
     now,
@@ -47,10 +48,11 @@ def chat_completions(req: ChatRequest, authorization: str | None = Header(defaul
         raise HTTPException(status_code=400, detail="messages must not be empty")
     check_routing_mode(req.routing_mode)
 
+    messages = [m.model_dump() for m in req.messages]
+    history_costs = history_for(messages, None)
     try:
-        result = run_cascade([m.model_dump() for m in req.messages],
-                             difficulty_to_tier=tier_map_for(0, None),
-                             skip_cheapest=req.routing_mode == "direct")
+        result = run_cascade(messages, difficulty_to_tier=tier_map_for(0, None, history_costs),
+                             skip_cheapest=req.routing_mode == "direct", history=history_costs)
     except AllTiersUnavailable:
         raise HTTPException(
             status_code=503,
@@ -165,13 +167,16 @@ def api_route(req: RouteRequest, user=Depends(get_user_from_api_key)):
     validate_byom_models(user["id"], tier_models, "POST /api/v1/calibrate first")
     check_routing_mode(req.routing_mode)
 
+    messages = [m.model_dump() for m in req.messages]
+    history_costs = history_for(messages, tier_models)
     try:
         result = run_cascade(
-            [m.model_dump() for m in req.messages],
+            messages,
             tier_models=tier_models,
             tier_api_keys=resolve_tier_keys(user["id"], tier_models, req.tier_api_keys),
-            difficulty_to_tier=tier_map_for(user["id"], tier_models),
+            difficulty_to_tier=tier_map_for(user["id"], tier_models, history_costs),
             skip_cheapest=req.routing_mode == "direct",
+            history=history_costs,
         )
     except AllTiersUnavailable:
         raise HTTPException(

@@ -40,7 +40,7 @@ QUALITY_THRESHOLD = 0.80
 
 
 def expected_costs(tiers: list[str], quality_by_tier: dict, cost_by_tier: dict,
-                   judge_cost: float, difficulty: str) -> dict:
+                   judge_cost: float, difficulty: str, extra_cost: dict | None = None) -> dict:
     """E[total cost | start at tier] for one difficulty, for every tier.
 
     Solved back to front: the last tier is trusted unconditionally, so its
@@ -52,11 +52,16 @@ def expected_costs(tiers: list[str], quality_by_tier: dict, cost_by_tier: dict,
     A tier with no measured quality on this band is treated as failing
     always -- it can't be a start tier anyway, and this keeps it from
     making the tier below look cheaper than it is.
+
+    extra_cost adds a per-tier cost to every answer that tier gives on this
+    request: re-sending the conversation history, priced at the cached rate
+    on a model that still holds it (app/routing/prompt_cache.py). Calibration
+    measured single questions, so its costs never include history.
     """
     costs = {}
     following = None
     for i, tier in reversed(list(enumerate(tiers))):
-        gen = (cost_by_tier.get(tier) or {}).get(difficulty) or 0.0
+        gen = ((cost_by_tier.get(tier) or {}).get(difficulty) or 0.0) + (extra_cost or {}).get(tier, 0.0)
         if following is None:
             costs[tier] = gen
         else:
@@ -69,7 +74,8 @@ def expected_costs(tiers: list[str], quality_by_tier: dict, cost_by_tier: dict,
 
 
 def derive_tier_map(quality_by_tier: dict, configured_tiers: list[str] | None = None,
-                    cost_by_tier: dict | None = None, judge_cost: float = 0.0) -> dict:
+                    cost_by_tier: dict | None = None, judge_cost: float = 0.0,
+                    extra_cost: dict | None = None) -> dict:
     """quality_by_tier: {tier: {difficulty: score|None}} from calibration.
     cost_by_tier:      {tier: {difficulty: avg cost per answer}} from
                        calibration -- per band, because a mid model's easy
@@ -84,6 +90,10 @@ def derive_tier_map(quality_by_tier: dict, configured_tiers: list[str] | None = 
     cheaper has been shown to handle. Falls back
     to the built-in map when there's nothing measured to go on, so an
     uncalibrated account behaves exactly as it did before.
+
+    extra_cost is this request's per-tier history cost (see expected_costs).
+    It can move a band's start to a model that holds the conversation in its
+    prompt cache, but never past the quality floor.
     """
     tiers = [t for t in TIER_ORDER if t in (configured_tiers or quality_by_tier.keys())]
     if not tiers:
@@ -105,7 +115,7 @@ def derive_tier_map(quality_by_tier: dict, configured_tiers: list[str] | None = 
             tier_map[difficulty] = eligible[0]
             continue
 
-        costs = expected_costs(tiers, quality_by_tier, cost_by_tier, judge_cost, difficulty)
+        costs = expected_costs(tiers, quality_by_tier, cost_by_tier, judge_cost, difficulty, extra_cost)
         # Ties go to the stronger tier: same money, fewer escalations, and
         # no waiting on a verdict.
         tier_map[difficulty] = min(eligible, key=lambda t: (round(costs[t], 9), -tiers.index(t)))

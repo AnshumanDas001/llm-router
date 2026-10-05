@@ -11,6 +11,7 @@ from app.api.common import (
     daily_allowance,
     enforce_daily_limit,
     finish_trace,
+    history_for,
     log_result,
     now,
     provider_needs_key,
@@ -200,12 +201,16 @@ def _prepare_send(chat_id: int, req: SendMessageRequest, user) -> dict:
     # Stored provider key if the user chose to save one, otherwise the key
     # they supplied for this request from the browser.
     tier_api_keys = resolve_tier_keys(user["id"], tier_models, req.tier_api_keys) if tier_models else None
+    # The history is re-sent every turn; a tier that served the last turn may
+    # still hold it in its prompt cache, which changes what each start costs.
+    history_costs = history_for(messages, tier_models)
     return {
         "messages": messages, "tier_models": tier_models, "tier_api_keys": tier_api_keys,
         # BYOM routes by what this session's own models measured; the
         # built-in stack by what calibration measured for it.
-        "difficulty_to_tier": tier_map_for(user["id"], tier_models),
+        "difficulty_to_tier": tier_map_for(user["id"], tier_models, history_costs),
         "skip_cheapest": chat["routing_mode"] == "direct",
+        "history": history_costs,
     }
 
 

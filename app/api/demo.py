@@ -14,6 +14,7 @@ from app.api.common import (
     builtin_routing,
     check_routing_mode,
     finish_trace,
+    history_for,
     log_result,
     now,
     sse,
@@ -140,8 +141,9 @@ def api_try(req: DemoRequest, request: Request, tl_demo: str | None = Cookie(def
 
     def event_stream():
         try:
-            for event in run_cascade_stream(messages, difficulty_to_tier=tier_map_for(0, None),
-                                            skip_cheapest=(req.routing_mode == "direct")):
+            history_costs = history_for(messages, None)
+            for event in run_cascade_stream(messages, difficulty_to_tier=tier_map_for(0, None, history_costs),
+                                            skip_cheapest=(req.routing_mode == "direct"), history=history_costs):
                 if event["type"] == "done":
                     event["baseline_cost"] = baseline_cost(event, None)
                     event["trace"] = finish_trace(event, 0, None, event["baseline_cost"])

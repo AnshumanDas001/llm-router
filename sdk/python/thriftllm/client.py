@@ -308,6 +308,11 @@ def explain_trace(trace: dict | None, band: str | None = None, tier: str | None 
                      + ("   <- chosen" if r["tier"] == s.get("chosen") else ""))
     if s.get("direct"):
         lines.append("   Direct mode skipped the cheapest tier.")
+    h = s.get("history") or {}
+    if h.get("tokens"):
+        warm = ", ".join(h.get("warm") or [])
+        lines.append(f"   History: {h['tokens']:,} tokens re-sent, priced into each tier"
+                     + (f"; {warm} still has it cached, at the cached rate." if warm else "; no tier has it cached."))
     lines.append("3. What happened:")
     for a in trace.get("attempts") or []:
         if a.get("outcome") == "unavailable":
@@ -319,8 +324,10 @@ def explain_trace(trace: dict | None, band: str | None = None, tier: str | None 
             detail += f", P(correct) {ch['p_correct']:.2f} vs {ch.get('accept_threshold')}"
         if ch.get("judge_verdict"):
             detail += f", judge: {ch['judge_verdict']}"
+        cached = a.get("cached_tokens")
         lines.append(f"     {a['tier']}: ${a.get('cost', 0):.5f}, {a.get('latency_ms')}ms, "
-                     f"{a.get('outcome')} ({detail})")
+                     + (f"{cached:,} of {a.get('tokens_in') or 0:,} input tokens cached, " if cached else "")
+                     + f"{a.get('outcome')} ({detail})")
     t = trace.get("totals") or {}
     if t:
         lines.append(f"4. Cost ${t.get('cost', 0):.5f} against ${t.get('baseline', 0):.5f} "
